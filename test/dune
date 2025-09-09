@@ -1,0 +1,4 @@
+(test
+ (name test_r_c_typing)
+ (libraries r_c_typing FrontC ppx_import)
+ (preprocess (staged_pps ppx_import)))
