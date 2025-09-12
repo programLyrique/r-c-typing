@@ -2,13 +2,13 @@
 opam-version: "2.0"
 synopsis: "Analyze and type C code used in R packages"
 description: "A longer description"
-maintainer: ["Pierre Donat-Bouillud <pierre.donat.bouillud@cvut.cz>"]
-authors: ["Pierre Donat-Bouillud <pierre.donat.bouillud@cvut.cz>"]
+maintainer: ["Pierre Donat-Bouillud <pierre.donat.bouillud@fit.cvut.cz>"]
+authors: ["Pierre Donat-Bouillud <pierre.donat.bouillud@fit.cvut.cz>"]
 license: "LICENSE"
 tags: ["R" "types" "C"]
-homepage: "https://github.com/username/reponame"
+homepage: "https://github.com/programLyrique/r-c-typing"
 doc: "https://url/to/documentation"
-bug-reports: "https://github.com/username/reponame/issues"
+bug-reports: "https://github.com/programLyrique/r-c-typing/issues"
 depends: [
   "dune" {>= "3.20"}
   "ocaml"
@@ -28,5 +28,5 @@ build: [
     "@doc" {with-doc}
   ]
 ]
-dev-repo: "git+https://github.com/username/reponame.git"
+dev-repo: "git+https://github.com/programLyrique/r-c-typing.git"
 x-maintenance-intent: ["(latest)"]

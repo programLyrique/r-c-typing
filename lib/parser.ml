@@ -12,3 +12,6 @@ let parse_string s =
       let cabs = Frontc.parse_channel ic Out_channel.stderr in
       cabs
   )
+
+
+type cabs = [%import: Cabs.file] [@@deriving show]
