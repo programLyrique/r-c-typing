@@ -5,11 +5,11 @@
 (generate_opam_files true)
 
 (source
- (github username/reponame))
+ (github programLyrique/r-c-typing))
 
-(authors "Pierre Donat-Bouillud <pierre.donat.bouillud@cvut.cz>")
+(authors "Pierre Donat-Bouillud <pierre.donat.bouillud@fit.cvut.cz>")
 
-(maintainers "Pierre Donat-Bouillud <pierre.donat.bouillud@cvut.cz>")
+(maintainers "Pierre Donat-Bouillud <pierre.donat.bouillud@fit.cvut.cz>")
 
 (license LICENSE)
 
