@@ -16,4 +16,4 @@ let parse_string s =
 
 let print_parse_result = function 
  | Frontc.PARSING_ERROR -> Printf.eprintf "Parsing error\n" 
-  | Frontc.PARSING_OK file -> Printf.printf "%s\n" (Cabs_printer.string_of_file file)
+  | Frontc.PARSING_OK file -> Printf.printf "%s\n" (Cabs_printer.string_of_file 0 file)

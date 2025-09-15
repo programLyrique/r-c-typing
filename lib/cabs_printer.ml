@@ -1,106 +1,167 @@
-open Cabs 
+open Cabs
 
-let rec string_of_size = function
+let indent level =
+  String.make (level * 2) ' '
+
+let new_line level =
+  "\n" ^ indent level
+
+let rec string_of_size _ = function
   | NO_SIZE -> "NO_SIZE"
   | SHORT -> "SHORT"
   | LONG -> "LONG"
   | LONG_LONG -> "LONG_LONG"
 
-and string_of_sign = function
+and string_of_sign _ = function
   | NO_SIGN -> "NO_SIGN"
   | SIGNED -> "SIGNED"
   | UNSIGNED -> "UNSIGNED"
 
-and string_of_storage = function
+and string_of_storage _ = function
   | NO_STORAGE -> "NO_STORAGE"
   | AUTO -> "AUTO"
   | STATIC -> "STATIC"
   | EXTERN -> "EXTERN"
   | REGISTER -> "REGISTER"
 
-and string_of_base_type = function
+and string_of_base_type level = function
   | NO_TYPE -> "NO_TYPE"
   | VOID -> "VOID"
   | BOOL -> "BOOL"
-  | CHAR sign -> "CHAR(" ^ string_of_sign sign ^ ")"
-  | INT (size, sign) -> "INT(" ^ string_of_size size ^ ", " ^ string_of_sign sign ^ ")"
-  | BITFIELD (sign, expr) -> "BITFIELD(" ^ string_of_sign sign ^ ", " ^ string_of_expression expr ^ ")"
-  | FLOAT long -> "FLOAT(" ^ string_of_bool long ^ ")"
-  | DOUBLE long -> "DOUBLE(" ^ string_of_bool long ^ ")"
+  | CHAR sign -> "CHAR(" ^ string_of_sign level sign ^ ")"
+  | INT (size, sign) ->
+      "INT(" ^ string_of_size level size ^ ", " ^ string_of_sign level sign ^ ")"
+  | BITFIELD (sign, expr) ->
+      "BITFIELD(" ^ string_of_sign level sign ^ ", " ^ string_of_expression level expr ^ ")"
+  | FLOAT long -> "FLOAT(" ^ string_of_bool level long ^ ")"
+  | DOUBLE long -> "DOUBLE(" ^ string_of_bool level long ^ ")"
   | COMPLEX_FLOAT -> "COMPLEX_FLOAT"
   | COMPLEX_DOUBLE -> "COMPLEX_DOUBLE"
   | COMPLEX_LONG_DOUBLE -> "COMPLEX_LONG_DOUBLE"
-  | PTR bt -> "PTR(" ^ string_of_base_type bt ^ ")"
-  | RESTRICT_PTR bt -> "RESTRICT_PTR(" ^ string_of_base_type bt ^ ")"
-  | ARRAY (bt, expr) -> "ARRAY(" ^ string_of_base_type bt ^ ", " ^ string_of_expression expr ^ ")"
-  | STRUCT (name, ngs) -> "STRUCT(" ^ name ^ ", [" ^ String.concat "; " (List.map string_of_name_group ngs) ^ "])"
-  | UNION (name, ngs) -> "UNION(" ^ name ^ ", [" ^ String.concat "; " (List.map string_of_name_group ngs) ^ "])"
-  | PROTO proto -> "PROTO(" ^ string_of_proto proto ^ ")"
-  | OLD_PROTO old_proto -> "OLD_PROTO(" ^ string_of_old_proto old_proto ^ ")"
+  | PTR bt -> "PTR(" ^ string_of_base_type level bt ^ ")"
+  | RESTRICT_PTR bt -> "RESTRICT_PTR(" ^ string_of_base_type level bt ^ ")"
+  | ARRAY (bt, expr) ->
+      "ARRAY(" ^ string_of_base_type level bt ^ ", " ^ string_of_expression level expr ^ ")"
+  | STRUCT (name, ngs) ->
+      let ngs_str = String.concat "; " (List.map (string_of_name_group level) ngs) in
+      "STRUCT(" ^ name ^ ", [" ^ ngs_str ^ "])"
+  | UNION (name, ngs) ->
+      let ngs_str = String.concat "; " (List.map (string_of_name_group level) ngs) in
+      "UNION(" ^ name ^ ", [" ^ ngs_str ^ "])"
+  | PROTO proto -> "PROTO(" ^ new_line (level + 1) ^ string_of_proto (level+1) proto ^ ")"
+  | OLD_PROTO old_proto -> "OLD_PROTO(" ^ string_of_old_proto level old_proto ^ ")"
   | NAMED_TYPE name -> "NAMED_TYPE(" ^ name ^ ")"
-  | ENUM (name, items) -> "ENUM(" ^ name ^ ", [" ^ String.concat "; " (List.map string_of_enum_item items) ^ "])"
-  | CONST bt -> "CONST(" ^ string_of_base_type bt ^ ")"
-  | VOLATILE bt -> "VOLATILE(" ^ string_of_base_type bt ^ ")"
-  | GNU_TYPE (attrs, bt) -> "GNU_TYPE([" ^ String.concat "; " (List.map string_of_gnu_attr attrs) ^ "], " ^ string_of_base_type bt ^ ")"
+  | ENUM (name, items) ->
+      let items_str = String.concat "; " (List.map (string_of_enum_item level) items) in
+      "ENUM(" ^ name ^ ", [" ^ items_str ^ "])"
+  | CONST bt -> "CONST(" ^ string_of_base_type level bt ^ ")"
+  | VOLATILE bt -> "VOLATILE(" ^ string_of_base_type level bt ^ ")"
+  | GNU_TYPE (attrs, bt) ->
+      let attrs_str = String.concat "; " (List.map (string_of_gnu_attr level) attrs) in
+      "GNU_TYPE([" ^ attrs_str ^ "], " ^ string_of_base_type level bt ^ ")"
   | BUILTIN_TYPE name -> "BUILTIN_TYPE(" ^ name ^ ")"
-  | TYPE_LINE (file, line, bt) -> "TYPE_LINE(" ^ file ^ ", " ^ string_of_int line ^ ", " ^ string_of_base_type bt ^ ")"
+  | TYPE_LINE (file, line, bt) ->
+      "TYPE_LINE(" ^ file ^ ", " ^ string_of_int line ^ ", " ^ string_of_base_type level bt ^ ")"
 
-and string_of_name (name, bt, attrs, expr) =
-  "(" ^ name ^ ", " ^ string_of_base_type bt ^ ", [" ^ String.concat "; " (List.map string_of_gnu_attr attrs) ^ "], " ^ string_of_expression expr ^ ")"
+and string_of_name level (name, bt, attrs, expr) =
+  "(" ^ name ^ ", " ^ string_of_base_type level bt ^ ", [" ^
+  String.concat "; " (List.map (string_of_gnu_attr level) attrs) ^ "], " ^
+  string_of_expression level expr ^ ")"
 
-and string_of_name_group (bt, storage, names) =
-  "(" ^ string_of_base_type bt ^ ", " ^ string_of_storage storage ^ ", [" ^ String.concat "; " (List.map string_of_name names) ^ "])"
+and string_of_name_group level (bt, storage, names) =
+  "(" ^ string_of_base_type level bt ^ ", " ^ string_of_storage level storage ^ ", [" ^
+  String.concat "; " (List.map (string_of_name level) names) ^ "])"
 
-and string_of_single_name (bt, storage, name) =
-  "(" ^ string_of_base_type bt ^ ", " ^ string_of_storage storage ^ ", " ^ string_of_name name ^ ")"
+and string_of_single_name level (bt, storage, name) =
+  "(" ^ string_of_base_type level bt ^ ", " ^ string_of_storage level storage ^
+  ", " ^ string_of_name level name ^ ")"
 
-and string_of_enum_item (name, expr) =
-  "(" ^ name ^ ", " ^ string_of_expression expr ^ ")"
+and string_of_enum_item level (name, expr) =
+  "(" ^ name ^ ", " ^ string_of_expression level expr ^ ")"
 
-and string_of_proto (bt, names, variadic) =
-  "(" ^ string_of_base_type bt ^ ", [" ^ String.concat "; " (List.map string_of_single_name names) ^ "], " ^ string_of_bool variadic ^ ")"
+and string_of_proto level (bt, names, variadic) =
+  "(" ^ string_of_base_type level bt ^ "," ^ new_line (level + 1) ^ "[" ^
+  String.concat "; " (List.map (string_of_single_name (level+1)) names) ^ "], " ^
+  string_of_bool (level+1) variadic ^ ")"
 
-and string_of_old_proto (bt, names, variadic) =
-  "(" ^ string_of_base_type bt ^ ", [" ^ String.concat "; " names ^ "], " ^ string_of_bool variadic ^ ")"
+and string_of_old_proto level (bt, names, variadic) =
+  "(" ^ string_of_base_type level bt ^ ", [" ^ String.concat "; " names ^ "], " ^
+  string_of_bool level variadic ^ ")"
 
-and string_of_definition = function
-  | FUNDEF (sn, body) -> "FUNDEF(" ^ string_of_single_name sn ^ ", " ^ string_of_body body ^ ")"
-  | OLDFUNDEF (sn, ngs, body) -> "OLDFUNDEF(" ^ string_of_single_name sn ^ ", [" ^ String.concat "; " (List.map string_of_name_group ngs) ^ "], " ^ string_of_body body ^ ")"
-  | DECDEF ng -> "DECDEF(" ^ string_of_name_group ng ^ ")"
-  | TYPEDEF (ng, attrs) -> "TYPEDEF(" ^ string_of_name_group ng ^ ", [" ^ String.concat "; " (List.map string_of_gnu_attr attrs) ^ "])"
-  | ONLYTYPEDEF ng -> "ONLYTYPEDEF(" ^ string_of_name_group ng ^ ")"
+and string_of_definition level = function
+  | FUNDEF (sn, body) ->
+      "FUNDEF(" ^ new_line (level + 1) ^ string_of_single_name (level + 1) sn ^ ", " ^
+      new_line (level + 2) ^
+      string_of_body (level + 2) body ^ ")"
+  | OLDFUNDEF (sn, ngs, body) ->
+      let ngs_str = String.concat "; " (List.map (string_of_name_group level) ngs) in
+      "OLDFUNDEF(" ^ new_line (level + 1) ^ string_of_single_name level sn ^ ", [" ^ ngs_str ^ "], " ^
+      string_of_body (level + 2) body ^ ")"
+  | DECDEF ng -> "DECDEF(" ^ string_of_name_group level ng ^ ")"
+  | TYPEDEF (ng, attrs) ->
+      let attrs_str = String.concat "; " (List.map (string_of_gnu_attr level) attrs) in
+      "TYPEDEF(" ^ string_of_name_group level ng ^ ", [" ^ attrs_str ^ "])"
+  | ONLYTYPEDEF ng -> "ONLYTYPEDEF(" ^ string_of_name_group level ng ^ ")"
 
-and string_of_file defs =
-  "[" ^ String.concat "; " (List.map string_of_definition defs) ^ "]"
+and string_of_file level defs =
+  "[" ^ String.concat "; " (List.map (string_of_definition level) defs) ^ "]"
 
-and string_of_body (defs, stmt) =
-  "([" ^ String.concat "; " (List.map string_of_definition defs) ^ "], " ^ string_of_statement stmt ^ ")"
+and string_of_body level (defs, stmt) =
+  "([" ^ String.concat "; " (List.map (string_of_definition level) defs) ^ "], " ^
+  string_of_statement level stmt ^ ")"
 
-and string_of_statement = function
+and string_of_statement level = function
   | NOP -> "NOP"
-  | COMPUTATION expr -> "COMPUTATION(" ^ string_of_expression expr ^ ")"
-  | BLOCK body -> "BLOCK(" ^ string_of_body body ^ ")"
-  | SEQUENCE (stmt1, stmt2) -> "SEQUENCE(" ^ string_of_statement stmt1 ^ ", " ^ string_of_statement stmt2 ^ ")"
-  | IF (expr, stmt1, stmt2) -> "IF(" ^ string_of_expression expr ^ ", " ^ string_of_statement stmt1 ^ ", " ^ string_of_statement stmt2 ^ ")"
-  | WHILE (expr, stmt) -> "WHILE(" ^ string_of_expression expr ^ ", " ^ string_of_statement stmt ^ ")"
-  | DOWHILE (expr, stmt) -> "DOWHILE(" ^ string_of_expression expr ^ ", " ^ string_of_statement stmt ^ ")"
-  | FOR (expr1, expr2, expr3, stmt) -> "FOR(" ^ string_of_expression expr1 ^ ", " ^ string_of_expression expr2 ^ ", " ^ string_of_expression expr3 ^ ", " ^ string_of_statement stmt ^ ")"
+  | COMPUTATION expr -> "COMPUTATION(" ^ string_of_expression level expr ^ ")"
+  | BLOCK body ->
+      "BLOCK(" ^ new_line (level + 1) ^ string_of_body (level + 1) body ^ new_line level ^ ")"
+  | SEQUENCE (stmt1, stmt2) ->
+      "SEQUENCE(" ^ new_line (level + 1) ^ string_of_statement (level + 1) stmt1 ^
+      ", " ^ new_line (level + 1) ^ string_of_statement (level + 1) stmt2 ^
+      new_line level ^ ")"
+  | IF (expr, stmt1, stmt2) ->
+      "IF(" ^ string_of_expression level expr ^ ", " ^
+      new_line (level + 1) ^ string_of_statement (level + 1) stmt1 ^ ", " ^
+      new_line (level + 1) ^ string_of_statement (level + 1) stmt2 ^ new_line level ^ ")"
+  | WHILE (expr, stmt) ->
+      "WHILE(" ^ string_of_expression level expr ^ ", " ^
+      new_line (level + 1) ^ string_of_statement (level + 1) stmt ^ new_line level ^ ")"
+  | DOWHILE (expr, stmt) ->
+      "DOWHILE(" ^ string_of_expression level expr ^ ", " ^
+      new_line (level + 1) ^ string_of_statement (level + 1) stmt ^ new_line level ^ ")"
+  | FOR (expr1, expr2, expr3, stmt) ->
+      "FOR(" ^ string_of_expression level expr1 ^ ", " ^
+      string_of_expression level expr2 ^ ", " ^ string_of_expression level expr3 ^ ", " ^
+      new_line (level + 1) ^ string_of_statement (level + 1) stmt ^ new_line level ^ ")"
   | BREAK -> "BREAK"
   | CONTINUE -> "CONTINUE"
-  | RETURN expr -> "RETURN(" ^ string_of_expression expr ^ ")"
-  | SWITCH (expr, stmt) -> "SWITCH(" ^ string_of_expression expr ^ ", " ^ string_of_statement stmt ^ ")"
-  | CASE (expr, stmt) -> "CASE(" ^ string_of_expression expr ^ ", " ^ string_of_statement stmt ^ ")"
-  | DEFAULT stmt -> "DEFAULT(" ^ string_of_statement stmt ^ ")"
-  | LABEL (label, stmt) -> "LABEL(" ^ label ^ ", " ^ string_of_statement stmt ^ ")"
+  | RETURN expr -> "RETURN(" ^ string_of_expression level expr ^ ")"
+  | SWITCH (expr, stmt) ->
+      "SWITCH(" ^ string_of_expression level expr ^ ", " ^
+      new_line (level + 1) ^ string_of_statement (level + 1) stmt ^ new_line level ^ ")"
+  | CASE (expr, stmt) ->
+      "CASE(" ^ string_of_expression level expr ^ ", " ^
+      new_line (level + 1) ^ string_of_statement (level + 1) stmt ^ new_line level ^ ")"
+  | DEFAULT stmt ->
+      "DEFAULT(" ^ new_line (level + 1) ^ string_of_statement (level + 1) stmt ^ new_line level ^ ")"
+  | LABEL (label, stmt) ->
+      "LABEL(" ^ label ^ ", " ^ new_line (level + 1) ^ string_of_statement (level + 1) stmt ^
+      new_line level ^ ")"
   | GOTO label -> "GOTO(" ^ label ^ ")"
   | ASM str -> "ASM(" ^ str ^ ")"
-  | GNU_ASM (str, args1, args2, strs) -> "GNU_ASM(" ^ str ^ ", [" ^ String.concat "; " (List.map string_of_gnu_asm_arg args1) ^ "], [" ^ String.concat "; " (List.map string_of_gnu_asm_arg args2) ^ "], [" ^ String.concat "; " strs ^ "])"
-  | STAT_LINE (stmt, file, line) -> "STAT_LINE(" ^ string_of_statement stmt ^ ", " ^ file ^ ", " ^ string_of_int line ^ ")"
+  | GNU_ASM (str, args1, args2, strs) ->
+      let args1_str = String.concat "; " (List.map (string_of_gnu_asm_arg level) args1) in
+      let args2_str = String.concat "; " (List.map (string_of_gnu_asm_arg level) args2) in
+      let strs_str = String.concat "; " strs in
+      "GNU_ASM(" ^ str ^ ", [" ^ args1_str ^ "], [" ^ args2_str ^ "], [" ^ strs_str ^ "])"
+  | STAT_LINE (stmt, file, line) ->
+      "STAT_LINE(" ^ new_line (level + 1) ^ string_of_statement (level + 1) stmt ^
+      ", " ^ file ^ ", " ^ string_of_int line ^ new_line level ^ ")"
 
-and string_of_gnu_asm_arg (str1, str2, expr) =
-  "(" ^ str1 ^ ", " ^ str2 ^ ", " ^ string_of_expression expr ^ ")"
+and string_of_gnu_asm_arg level (str1, str2, expr) =
+  "(" ^ str1 ^ ", " ^ str2 ^ ", " ^ string_of_expression level expr ^ ")"
 
-and string_of_binary_operator = function
+and string_of_binary_operator _ = function
   | ADD -> "ADD"
   | SUB -> "SUB"
   | MUL -> "MUL"
@@ -131,7 +192,7 @@ and string_of_binary_operator = function
   | SHL_ASSIGN -> "SHL_ASSIGN"
   | SHR_ASSIGN -> "SHR_ASSIGN"
 
-and string_of_unary_operator = function
+and string_of_unary_operator _ = function
   | MINUS -> "MINUS"
   | PLUS -> "PLUS"
   | NOT -> "NOT"
@@ -143,42 +204,60 @@ and string_of_unary_operator = function
   | POSINCR -> "POSINCR"
   | POSDECR -> "POSDECR"
 
-and string_of_expression = function
+and string_of_expression level = function
   | NOTHING -> "NOTHING"
-  | UNARY (op, expr) -> "UNARY(" ^ string_of_unary_operator op ^ ", " ^ string_of_expression expr ^ ")"
-  | BINARY (op, expr1, expr2) -> "BINARY(" ^ string_of_binary_operator op ^ ", " ^ string_of_expression expr1 ^ ", " ^ string_of_expression expr2 ^ ")"
-  | QUESTION (expr1, expr2, expr3) -> "QUESTION(" ^ string_of_expression expr1 ^ ", " ^ string_of_expression expr2 ^ ", " ^ string_of_expression expr3 ^ ")"
-  | CAST (bt, expr) -> "CAST(" ^ string_of_base_type bt ^ ", " ^ string_of_expression expr ^ ")"
-  | CALL (expr, exprs) -> "CALL(" ^ string_of_expression expr ^ ", [" ^ String.concat "; " (List.map string_of_expression exprs) ^ "])"
-  | COMMA exprs -> "COMMA([" ^ String.concat "; " (List.map string_of_expression exprs) ^ "])"
-  | CONSTANT const -> "CONSTANT(" ^ string_of_constant const ^ ")"
+  | UNARY (op, expr) ->
+      "UNARY(" ^ string_of_unary_operator level op ^ ", " ^ string_of_expression level expr ^ ")"
+  | BINARY (op, expr1, expr2) ->
+      "BINARY(" ^ string_of_binary_operator level op ^ ", " ^
+      string_of_expression level expr1 ^ ", " ^ string_of_expression level expr2 ^ ")"
+  | QUESTION (expr1, expr2, expr3) ->
+      "QUESTION(" ^ string_of_expression level expr1 ^ ", " ^
+      string_of_expression level expr2 ^ ", " ^ string_of_expression level expr3 ^ ")"
+  | CAST (bt, expr) ->
+      "CAST(" ^ string_of_base_type level bt ^ ", " ^ string_of_expression level expr ^ ")"
+  | CALL (expr, exprs) ->
+      let exprs_str = String.concat "; " (List.map (string_of_expression level) exprs) in
+      "CALL(" ^ string_of_expression level expr ^ ", [" ^ exprs_str ^ "])"
+  | COMMA exprs ->
+      let exprs_str = String.concat "; " (List.map (string_of_expression level) exprs) in
+      "COMMA([" ^ exprs_str ^ "])"
+  | CONSTANT const -> "CONSTANT(" ^ string_of_constant level const ^ ")"
   | VARIABLE str -> "VARIABLE(" ^ str ^ ")"
-  | EXPR_SIZEOF expr -> "EXPR_SIZEOF(" ^ string_of_expression expr ^ ")"
-  | TYPE_SIZEOF bt -> "TYPE_SIZEOF(" ^ string_of_base_type bt ^ ")"
-  | INDEX (expr1, expr2) -> "INDEX(" ^ string_of_expression expr1 ^ ", " ^ string_of_expression expr2 ^ ")"
-  | MEMBEROF (expr, str) -> "MEMBEROF(" ^ string_of_expression expr ^ ", " ^ str ^ ")"
-  | MEMBEROFPTR (expr, str) -> "MEMBEROFPTR(" ^ string_of_expression expr ^ ", " ^ str ^ ")"
-  | GNU_BODY body -> "GNU_BODY(" ^ string_of_body body ^ ")"
-  | DESIGNATED (str, expr) -> "DESIGNATED(" ^ str ^ ", " ^ string_of_expression expr ^ ")"
-  | EXPR_LINE (expr, file, line) -> "EXPR_LINE(" ^ string_of_expression expr ^ ", " ^ file ^ ", " ^ string_of_int line ^ ")"
+  | EXPR_SIZEOF expr -> "EXPR_SIZEOF(" ^ string_of_expression level expr ^ ")"
+  | TYPE_SIZEOF bt -> "TYPE_SIZEOF(" ^ string_of_base_type level bt ^ ")"
+  | INDEX (expr1, expr2) ->
+      "INDEX(" ^ string_of_expression level expr1 ^ ", " ^ string_of_expression level expr2 ^ ")"
+  | MEMBEROF (expr, str) ->
+      "MEMBEROF(" ^ string_of_expression level expr ^ ", " ^ str ^ ")"
+  | MEMBEROFPTR (expr, str) ->
+      "MEMBEROFPTR(" ^ string_of_expression level expr ^ ", " ^ str ^ ")"
+  | GNU_BODY body -> "GNU_BODY(" ^ string_of_body level body ^ ")"
+  | DESIGNATED (str, expr) ->
+      "DESIGNATED(" ^ str ^ ", " ^ string_of_expression level expr ^ ")"
+  | EXPR_LINE (expr, file, line) ->
+      "EXPR_LINE(" ^ string_of_expression level expr ^ ", " ^ file ^ ", " ^
+      string_of_int line ^ ")"
 
-and string_of_constant = function
+and string_of_constant level = function
   | CONST_INT str -> "CONST_INT(" ^ str ^ ")"
   | CONST_FLOAT str -> "CONST_FLOAT(" ^ str ^ ")"
   | CONST_CHAR str -> "CONST_CHAR(" ^ str ^ ")"
   | CONST_STRING str -> "CONST_STRING(" ^ str ^ ")"
-  | CONST_COMPOUND exprs -> "CONST_COMPOUND([" ^ String.concat "; " (List.map string_of_expression exprs) ^ "])"
+  | CONST_COMPOUND exprs ->
+      let exprs_str = String.concat "; " (List.map (string_of_expression level) exprs) in
+      "CONST_COMPOUND([" ^ exprs_str ^ "])"
 
-and string_of_gnu_attr = function
+and string_of_gnu_attr level = function
   | GNU_NONE -> "GNU_NONE"
-  | GNU_CALL (str, attrs) -> "GNU_CALL(" ^ str ^ ", [" ^ String.concat "; " (List.map string_of_gnu_attr attrs) ^ "])"
+  | GNU_CALL (str, attrs) ->
+      let attrs_str = String.concat "; " (List.map (string_of_gnu_attr level) attrs) in
+      "GNU_CALL(" ^ str ^ ", [" ^ attrs_str ^ "])"
   | GNU_ID str -> "GNU_ID(" ^ str ^ ")"
-  | GNU_CST const -> "GNU_CST(" ^ string_of_constant const ^ ")"
+  | GNU_CST const -> "GNU_CST(" ^ string_of_constant level const ^ ")"
   | GNU_EXTENSION -> "GNU_EXTENSION"
   | GNU_INLINE -> "GNU_INLINE"
-  | GNU_TYPE_ARG (bt, storage) -> "GNU_TYPE_ARG(" ^ string_of_base_type bt ^ ", " ^ string_of_storage storage ^ ")"
+  | GNU_TYPE_ARG (bt, storage) ->
+      "GNU_TYPE_ARG(" ^ string_of_base_type level bt ^ ", " ^ string_of_storage level storage ^ ")"
 
-and string_of_gnu_attrs attrs =
-  "[" ^ String.concat "; " (List.map string_of_gnu_attr attrs) ^ "]"
-
-and string_of_bool b = if b then "true" else "false"
+and string_of_bool _ b = if b then "true" else "false"
