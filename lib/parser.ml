@@ -2,6 +2,11 @@ open Tree_sitter_c
 open Tree_sitter_run
 
 let print_res (res: (CST.translation_unit, CST.extra) Tree_sitter_run.Parsing_result.t) = 
+  Printf.printf "Errors: %d. Lines with errors: %d / %d\n" res.stat.error_count
+    res.stat.error_line_count res.stat.total_line_count ;
+    List.iter (fun e -> 
+      Printf.printf "Error: %s\n" (Tree_sitter_error.to_string e)
+    ) res.errors ;
    match res.program with
   | None -> ()
   | Some prog ->
