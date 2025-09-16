@@ -1,4 +1,4 @@
 (library
  (name r_c_typing)
- (libraries FrontC)
+ (libraries r-c-typing.c)
  (preprocess (pps ppx_deriving.show)))

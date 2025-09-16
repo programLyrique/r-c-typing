@@ -1,4 +1,4 @@
 (executable
  (public_name r-c-typing)
  (name main)
- (libraries r_c_typing FrontC))
+ (libraries r_c_typing))

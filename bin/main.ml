@@ -6,7 +6,7 @@ let main _ =
   else
     let filename = Sys.argv.(1) in
     let ast = Parser.parse_file filename in
-    Parser.print_parse_result ast
+    Parser.print_res ast
     
 
 let () = main ()
