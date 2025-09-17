@@ -28,3 +28,5 @@ let parse_string s =
   let res = Parse.string s in 
   process_res res
 
+
+  let of_raw_tree tree = failwith "unimplemented"
