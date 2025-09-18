@@ -1,3 +1,10 @@
+open Common
+
+module Position = struct
+  type t = Position.t
+  let pp fmt _ = Format.fprintf fmt "_"
+end
+
 type const =
  | CStr of string 
  | CFloat of string 
@@ -26,10 +33,12 @@ type ctype =
  [@@deriving show]
 
 
- type top_level_unit = 
+ type top_level_unit' = 
   | Fundef of ctype * string * param list * e
   [@@deriving show]
- and e = 
+ and top_level_unit = Position.t * top_level_unit'
+  [@@deriving show]
+ and e' = 
   | Const of const 
   | Id of string
   | Unop of string * e
@@ -39,3 +48,6 @@ type ctype =
   | Return of e option
   [@@deriving show]
  and param = ctype * string
+  [@@deriving show]
+ and e = Position.t * e'
+  [@@deriving show]

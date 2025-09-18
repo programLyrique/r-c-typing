@@ -19,7 +19,7 @@
  (name r-c-typing)
  (synopsis "Analyze and type C code used in R packages")
  (description "A longer description")
- (depends ocaml)
+ (depends (ocaml (>= 5.3.0)) dune mlsem sstt)
  (tags
   ("R" "types" "C")))
 

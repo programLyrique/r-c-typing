@@ -1,4 +1,4 @@
 (library
  (name r_c_typing)
- (libraries r-c-typing.c)
+ (libraries r-c-typing.c mlsem)
  (preprocess (pps ppx_deriving.show)))

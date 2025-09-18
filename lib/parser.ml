@@ -1,5 +1,6 @@
 open Tree_sitter_c
 open Tree_sitter_run
+open CST
 
 let print_res (res: (CST.translation_unit, CST.extra) Tree_sitter_run.Parsing_result.t) = 
   Printf.printf "Errors: %d. Lines with errors: %d / %d\n" res.stat.error_count
@@ -29,4 +30,8 @@ let parse_string s =
   process_res res
 
 
-  let of_raw_tree tree = failwith "unimplemented"
+
+
+let aux_top_level_item tree = []
+let aux_translation_unit tree =
+  List.map aux_top_level_item tree |> List.concat
