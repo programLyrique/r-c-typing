@@ -1,4 +1,4 @@
-open Common
+open Mlsem.Common
 
 module Position = struct
   type t = Position.t
@@ -17,6 +17,7 @@ type ctype =
  | Void
  | Int
  | Float 
+ | Char
  | Ptr of ctype
  | Array of ctype * int option
  | Struct of string * (ctype * string) list
@@ -24,12 +25,8 @@ type ctype =
  | Enum of string * (string * int option) list
  | Typedef of string
  (* SEXPs *)
- | SInt 
- | SFloat 
- | SStr 
- | SRaw
- | SVec
- | SEnv
+ | SEXP
+ | Any
  [@@deriving show]
 
 
@@ -51,3 +48,7 @@ type ctype =
   [@@deriving show]
  and e = Position.t * e'
   [@@deriving show]
+
+
+type definitions = top_level_unit list
+[@@deriving show]

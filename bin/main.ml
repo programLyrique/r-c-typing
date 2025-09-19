@@ -8,8 +8,10 @@ let main _ =
     (* Add optional call to pre-processor?
       cpp -E -I ~/Documents/RLanguage/R-4.5.0/src/include test/cprogs/small.c -o test/cprogs/small-p.c
     *)
-    let ast = Parser.parse_file filename in
-    Parser.print_res ast
+    let cst = Parser.parse_file filename in
+    Parser.print_res cst;
+    Printf.printf "%s\n" (Ast.show_definitions (Parser.to_ast cst));
+    ()
     
 
 let () = main ()
