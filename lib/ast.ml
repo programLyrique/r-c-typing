@@ -43,6 +43,7 @@ type ctype =
   | Call of e * e list 
   | Ite of e * e * e option
   | Return of e option
+  | Seq of e list
   [@@deriving show]
  and param = ctype * string
   [@@deriving show]
