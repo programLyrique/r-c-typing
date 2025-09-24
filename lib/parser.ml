@@ -84,9 +84,6 @@ let aux_expression_statement (expr_stmt: expression_statement) =
   | (Some comma_expr, _) -> aux_comma_expression comma_expr
   | (None, _) -> (Mlsem.Common.Position.dummy, A.Return None)
 
-let aux_if_statement (if_stmt: if_statement) =
-  let _, _ond, _then_stmt, _else_opt = if_stmt in
-  (Mlsem.Common.Position.dummy, A.Return None) (* TODO *)
 
 let aux_for_statement (for_stmt: for_statement) =
   let _,_,_body,_,_stmt = for_stmt in
@@ -144,6 +141,24 @@ and aux_body body =
     List.hd stmts
   else
    (Mlsem.Common.Position.dummy, A.Seq stmts)
+
+and aux_paren_expr (p_expr: parenthesized_expression) =
+  let _, expr, _ = p_expr in
+  match expr with
+  | `Exp e -> aux_expression e
+  | `Comma_exp (e1, _, e2) -> 
+      let ast1 = aux_expression e1 in
+      let ast2 = aux_comma_expression e2 in
+      (Mlsem.Common.Position.dummy, A.Comma (ast1,ast2))
+  | `Comp_stmt comp -> aux_body comp
+
+and aux_if_statement (if_stmt: if_statement) =
+  let _, cond, then_stmt, else_opt = if_stmt in
+  let ast_cond = aux_paren_expr cond in
+  let ast_then = aux_statement then_stmt in
+  let ast_else = Option.map (fun (_,st) -> aux_statement st) else_opt in
+
+  (Mlsem.Common.Position.dummy,A.Ite (ast_cond, ast_then, ast_else)) (* TODO *)
 
 let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
   match item with

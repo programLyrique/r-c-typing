@@ -44,6 +44,7 @@ type ctype =
   | Ite of e * e * e option
   | Return of e option
   | Seq of e list
+  | Comma of e * e
   [@@deriving show]
  and param = ctype * string
   [@@deriving show]
