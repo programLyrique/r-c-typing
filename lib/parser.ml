@@ -2,6 +2,7 @@ open Tree_sitter_c
 open Tree_sitter_run
 open CST
 module A = Ast
+open Mlsem.Common
 
 let print_res (res: (CST.translation_unit, CST.extra) Tree_sitter_run.Parsing_result.t) = 
   Printf.printf "Errors: %d. Lines with errors: %d / %d\n" res.stat.error_count
@@ -31,6 +32,16 @@ let parse_string s =
   process_res res
 
 
+(* Taken from E-Sh4rk/typed-r *)
+let line_length = 0x10000
+let conv_pos tspos =
+  let bol = tspos.Loc.row*line_length in
+  {
+    Lexing.pos_fname = "" ;
+    pos_lnum = tspos.Loc.row ;
+    pos_bol = bol ;
+    pos_cnum = bol + tspos.Loc.column ;
+  }
 
 let aux_primitive_type t = 
   match t with 
@@ -42,6 +53,8 @@ let aux_primitive_type t =
 
 let aux_struct _struc = []
 
+
+let token_to_string (_loc, s) = s
 
 let aux_type_spec (type_spec : type_specifier)  =
   match type_spec with
@@ -57,47 +70,114 @@ let aux_decl_spec decl_spec =
 
 let rec aux_fun_name (decl : declarator) : string =
   match decl with
-  | `Id tok -> let (_loc, s) = tok in s
+  | `Id tok -> token_to_string tok
   | `Func_decl (decl, _, _, _) -> aux_fun_name decl
   | _ -> failwith "Not supported yet: function name"
 
 let aux_params _params = []
 
-let aux_expression (_expr: expression) : A.e =
-  (Mlsem.Common.Position.dummy, A.Return None) (* TODO *)
 
-let rec aux_comma_expression (expr: anon_choice_exp_55b4dba) =
+let rec aux_expression (expr: expression) : A.e =
+  match expr with 
+  | `Choice_cond_exp e -> aux_not_bin_expression e
+  | `Bin_exp e -> aux_bin_expression e
+and aux_bin_expression (e: binary_expression) =
+  match e with 
+  | `Exp_PLUS_exp (e1, _, e2) -> 
+      (Mlsem.Common.Position.dummy, A.Binop ("+", (aux_expression e1, aux_expression e2)))
+  | `Exp_DASH_exp (e1, _, e2) -> 
+      (Mlsem.Common.Position.dummy, A.Binop ("-", (aux_expression e1, aux_expression e2)))
+  | `Exp_STAR_exp (e1, _, e2) ->
+      (Mlsem.Common.Position.dummy, A.Binop ("*", (aux_expression e1, aux_expression e2)))
+  | `Exp_SLASH_exp (e1, _, e2) ->
+      (Mlsem.Common.Position.dummy, A.Binop ("/", (aux_expression e1, aux_expression e2)))
+  | `Exp_PERC_exp (e1, _, e2) ->
+      (Mlsem.Common.Position.dummy, A.Binop ("%", (aux_expression e1, aux_expression e2)))
+  | `Exp_BARBAR_exp (e1, _, e2) ->
+      (Mlsem.Common.Position.dummy, A.Binop ("||", (aux_expression e1, aux_expression e2)))
+  | `Exp_AMPAMP_exp (e1, _, e2) ->
+      (Mlsem.Common.Position.dummy, A.Binop ("&&", (aux_expression e1, aux_expression e2)))
+  | `Exp_BAR_exp (e1, _, e2) ->
+      (Mlsem.Common.Position.dummy, A.Binop ("|", (aux_expression e1, aux_expression e2)))
+  | `Exp_HAT_exp (e1, _, e2) ->
+      (Mlsem.Common.Position.dummy, A.Binop ("^", (aux_expression e1, aux_expression e2)))
+  | `Exp_AMP_exp (e1, _, e2) ->
+      (Mlsem.Common.Position.dummy, A.Binop ("&", (aux_expression e1, aux_expression e2)))
+  | `Exp_EQEQ_exp (e1, _, e2) ->
+      (Mlsem.Common.Position.dummy, A.Binop ("==", (aux_expression e1, aux_expression e2)))
+  | `Exp_BANGEQ_exp (e1, _, e2) ->
+      (Mlsem.Common.Position.dummy, A.Binop ("!=", (aux_expression e1, aux_expression e2)))
+  | `Exp_GT_exp (e1, _, e2) ->
+      (Mlsem.Common.Position.dummy, A.Binop (">", (aux_expression e1, aux_expression e2)))
+  | `Exp_GTEQ_exp (e1, _, e2) ->
+      (Mlsem.Common.Position.dummy, A.Binop (">=", (aux_expression e1, aux_expression e2)))
+  | `Exp_LTEQ_exp (e1, _, e2) ->
+      (Mlsem.Common.Position.dummy, A.Binop ("<=", (aux_expression e1, aux_expression e2)))
+  | `Exp_LT_exp (e1, _, e2) ->
+      (Mlsem.Common.Position.dummy, A.Binop ("<", (aux_expression e1, aux_expression e2)))
+  | `Exp_LTLT_exp (e1, _, e2) ->
+      (Mlsem.Common.Position.dummy, A.Binop ("<<", (aux_expression e1, aux_expression e2)))
+  | `Exp_GTGT_exp (e1, _, e2) ->
+      (Mlsem.Common.Position.dummy, A.Binop (">>", (aux_expression e1, aux_expression e2)))
+
+and aux_not_bin_expression (e : expression_not_binary) = 
+  match e with 
+  | `Id (_loc, s) -> (Position.dummy, A.Id s)
+  | `Num_lit (_loc, s) -> (Position.dummy, A.Const (A.CInt (int_of_string s)))
+  | `Null _ -> (Position.dummy, A.Const A.CNull)
+  | `Call_exp  call -> aux_call_expression call
+  | _ -> (
+    Boilerplate.map_expression_not_binary () e |> Tree_sitter_run.Raw_tree.to_channel stdout ;
+    failwith "Not supported yet: not binary expressions"
+  )
+and aux_call_expression (call: call_expression) =
+  let expr, args = call in
+  let func_ast = aux_expression expr in
+  let args_ast = aux_argument_list args in
+  (Mlsem.Common.Position.dummy, A.Call (func_ast, args_ast))
+and aux_argument (arg: anon_choice_exp_f079e30) =
+  match arg with 
+  | `Exp e -> aux_expression e
+  | `Comp_stmt comp -> aux_body comp
+and aux_argument_list (arg_list: argument_list) =
+  let _,args,_ = arg_list in
+  match args with 
+  | None -> []
+  | Some (arg1, others) ->
+    aux_argument arg1 ::  List.map (fun (_, arg) -> aux_argument arg) others
+
+and  aux_comma_expression (expr: anon_choice_exp_55b4dba) =
   match expr with
   | `Exp e -> aux_expression e
   | `Comma_exp (e1, _, e2) -> 
       let _ = aux_expression e1 in
       aux_comma_expression e2
 
-let aux_return_statement (ret: return_statement)  =
+and aux_return_statement (ret: return_statement)  =
   let _, expr_opt, _ = ret in
   match expr_opt with
   | None -> (Mlsem.Common.Position.dummy, A.Return None)
   | Some expr -> (Mlsem.Common.Position.dummy, Return (Some (aux_comma_expression expr)))
 
-let aux_expression_statement (expr_stmt: expression_statement) =
+and aux_expression_statement (expr_stmt: expression_statement) =
   match expr_stmt with 
   | (Some comma_expr, _) -> aux_comma_expression comma_expr
   | (None, _) -> (Mlsem.Common.Position.dummy, A.Return None)
 
 
-let aux_for_statement (for_stmt: for_statement) =
+and aux_for_statement (for_stmt: for_statement) =
   let _,_,_body,_,_stmt = for_stmt in
   failwith "Not supported yet: for statement"
 
-let aux_while_statement (while_stmt: while_statement) =
+and aux_while_statement (while_stmt: while_statement) =
   let _,_cond,_body = while_stmt in
   failwith "Not supported yet: while statement"
 
-let aux_do_statement (do_stmt: do_statement) =
+and aux_do_statement (do_stmt: do_statement) =
   let _,_body,_,_cond,_ = do_stmt in
   failwith "Not supported yet: do statement"
 
-let rec aux_non_case_statement (stmt: non_case_statement) =
+and aux_non_case_statement (stmt: non_case_statement) =
   match stmt with
   | `Ret_stmt ret -> aux_return_statement ret
   | `Exp_stmt exp -> aux_expression_statement exp
