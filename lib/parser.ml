@@ -120,12 +120,23 @@ and aux_bin_expression (e: binary_expression) =
   | `Exp_GTGT_exp (e1, _, e2) ->
       (Mlsem.Common.Position.dummy, A.Binop (">>", (aux_expression e1, aux_expression e2)))
 
+and aux_string (s: string_) = 
+  let unescape  = function
+    | `Imm_tok_prec_p1_pat_c7f65b4 (_loc, s) -> s
+    | `Esc_seq (_loc, s) -> s
+  in
+  match s with 
+  | `Str_lit (_prefix,escaped, _) -> 
+    let str = String.concat "" (List.map unescape escaped) in
+    (Mlsem.Common.Position.dummy, A.Const (A.CStr str))
+  | _ -> failwith "Not supported yet: strings with escaped characters or concatenated strings"
 and aux_not_bin_expression (e : expression_not_binary) = 
   match e with 
   | `Id (_loc, s) -> (Position.dummy, A.Id s)
   | `Num_lit (_loc, s) -> (Position.dummy, A.Const (A.CInt (int_of_string s)))
   | `Null _ -> (Position.dummy, A.Const A.CNull)
   | `Call_exp  call -> aux_call_expression call
+  | `Str s -> aux_string s
   | _ -> (
     Boilerplate.map_expression_not_binary () e |> Tree_sitter_run.Raw_tree.to_channel stdout ;
     failwith "Not supported yet: not binary expressions"
