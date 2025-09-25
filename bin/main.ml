@@ -9,8 +9,7 @@ let main cst ast filename =
   else if ast then
     let cst = Parser.parse_file filename in
     Printf.printf "%s\n" (Ast.show_definitions (Parser.to_ast cst))
-  else
-    Printf.eprintf "Usage: %s [--cst|--ast] <c_file>\n" Sys.argv.(0)
+  (* else... nothing to print so far*)
 
 let cst_opt =
   let doc = "Print CST (concrete syntax tree)" in
