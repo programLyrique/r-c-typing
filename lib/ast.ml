@@ -5,10 +5,12 @@ type label = string
 [@@deriving show]
 
 type const =
-| CChr of string
+| CStr of string
 | CDbl of string
-| CLgl of bool
+| CInt of int
+| CBool of bool
 | CNull
+| CNa
 [@@deriving show]
 
 type e' =
@@ -19,19 +21,26 @@ type e' =
 | VarAssign of Variable.t * e
 | Unop of Variable.t * e
 | Binop of Variable.t * e * e
-| Call of e * arg list
+| Call of e * e list
 | Ite of e * e * e
 | While of e * e
 (*| TyCheck of e * Types.Ty.t*) (* Test between an expression and a constant *)
-| Function of param list * e
+| Function of Variable.t list * e
 | Seq of e * e
 | Return of e option | Break | Next
 [@@deriving show]
-and arg = arg_label * e
-[@@deriving show]
-and arg_label = Positional | Named of label
-[@@deriving show]
-and param = NoDefault of Variable.t | Default of Variable.t * e | Ellipsis
-[@@deriving show]
 and e = Eid.t * e'
 [@@deriving show]
+
+module BuiltinOp = struct
+  let eq = MVariable.create Immut (Some "==__2")
+  let neq = MVariable.create Immut (Some "!=__2")
+  let all = [ eq ; neq ]
+  let find_builtin str =
+    let f v =
+      match Variable.get_name v with
+      | None -> false
+      | Some name -> String.equal name str
+    in
+    List.find_opt f all
+end

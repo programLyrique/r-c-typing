@@ -1,4 +1,5 @@
 open Mlsem.Common
+module MVariable = Mlsem.Lang.MVariable
 
 module Position = struct
   type t = Position.t
@@ -43,6 +44,8 @@ type ctype =
   | Call of e * e list 
   | Ite of e * e * e option
   | Return of e option
+  | Break
+  | Next
   | Seq of e list
   | Comma of e * e
   [@@deriving show]
@@ -54,3 +57,29 @@ type ctype =
 
 type definitions = top_level_unit list
 [@@deriving show]
+
+module StrMap = Map.Make(String)
+type env = { id: Variable.t StrMap.t }
+
+let var env str = 
+  match StrMap.find_opt str env.id with 
+ | None ->
+    begin match Ast.BuiltinOp.find_builtin str with
+    | None -> MVariable.create Immut (Some str)
+    | Some v -> v
+    end
+  | Some v -> v
+
+let add_var env str =
+  let v = MVariable.create MVariable.Mut (Some str) in
+  StrMap.add str v env
+
+let aux_const c = 
+  match c with 
+  | CStr s -> Ast.CStr s 
+  | CFloat s -> Ast.CDbl s
+  | CInt i -> Ast.CInt i
+  | CNull -> Ast.CNull
+  | CNa -> Ast.CNa
+
+
