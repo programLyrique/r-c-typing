@@ -1,7 +1,7 @@
 open Tree_sitter_c
 open Tree_sitter_run
 open CST
-module A = Ast
+module A = PAst
 open Mlsem.Common
 
 let print_res (res: (CST.translation_unit, CST.extra) Tree_sitter_run.Parsing_result.t) = 

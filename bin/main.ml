@@ -8,7 +8,7 @@ let main cst ast filename =
     Parser.print_res cst
   else if ast then
     let cst = Parser.parse_file filename in
-    Printf.printf "%s\n" (Ast.show_definitions (Parser.to_ast cst))
+    Printf.printf "%s\n" (PAst.show_definitions (Parser.to_ast cst))
   (* else... nothing to print so far*)
 
 let cst_opt =

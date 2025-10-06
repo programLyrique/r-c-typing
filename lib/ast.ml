@@ -1,56 +1,37 @@
 open Mlsem.Common
+module MVariable = Mlsem.Lang.MVariable
 
-module Position = struct
-  type t = Position.t
-  let pp fmt _ = Format.fprintf fmt "_"
-end
+type label = string
+[@@deriving show]
 
 type const =
- | CStr of string 
- | CFloat of string 
- | CInt of int 
- | CNull
- | CNa
- [@@deriving show]
+| CChr of string
+| CDbl of string
+| CLgl of bool
+| CNull
+[@@deriving show]
 
-type ctype = 
- | Void
- | Int
- | Float 
- | Char
- | Ptr of ctype
- | Array of ctype * int option
- | Struct of string * (ctype * string) list
- | Union of string * (ctype * string) list
- | Enum of string * (string * int option) list
- | Typedef of string
- (* SEXPs *)
- | SEXP
- | Any
- [@@deriving show]
-
-
- type top_level_unit' = 
-  | Fundef of ctype * string * param list * e
-  [@@deriving show]
- and top_level_unit = Position.t * top_level_unit'
-  [@@deriving show]
- and e' = 
-  | Const of const 
-  | Id of string
-  | Unop of string * e
-  | Binop of string * (e * e) 
-  | Call of e * e list 
-  | Ite of e * e * e option
-  | Return of e option
-  | Seq of e list
-  | Comma of e * e
-  [@@deriving show]
- and param = ctype * string
-  [@@deriving show]
- and e = Position.t * e'
-  [@@deriving show]
-
-
-type definitions = top_level_unit list
+type e' =
+| Const of const
+| Id of Variable.t
+| Declare of Variable.t * e
+| Let of Variable.t * e * e
+| VarAssign of Variable.t * e
+| Unop of Variable.t * e
+| Binop of Variable.t * e * e
+| Call of e * arg list
+| Ite of e * e * e
+| While of e * e
+(*| TyCheck of e * Types.Ty.t*) (* Test between an expression and a constant *)
+| Function of param list * e
+| Seq of e * e
+| Return of e option | Break | Next
+[@@deriving show]
+and arg = arg_label * e
+[@@deriving show]
+and arg_label = Positional | Named of label
+[@@deriving show]
+and param = NoDefault of Variable.t | Default of Variable.t * e | Ellipsis
+[@@deriving show]
+and e = Eid.t * e'
 [@@deriving show]
