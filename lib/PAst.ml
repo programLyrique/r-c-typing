@@ -3,7 +3,9 @@ module MVariable = Mlsem.Lang.MVariable
 
 module Position = struct
   type t = Position.t
-  let pp fmt _ = Format.fprintf fmt "_"
+  let pp fmt pos = if pos = Position.dummy then Format.fprintf fmt "dummy"
+        else  Format.fprintf fmt "(%d,%d)" 
+    (Position.start_of_position pos).pos_lnum (Position.end_of_position pos).pos_lnum
 end
 
 type const =
