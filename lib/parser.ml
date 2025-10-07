@@ -43,6 +43,21 @@ let conv_pos tspos =
     pos_cnum = bol + tspos.Loc.column ;
   }
 
+
+let loc_to_pos (loc: Loc.t) : Position.t =
+  let start_pos = conv_pos loc.start in
+  let end_pos = conv_pos loc.end_ in
+  Position.lex_join start_pos end_pos
+
+(** Given to locations, create a position using the start of
+   the first loc and the end of the second loc *)
+let locs_to_pos (loc1: Loc.t) (loc2: Loc.t) : Position.t =
+  let start_pos = conv_pos loc1.start in
+  let end_pos = conv_pos loc2.end_ in
+  Position.lex_join start_pos end_pos
+
+
+
 let aux_primitive_type t = 
   match t with 
   | "void" -> A.Void
@@ -122,18 +137,21 @@ and aux_bin_expression (e: binary_expression) =
 
 and aux_string (s: string_) = 
   let unescape  = function
-    | `Imm_tok_prec_p1_pat_c7f65b4 (_loc, s) -> s
-    | `Esc_seq (_loc, s) -> s
+    | `Imm_tok_prec_p1_pat_c7f65b4 (loc, s) -> (loc,s)
+    | `Esc_seq (loc, s) -> (loc,s)
   in
   match s with 
   | `Str_lit (_prefix,escaped, _) -> 
-    let str = String.concat "" (List.map unescape escaped) in
-    (Mlsem.Common.Position.dummy, A.Const (A.CStr str))
+    let pos_str = List.map unescape escaped in
+    let str = String.concat "" (List.map snd pos_str) in
+    let start_loc = fst (List.hd pos_str) in
+    let end_loc = fst (List.nth pos_str (List.length pos_str - 1) ) in
+    (locs_to_pos start_loc end_loc, A.Const (A.CStr str))
   | _ -> failwith "Not supported yet: strings with escaped characters or concatenated strings"
 and aux_not_bin_expression (e : expression_not_binary) = 
   match e with 
-  | `Id (_loc, s) -> (Position.dummy, A.Id s)
-  | `Num_lit (_loc, s) -> (Position.dummy, A.Const (A.CInt (int_of_string s)))
+  | `Id (loc, s) -> (loc_to_pos loc, A.Id s)
+  | `Num_lit (loc, s) -> (loc_to_pos loc, A.Const (A.CInt (int_of_string s)))
   | `Null _ -> (Position.dummy, A.Const A.CNull)
   | `Call_exp  call -> aux_call_expression call
   | `Str s -> aux_string s
@@ -197,9 +215,9 @@ and aux_non_case_statement (stmt: non_case_statement) =
   | `For_stmt for_stmt -> aux_for_statement for_stmt
   | `While_stmt while_stmt -> aux_while_statement while_stmt
   | `Do_stmt do_stmt -> aux_do_statement do_stmt
-  | `Brk_stmt _ -> (Mlsem.Common.Position.dummy, Return None)
-  | `Cont_stmt _ -> (Mlsem.Common.Position.dummy, Return None)
-  | `Goto_stmt _ -> (Mlsem.Common.Position.dummy, Return None)
+  | `Brk_stmt ((l1, _), (l2, _)) -> (locs_to_pos l1 l2, Return None)
+  | `Cont_stmt ((l1, _), (l2, _)) -> (locs_to_pos l1 l2, Return None)
+  | `Goto_stmt ((l1, _),_, (l2, _)) -> (locs_to_pos l1 l2, Return None)
   | `Labe_stmt _ -> (Mlsem.Common.Position.dummy, Return None)
   | `Switch_stmt _ -> (Mlsem.Common.Position.dummy, Return None)
   | `Attr_stmt _ -> failwith "Not supported yet: attribute statements"
@@ -226,30 +244,35 @@ and aux_block_item (item : block_item) =
   | _ -> failwith "Not supported yet: old function defi or link spec"
 
 and aux_body body =
-  let _,block_items,_ = body in
+  let (l1,_),block_items,(l2,_) = body in
   let stmts = List.map aux_block_item block_items in
   if Utils.is_singleton stmts then
     List.hd stmts
   else
-   (Mlsem.Common.Position.dummy, A.Seq stmts)
+   (locs_to_pos l1 l2, A.Seq stmts)
 
 and aux_paren_expr (p_expr: parenthesized_expression) =
-  let _, expr, _ = p_expr in
+  let (l1,_), expr, (l2,_) = p_expr in
   match expr with
   | `Exp e -> aux_expression e
   | `Comma_exp (e1, _, e2) -> 
       let ast1 = aux_expression e1 in
       let ast2 = aux_comma_expression e2 in
-      (Mlsem.Common.Position.dummy, A.Comma (ast1,ast2))
+      (locs_to_pos l1 l2, A.Comma (ast1,ast2))
   | `Comp_stmt comp -> aux_body comp
 
 and aux_if_statement (if_stmt: if_statement) =
-  let _, cond, then_stmt, else_opt = if_stmt in
+  let (l1,_), cond, then_stmt, else_opt = if_stmt in
   let ast_cond = aux_paren_expr cond in
   let ast_then = aux_statement then_stmt in
   let ast_else = Option.map (fun (_,st) -> aux_statement st) else_opt in
+  let l2 = Option.map  
+    (fun (pos,_) -> Position.end_of_position pos)
+    ast_else
+    |> Option.value ~default:(Position.end_of_position @@ fst ast_then)
+  in
 
-  (Mlsem.Common.Position.dummy,A.Ite (ast_cond, ast_then, ast_else)) (* TODO *)
+  (Position.lex_join (conv_pos l1.start) l2,A.Ite (ast_cond, ast_then, ast_else)) (* TODO *)
 
 let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
   match item with
