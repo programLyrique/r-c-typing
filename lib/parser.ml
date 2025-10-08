@@ -56,6 +56,10 @@ let locs_to_pos (loc1: Loc.t) (loc2: Loc.t) : Position.t =
   let end_pos = conv_pos loc2.end_ in
   Position.lex_join start_pos end_pos
 
+  let exprs_to_pos (expr1: A.e) (expr2: A.e) : Position.t =
+    let pos1, _ = expr1 in
+    let pos2, _ = expr2 in
+    Position.join pos1 pos2
 
 
 let aux_primitive_type t = 
@@ -97,43 +101,30 @@ let rec aux_expression (expr: expression) : A.e =
   | `Choice_cond_exp e -> aux_not_bin_expression e
   | `Bin_exp e -> aux_bin_expression e
 and aux_bin_expression (e: binary_expression) =
+  let build_expr op e1 e2 = 
+    let e1 = aux_expression e1 in
+    let e2 = aux_expression e2 in
+    (exprs_to_pos e1 e2, A.Binop (op, (e1, e2)))
+  in
   match e with 
-  | `Exp_PLUS_exp (e1, _, e2) -> 
-      (Mlsem.Common.Position.dummy, A.Binop ("+", (aux_expression e1, aux_expression e2)))
-  | `Exp_DASH_exp (e1, _, e2) -> 
-      (Mlsem.Common.Position.dummy, A.Binop ("-", (aux_expression e1, aux_expression e2)))
-  | `Exp_STAR_exp (e1, _, e2) ->
-      (Mlsem.Common.Position.dummy, A.Binop ("*", (aux_expression e1, aux_expression e2)))
-  | `Exp_SLASH_exp (e1, _, e2) ->
-      (Mlsem.Common.Position.dummy, A.Binop ("/", (aux_expression e1, aux_expression e2)))
-  | `Exp_PERC_exp (e1, _, e2) ->
-      (Mlsem.Common.Position.dummy, A.Binop ("%", (aux_expression e1, aux_expression e2)))
-  | `Exp_BARBAR_exp (e1, _, e2) ->
-      (Mlsem.Common.Position.dummy, A.Binop ("||", (aux_expression e1, aux_expression e2)))
-  | `Exp_AMPAMP_exp (e1, _, e2) ->
-      (Mlsem.Common.Position.dummy, A.Binop ("&&", (aux_expression e1, aux_expression e2)))
-  | `Exp_BAR_exp (e1, _, e2) ->
-      (Mlsem.Common.Position.dummy, A.Binop ("|", (aux_expression e1, aux_expression e2)))
-  | `Exp_HAT_exp (e1, _, e2) ->
-      (Mlsem.Common.Position.dummy, A.Binop ("^", (aux_expression e1, aux_expression e2)))
-  | `Exp_AMP_exp (e1, _, e2) ->
-      (Mlsem.Common.Position.dummy, A.Binop ("&", (aux_expression e1, aux_expression e2)))
-  | `Exp_EQEQ_exp (e1, _, e2) ->
-      (Mlsem.Common.Position.dummy, A.Binop ("==", (aux_expression e1, aux_expression e2)))
-  | `Exp_BANGEQ_exp (e1, _, e2) ->
-      (Mlsem.Common.Position.dummy, A.Binop ("!=", (aux_expression e1, aux_expression e2)))
-  | `Exp_GT_exp (e1, _, e2) ->
-      (Mlsem.Common.Position.dummy, A.Binop (">", (aux_expression e1, aux_expression e2)))
-  | `Exp_GTEQ_exp (e1, _, e2) ->
-      (Mlsem.Common.Position.dummy, A.Binop (">=", (aux_expression e1, aux_expression e2)))
-  | `Exp_LTEQ_exp (e1, _, e2) ->
-      (Mlsem.Common.Position.dummy, A.Binop ("<=", (aux_expression e1, aux_expression e2)))
-  | `Exp_LT_exp (e1, _, e2) ->
-      (Mlsem.Common.Position.dummy, A.Binop ("<", (aux_expression e1, aux_expression e2)))
-  | `Exp_LTLT_exp (e1, _, e2) ->
-      (Mlsem.Common.Position.dummy, A.Binop ("<<", (aux_expression e1, aux_expression e2)))
-  | `Exp_GTGT_exp (e1, _, e2) ->
-      (Mlsem.Common.Position.dummy, A.Binop (">>", (aux_expression e1, aux_expression e2)))
+  | `Exp_PLUS_exp (e1, _, e2) -> build_expr "+" e1 e2
+  | `Exp_DASH_exp (e1, _, e2) -> build_expr "-" e1 e2
+  | `Exp_STAR_exp (e1, _, e2) -> build_expr "*" e1 e2
+  | `Exp_SLASH_exp (e1, _, e2) -> build_expr "/" e1 e2
+  | `Exp_PERC_exp (e1, _, e2) -> build_expr "%" e1 e2
+  | `Exp_BARBAR_exp (e1, _, e2) -> build_expr "||" e1 e2
+  | `Exp_AMPAMP_exp (e1, _, e2) -> build_expr "&&" e1 e2
+  | `Exp_BAR_exp (e1, _, e2) -> build_expr "|" e1 e2
+  | `Exp_HAT_exp (e1, _, e2) -> build_expr "^" e1 e2
+  | `Exp_AMP_exp (e1, _, e2) -> build_expr "&" e1 e2
+  | `Exp_EQEQ_exp (e1, _, e2) -> build_expr "==" e1 e2
+  | `Exp_BANGEQ_exp (e1, _, e2) -> build_expr "!=" e1 e2
+  | `Exp_GT_exp (e1, _, e2) -> build_expr ">" e1 e2
+  | `Exp_GTEQ_exp (e1, _, e2) -> build_expr ">=" e1 e2
+  | `Exp_LTEQ_exp (e1, _, e2) -> build_expr "<=" e1 e2
+  | `Exp_LT_exp (e1, _, e2) -> build_expr "<" e1 e2
+  | `Exp_LTLT_exp (e1, _, e2) -> build_expr "<<" e1 e2
+  | `Exp_GTGT_exp (e1, _, e2) -> build_expr ">>" e1 e2
 
 and aux_string (s: string_) = 
   let unescape  = function
@@ -162,36 +153,39 @@ and aux_not_bin_expression (e : expression_not_binary) =
 and aux_call_expression (call: call_expression) =
   let expr, args = call in
   let func_ast = aux_expression expr in
-  let args_ast = aux_argument_list args in
-  (Mlsem.Common.Position.dummy, A.Call (func_ast, args_ast))
+  let pos1,_ = func_ast in 
+  let pos2, args_ast = aux_argument_list args in
+  (Position.join pos1 pos2, A.Call (func_ast, args_ast))
 and aux_argument (arg: anon_choice_exp_f079e30) =
   match arg with 
   | `Exp e -> aux_expression e
   | `Comp_stmt comp -> aux_body comp
 and aux_argument_list (arg_list: argument_list) =
-  let _,args,_ = arg_list in
+  let (l1, _),args,(l2,_) = arg_list in
+  let pos = locs_to_pos l1 l2 in
   match args with 
-  | None -> []
+  | None -> (pos, [])
   | Some (arg1, others) ->
-    aux_argument arg1 ::  List.map (fun (_, arg) -> aux_argument arg) others
+    (pos, aux_argument arg1 ::  List.map (fun (_, arg) -> aux_argument arg) others)
 
 and  aux_comma_expression (expr: anon_choice_exp_55b4dba) =
   match expr with
   | `Exp e -> aux_expression e
   | `Comma_exp (e1, _, e2) -> 
       let _ = aux_expression e1 in
-      aux_comma_expression e2
+      aux_comma_expression e2 (* ? *)
 
 and aux_return_statement (ret: return_statement)  =
-  let _, expr_opt, _ = ret in
+  let (l1, _), expr_opt, (l2,_) = ret in
+  let pos = locs_to_pos l1 l2 in
   match expr_opt with
-  | None -> (Mlsem.Common.Position.dummy, A.Return None)
-  | Some expr -> (Mlsem.Common.Position.dummy, Return (Some (aux_comma_expression expr)))
+  | None -> (pos, A.Return None)
+  | Some expr -> (pos, Return (Some (aux_comma_expression expr)))
 
 and aux_expression_statement (expr_stmt: expression_statement) =
   match expr_stmt with 
   | (Some comma_expr, _) -> aux_comma_expression comma_expr
-  | (None, _) -> (Mlsem.Common.Position.dummy, A.Return None)
+  | (None, (loc,_)) -> (loc_to_pos loc, A.Return None)
 
 
 and aux_for_statement (for_stmt: for_statement) =
