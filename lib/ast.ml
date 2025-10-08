@@ -13,6 +13,22 @@ type const =
 | CNa
 [@@deriving show]
 
+type ctype = 
+ | Void
+ | Int
+ | Float 
+ | Char
+ | Ptr of ctype
+ | Array of ctype * int option
+ | Struct of string * (ctype * string) list
+ | Union of string * (ctype * string) list
+ | Enum of string * (string * int option) list
+ | Typedef of string
+ (* SEXPs *)
+ | SEXP
+ | Any
+ [@@deriving show]
+
 type e' =
 | Const of const
 | Id of Variable.t
@@ -25,11 +41,14 @@ type e' =
 | Ite of e * e * e
 | While of e * e
 (*| TyCheck of e * Types.Ty.t*) (* Test between an expression and a constant *)
-| Function of Variable.t list * e
+| Function of ctype * (ctype * Variable.t) list * e
 | Seq of e * e
 | Return of e option | Break | Next
 [@@deriving show]
 and e = Eid.t * e'
+[@@deriving show]
+
+type funcs = e list (* list of function definitions *)
 [@@deriving show]
 
 module BuiltinOp = struct

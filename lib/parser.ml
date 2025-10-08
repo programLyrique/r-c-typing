@@ -64,10 +64,10 @@ let locs_to_pos (loc1: Loc.t) (loc2: Loc.t) : Position.t =
 
 let aux_primitive_type t = 
   match t with 
-  | "void" -> A.Void
-  | "char" -> A.Char
-  | "short" | "int" | "long" -> A.Int
-  | "float" | "double" -> A.Float
+  | "void" -> Ast.Void
+  | "char" -> Ast.Char
+  | "short" | "int" | "long" -> Ast.Int
+  | "float" | "double" -> Ast.Float
   | _ -> failwith ("Unknown primitive type: " ^ t)
 
 let aux_struct _struc = []
@@ -78,8 +78,8 @@ let token_to_string (_loc, s) = s
 let aux_type_spec (type_spec : type_specifier)  =
   match type_spec with
   | `Prim_type tok -> let (_loc, s) = tok in aux_primitive_type s
-  | `Id (_loc, s) when s = "SEXP" -> A.SEXP
-  | `Id _ -> A.Any
+  | `Id (_loc, s) when s = "SEXP" -> Ast.SEXP
+  | `Id _ -> Ast.Any
   | `Struct_spec _ -> failwith "Not supported yet"
   | _ -> failwith "Not supported yet: type specifier"
 
@@ -146,9 +146,20 @@ and aux_not_bin_expression (e : expression_not_binary) =
   | `Null _ -> (Position.dummy, A.Const A.CNull)
   | `Call_exp  call -> aux_call_expression call
   | `Str s -> aux_string s
+  | `Assign_exp (e1, `EQ _, e2) -> 
+      let lhs = aux_assign_left_expression e1 in
+      let rhs = aux_expression e2 in
+      (exprs_to_pos lhs rhs, A.VarAssign (lhs, rhs))
   | _ -> (
-    Boilerplate.map_expression_not_binary () e |> Tree_sitter_run.Raw_tree.to_channel stdout ;
+    Boilerplate.map_expression_not_binary () e |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: not binary expressions"
+  )
+and aux_assign_left_expression (e: assignment_left_expression) : A.e =
+  match e with 
+  | `Id (loc, s) -> (loc_to_pos loc, A.Id s)
+  | _ -> (
+    Boilerplate.map_assignment_left_expression () e |> Tree_sitter_run.Raw_tree.to_channel stderr ;
+    failwith "Not supported yet: left side of assignment must be an identifier"
   )
 and aux_call_expression (call: call_expression) =
   let expr, args = call in
