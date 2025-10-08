@@ -94,6 +94,13 @@ let add_var env str =
   let v = MVariable.create MVariable.Mut (Some str) in
   StrMap.add str v env
 
+
+let add_def pid eid e str =
+  let v = StrMap.find str eid in
+  match StrMap.find_opt str pid with
+  | None -> Eid.unique (), Ast.Declare (v, e)
+  | Some v -> Eid.unique (), Ast.Let (v, (Eid.unique (), Ast.Id v), e)
+
 let aux_const c = 
   match c with 
   | CStr s -> Ast.CStr s 
@@ -131,6 +138,7 @@ let rec aux_e env (pos,e) =
   (eid, e)
 and transform env (pos, topl_unit) = 
   let eid = Eid.unique_with_pos pos in
+  (* TODO: add_def *)
   let e = match topl_unit with 
   | Fundef (ret_ty, _name, params, body) -> 
     let param_vars = bv_params params in
@@ -140,6 +148,7 @@ and transform env (pos, topl_unit) =
     let body_vars = bv_e body in
     let eid = List.fold_left add_var env.id (StrSet.elements body_vars) in
     let env = {id=eid} in
-    Ast.Function (ret_ty, params, aux_e env body) 
+    let e = List.fold_left (add_def pid eid) (aux_e env body) (StrSet.elements body_vars) in
+    Ast.Function (ret_ty, params, e) 
   in
   (eid, e)
