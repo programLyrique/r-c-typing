@@ -87,13 +87,26 @@ let aux_decl_spec decl_spec =
   let (_, type_spec, _) = decl_spec in
   aux_type_spec type_spec
 
-let rec aux_fun_name (decl : declarator) : string =
+let rec aux_decl_name (decl : declarator) : string =
   match decl with
   | `Id tok -> token_to_string tok
-  | `Func_decl (decl, _, _, _) -> aux_fun_name decl
+  | `Func_decl (decl, _, _, _) -> aux_decl_name decl
   | _ -> failwith "Not supported yet: function name"
 
-let aux_params _params = []
+let aux_param (p: anon_choice_param_decl_4ac2852) = 
+  match p with 
+  | `Param_decl (decl_spec, Some (`Decl decl), _) -> 
+    let ty = aux_decl_spec decl_spec in
+    let name = aux_decl_name decl in
+    (ty, name)
+  | `Vari_param _ -> failwith "Not supported yet: variable number of parameters (...) in declaration"
+  | _ -> failwith "Not supported yet: parameter declaration"
+
+let aux_params (decl: declarator) : A.param list =
+  match decl with 
+  | `Func_decl (_, (_loc1, `Opt_choice_param_decl_rep_COMMA_choice_param_decl (Some (p1, params)), _loc2), _,_) -> 
+     (aux_param p1) :: (List.map (fun (_, p) -> aux_param p) params)
+  | _ -> []
 
 
 let rec aux_expression (expr: expression) : A.e =
@@ -283,7 +296,7 @@ let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
   match item with
   | `Func_defi (_, decl_spec, _, decl, body) -> (
      let return_type = aux_decl_spec decl_spec in 
-     let name = aux_fun_name decl in 
+     let name = aux_decl_name decl in 
      let params = aux_params decl in
      let body = aux_body body in 
      Some (Mlsem.Common.Position.dummy, Fundef (return_type, name, params, body))

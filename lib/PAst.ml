@@ -53,8 +53,8 @@ type definitions = top_level_unit list
 module StrSet = Set.Make(String)
 
 (** Extract parameter names from a function definition 
-
-TODO: also keep the types?*)
+  Types will be added back to the Ast.Function. This is just to check if some variables 
+  in the body are defined as parameters. *)
 let bv_params params = 
   List.map snd params |> StrSet.of_list
 
@@ -94,7 +94,9 @@ let add_var env str =
   let v = MVariable.create MVariable.Mut (Some str) in
   StrMap.add str v env
 
-
+(* Check if variables in the body are defined as parameters.
+  If yes, we create a fresh variable with let that gets the param. 
+  If not, we create a fresh variable with declare (mutable) *)
 let add_def pid eid e str =
   let v = StrMap.find str eid in
   match StrMap.find_opt str pid with
@@ -138,7 +140,6 @@ let rec aux_e env (pos,e) =
   (eid, e)
 and transform env (pos, topl_unit) = 
   let eid = Eid.unique_with_pos pos in
-  (* TODO: add_def *)
   let e = match topl_unit with 
   | Fundef (ret_ty, _name, params, body) -> 
     let param_vars = bv_params params in
