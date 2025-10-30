@@ -32,6 +32,7 @@ type const =
   | Id of string
   | Unop of string * e
   | Binop of string * (e * e) 
+  (*| VarDeclare of Ast.ctype * e*)
   | VarAssign of e * e
   | Call of e * e list 
   | Ite of e * e * e option

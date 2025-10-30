@@ -245,11 +245,21 @@ and aux_statement (stmt: statement) =
  match stmt with 
  | `Case_stmt _ -> failwith "Case statements are not supported yet"
  | `Choice_attr_stmt st -> aux_non_case_statement st
-
+and aux_declaration _typ (decl: anon_choice_opt_ms_call_modi_decl_decl_opt_gnu_asm_exp_2fa2f9e) =
+  match decl with 
+  |`Init_decl (declr, _, `Exp exp) -> 
+      let name = aux_decl_name declr in
+      let e = aux_expression exp in
+      (* Keep the type information*)
+      (Mlsem.Common.Position.dummy, A.VarAssign ((Mlsem.Common.Position.dummy, A.Id name), e))
+  | _ -> failwith "Not supported yet: other declaration types or initializer list"
+and aux_declarations ((decl_type, decl1, decls, _loc2): declaration) =
+  let typ = aux_decl_spec decl_type in
+  (Mlsem.Common.Position.dummy, A.Seq ((aux_declaration typ decl1) :: (List.map (fun (_, d) -> aux_declaration typ d) decls)))
 and aux_block_item (item : block_item) =
   match item with
   | `Stmt stmt -> aux_statement stmt
-  | `Decl _decl -> failwith "Not supported yet: declarations"
+  | `Decl decls -> aux_declarations decls
   | `Attr_stmt _attr_stmt -> failwith "Not supported yet: attribute statements"
   | `Type_defi _ -> (Mlsem.Common.Position.dummy, Return None) (* Type definitions don't produce values *)
   | `Empty_decl _ -> (Mlsem.Common.Position.dummy, Return None)
