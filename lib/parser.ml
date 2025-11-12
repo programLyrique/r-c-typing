@@ -250,7 +250,8 @@ and aux_declaration _typ (decl: anon_choice_opt_ms_call_modi_decl_decl_opt_gnu_a
   |`Init_decl (declr, _, `Exp exp) -> 
       let name = aux_decl_name declr in
       let e = aux_expression exp in
-      (* Keep the type information*)
+      (* Keep the type information: add a VarDeclare? Or some kind of type constraint 
+      already at this level of the AST?*)
       (Mlsem.Common.Position.dummy, A.VarAssign ((Mlsem.Common.Position.dummy, A.Id name), e))
   | _ -> failwith "Not supported yet: other declaration types or initializer list"
 and aux_declarations ((decl_type, decl1, decls, _loc2): declaration) =
