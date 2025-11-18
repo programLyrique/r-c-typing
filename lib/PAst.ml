@@ -32,7 +32,7 @@ type const =
   | Id of string
   | Unop of string * e
   | Binop of string * (e * e) 
-  (*| VarDeclare of Ast.ctype * e*)
+  | VarDeclare of Ast.ctype * e
   | VarAssign of e * e
   | Call of e * e list 
   | Ite of e * e * e option
@@ -78,6 +78,7 @@ let rec bv_e (_,e) =
   | Return (Some e) -> bv_e e
   | Seq exprs -> List.fold_left (fun acc e -> StrSet.union acc (bv_e e)) StrSet.empty exprs
   | Comma (e1, e2) -> StrSet.union (bv_e e1) (bv_e e2)
+  | _ -> failwith "TODO: VarAssign"
 
 module StrMap = Map.Make(String)
 type env = { id: Variable.t StrMap.t }
@@ -137,6 +138,7 @@ let rec aux_e env (pos,e) =
   | Seq (e::es) -> List.fold_left (fun acc e ->
       Eid.unique (), Ast.Seq (acc, aux_e env e)) (aux_e env e) es |> snd
   | Comma _ -> failwith "Comma operator not supported yet"
+  | _ -> failwith "TODO: VarAssign"
   in
   (eid, e)
 and transform env (pos, topl_unit) = 
