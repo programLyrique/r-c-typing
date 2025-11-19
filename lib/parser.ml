@@ -173,18 +173,22 @@ and aux_not_bin_expression (e : expression_not_binary) =
       let expr = aux_expression e1 in 
       (Position.join (loc_to_pos loc1) (fst expr),
       A.Unop (op, expr))
-  | `Subs_exp (e1, _, e2, t2) -> 
-      let arr = aux_expression e1 in
-      let idx = aux_expression e2 in
-      let pos = Position.join (fst arr) (loc_to_pos (fst t2)) in
-      (pos, A.Call ((pos, A.Id "[]"), [arr; idx])) (* A usual function*)
+  | `Subs_exp expr -> 
+      aux_subscription_expression expr
   | _ -> (
     Boilerplate.map_expression_not_binary () e |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: not binary expressions"
   )
+and aux_subscription_expression (subs: subscript_expression) =
+  let expr, _, index, _ = subs in
+  let arr = aux_expression expr in
+  let idx = aux_expression index in
+  let pos = Position.join (fst arr) (fst idx) in
+  (pos, A.Call ((pos, A.Id "[]"), [arr; idx])) (* A usual function? Or a specific operator*)
 and aux_assign_left_expression (e: assignment_left_expression) : A.e =
   match e with 
   | `Id (loc, s) -> (loc_to_pos loc, A.Id s)
+  | `Subs_exp expr -> aux_subscription_expression expr (*Like that so far, but may require special treatment *)
   | _ -> (
     Boilerplate.map_assignment_left_expression () e |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: left side of assignment must be an identifier"
