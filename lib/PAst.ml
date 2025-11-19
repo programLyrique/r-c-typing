@@ -78,7 +78,8 @@ let rec bv_e (_,e) =
   | Return (Some e) -> bv_e e
   | Seq exprs -> List.fold_left (fun acc e -> StrSet.union acc (bv_e e)) StrSet.empty exprs
   | Comma (e1, e2) -> StrSet.union (bv_e e1) (bv_e e2)
-  | _ -> failwith "TODO: VarDeclare" (* We actually only need the declare but the variable extraction already does the job anyway*)
+  | VarDeclare (_, (_, Id s)) -> StrSet.singleton s
+  | VarDeclare (_, _) -> failwith "Declaration must have an identifier" (*Should be unreachable*)
 
 module StrMap = Map.Make(String)
 type env = { id: Variable.t StrMap.t }
@@ -96,11 +97,16 @@ let add_var env str =
   let v = MVariable.create MVariable.Mut (Some str) in
   StrMap.add str v env
 
+
 (* Check if variables in the body are defined as parameters.
   If yes, we create a fresh variable with let that gets the param. 
-  If not, we create a fresh variable with declare (mutable) *)
+  pid: parameters 
+  eid : variables
+  e: expression to add after (let v = param in e)
+  str: name of the variable to look at 
+  TODO: we already have explicit declarations in C so we should rather use them insteaf of detecting variables *)
 let add_def pid eid e str =
-  let v = StrMap.find str eid in
+   let v = StrMap.find str eid in
   match StrMap.find_opt str pid with
   | None -> Eid.unique (), Ast.Declare (v, e)
   | Some v -> Eid.unique (), Ast.Let (v, (Eid.unique (), Ast.Id v), e)
@@ -138,7 +144,8 @@ let rec aux_e env (pos,e) =
   | Seq (e::es) -> List.fold_left (fun acc e ->
       Eid.unique (), Ast.Seq (acc, aux_e env e)) (aux_e env e) es |> snd
   | Comma _ -> failwith "Comma operator not supported yet"
-  | _ -> failwith "TODO: VarAssign"
+  | VarDeclare (_typ, (_,Id _s)) -> Ast.Noop (* Rather generate a AST.Declare somewhere from them*)
+  | VarDeclare (_, _) -> failwith "Declaration must have an identifier" (*Should be unreachable*)
   in
   (eid, e)
 and transform env (pos, topl_unit) = 

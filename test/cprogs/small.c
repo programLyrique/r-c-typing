@@ -1,7 +1,7 @@
 #include <Rinternals.h>
 
 // This is just a test
-SEXP small_f(SEXP x, int test) {
+/*SEXP small_f(SEXP x, int test) {
     //test = test + 1;
     int y = 1;
     double z;
@@ -11,7 +11,7 @@ SEXP small_f(SEXP x, int test) {
         printf("test is non-positive\n");
     }
     return x;
-}
+}*/
 
 SEXP incr(SEXP a) {
     if (!isInteger(a) || LENGTH(a) != 1) {

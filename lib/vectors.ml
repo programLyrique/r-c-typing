@@ -23,6 +23,18 @@ module Prim = struct (* TODO: extension (for printing) *)
     t
 end
 
+module C  = struct 
+  let int = Enum.define "C_int" |> Enum.typ
+  let double = Enum.define "C_double" |> Enum.typ
+  let str = Enum.define "C_str" |> Enum.typ
+  let void = Enum.define "C_void" |> Enum.typ
+end
+
+
+module Null = struct
+  let null = Enum.define "Null" |> Enum.typ
+end
+
 module Vecs = struct
   open Sstt.Prec
   open Sstt
