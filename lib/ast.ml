@@ -30,6 +30,7 @@ type ctype =
  | Typedef of string
  (* SEXPs *)
  | SEXP
+ | Any
  [@@deriving show]
 
 type e' =
@@ -111,11 +112,11 @@ let rec aux_e (eid, e) =
     | Return e -> A.Return (match e with 
         | None -> (Eid.unique (), A.Void)
         | Some e -> aux_e e)
-    | Function (ret_type, params, body) ->
+    | Function (_ret_type, params, body) ->
       (*TODO: add projection for the tuples representing the arguments*)
 
       (* Suggested type decomposition, domain, type variable, body*)
-      A.Lambda ([], Tuple.mk (List.map (function (typ, _) -> match typ with SEXP -> GTy.mk @@ TVar.typ (TVar.mk TVar.KInfer None) | _ -> GTy.dyn) params), 
+      A.Lambda ([], GTy.mk @@ Tuple.mk (List.map (function (typ, _) -> match typ with SEXP -> TVar.typ (TVar.mk TVar.KInfer None) | _ -> TVar.typ (TVar.mk TVar.KNoInfer None)) params), 
       MVariable.create Immut None, aux_e body) 
     | Break -> A.Break
     | Next -> A.Break
