@@ -12,3 +12,15 @@ SEXP small_f(SEXP x, int test) {
     }
     return x;
 }
+
+SEXP incr(SEXP a) {
+    if (!isInteger(a) || LENGTH(a) != 1) {
+        error("Input must be a single integer");
+    }
+    int val = INTEGER(a)[0];
+    val += 1;
+    SEXP result = PROTECT(allocVector(INTSXP, 1));
+    INTEGER(result)[0] = val;
+    UNPROTECT(1);
+    return result;
+}

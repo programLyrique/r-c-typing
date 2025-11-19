@@ -163,6 +163,16 @@ and aux_not_bin_expression (e : expression_not_binary) =
       let lhs = aux_assign_left_expression e1 in
       let rhs = aux_expression e2 in
       (exprs_to_pos lhs rhs, A.VarAssign (lhs, rhs))
+  | `Un_exp (op, e1) -> 
+      let loc1,op = match op with 
+        | `DASH (loc, _) -> (loc, "-")
+        | `BANG (loc, _) -> (loc, "!")
+        | `TILDE (loc, _) -> (loc, "~")
+        | `PLUS (loc, _) -> (loc, "+")
+      in
+      let expr = aux_expression e1 in 
+      (Position.join (loc_to_pos loc1) (fst expr),
+      A.Unop (op, expr))
   | _ -> (
     Boilerplate.map_expression_not_binary () e |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: not binary expressions"

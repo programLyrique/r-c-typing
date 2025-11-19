@@ -78,7 +78,7 @@ let rec bv_e (_,e) =
   | Return (Some e) -> bv_e e
   | Seq exprs -> List.fold_left (fun acc e -> StrSet.union acc (bv_e e)) StrSet.empty exprs
   | Comma (e1, e2) -> StrSet.union (bv_e e1) (bv_e e2)
-  | _ -> failwith "TODO: VarAssign"
+  | _ -> failwith "TODO: VarDeclare" (* We actually only need the declare but the variable extraction already does the job anyway*)
 
 module StrMap = Map.Make(String)
 type env = { id: Variable.t StrMap.t }
