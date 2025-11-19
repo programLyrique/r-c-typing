@@ -18,7 +18,7 @@ SEXP incr(SEXP a) {
         error("Input must be a single integer");
     }
     int val = INTEGER(a)[0];
-    val += 1;
+    val = val + 1;
     SEXP result = PROTECT(allocVector(INTSXP, 1));
     INTEGER(result)[0] = val;
     UNPROTECT(1);

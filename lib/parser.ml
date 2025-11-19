@@ -173,6 +173,11 @@ and aux_not_bin_expression (e : expression_not_binary) =
       let expr = aux_expression e1 in 
       (Position.join (loc_to_pos loc1) (fst expr),
       A.Unop (op, expr))
+  | `Subs_exp (e1, _, e2, t2) -> 
+      let arr = aux_expression e1 in
+      let idx = aux_expression e2 in
+      let pos = Position.join (fst arr) (loc_to_pos (fst t2)) in
+      (pos, A.Call ((pos, A.Id "[]"), [arr; idx])) (* A usual function*)
   | _ -> (
     Boilerplate.map_expression_not_binary () e |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: not binary expressions"
