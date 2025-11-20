@@ -42,7 +42,7 @@ type e' =
 | Unop of Variable.t * e
 | Binop of Variable.t * e * e
 | Call of e * e list
-| Ite of e * e * e
+| If of e * e * e option
 | While of e * e
 (*| TyCheck of e * Types.Ty.t (* Test between an expression and a constant *)*)
 | Function of ctype * (ctype * Variable.t) list * e
@@ -86,7 +86,9 @@ let typeof_const c =
   | CNull -> Null.null
   | CNa -> Prim.na
 
-(* Transformation to MLsem ast*)
+(* Transformation to MLsem ast
+  GTy is used for gradual types, Ty for "normal" types
+*)
 let rec aux_e (eid, e) =
   let rec aux e = 
     match e with 
@@ -103,10 +105,10 @@ let rec aux_e (eid, e) =
         let args = (Eid.unique (), A.Constructor 
           (SA.Tuple (List.length es), es)) in
         A.App (aux_e f, args)
-    | Ite (cond, then_, else_) -> 
+    | If (cond, then_, else_) -> 
         let cond = aux_e cond in
         let cond = (Eid.unique (), (A.App ((Eid.unique (), A.Var tobool), cond))) in
-        A.Ite (cond, Ty.tt, aux_e then_, aux_e else_)
+        A.If (cond, Ty.tt, aux_e then_, Option.map aux_e else_)
     | While (_cond, _body) -> failwith "While loops not supported yet"
     | Seq (e1,e2) -> A.Seq (aux_e e1, aux_e e2)
     | Return e -> A.Return (match e with 
@@ -125,3 +127,6 @@ let rec aux_e (eid, e) =
     
   in
   (eid, aux e)
+
+  let to_mlsem e = 
+    e |> aux_e |> Mlsem.Lang.Transform.transform

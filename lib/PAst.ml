@@ -35,7 +35,7 @@ type const =
   | VarDeclare of Ast.ctype * e
   | VarAssign of e * e
   | Call of e * e list 
-  | Ite of e * e * e option
+  | If of e * e * e option
   | Return of e option
   | Break
   | Next
@@ -60,24 +60,26 @@ let bv_params params =
   List.map snd params |> StrSet.of_list
 
 (** Extract variables from an expression*)
-let rec bv_e (_,e) = 
+let rec bv_e in_lhs_assign (_,e) = 
   match e with 
-  | Break | Next | Id _ | Const _ -> StrSet.empty
-  | Unop (_, e) -> bv_e e
-  | Binop (_, (e1,e2)) -> StrSet.union (bv_e e1) (bv_e e2)
-  | VarAssign ((_,Id s), e2) -> (StrSet.singleton s) |> StrSet.union (bv_e e2)
-  | VarAssign (_,_) -> failwith "Left side of assignment must be an identifier" (* and this should currently be unreachable given how PAst is built from Cst*)
-  | Call (f, args) -> List.fold_left (fun acc arg -> StrSet.union acc (bv_e arg)) (bv_e f) args
-  | Ite (cond, then_, else_) -> 
-      let acc = bv_e cond |> StrSet.union (bv_e then_) in
+  | Break | Next  | Const _ -> StrSet.empty
+  | Id s when in_lhs_assign -> StrSet.singleton s
+  | Id _ -> StrSet.empty
+  | Unop (_, e) -> bv_e in_lhs_assign e
+  | Binop (_, (e1,e2)) -> StrSet.union (bv_e in_lhs_assign e1) (bv_e in_lhs_assign e2)
+  | VarAssign ((_,Id s), e2) -> (StrSet.singleton s) |> StrSet.union (bv_e in_lhs_assign e2)
+  | VarAssign (e,_) -> bv_e true e (* Grooss overapproximation! Left side of assignment, we want to collect identifiers in the lhs. Args will be detected as been "assigned". *)
+  | Call (f, args) -> List.fold_left (fun acc arg -> StrSet.union acc (bv_e in_lhs_assign arg)) (bv_e  false f) args
+  | If (cond, then_, else_) -> 
+      let acc = bv_e in_lhs_assign cond |> StrSet.union (bv_e in_lhs_assign then_) in
       begin match else_ with 
       | None -> acc
-      | Some e -> StrSet.union acc (bv_e e)
+      | Some e -> StrSet.union acc (bv_e in_lhs_assign e)
       end
   | Return None -> StrSet.empty
-  | Return (Some e) -> bv_e e
-  | Seq exprs -> List.fold_left (fun acc e -> StrSet.union acc (bv_e e)) StrSet.empty exprs
-  | Comma (e1, e2) -> StrSet.union (bv_e e1) (bv_e e2)
+  | Return (Some e) -> bv_e in_lhs_assign e
+  | Seq exprs -> List.fold_left (fun acc e -> StrSet.union acc (bv_e in_lhs_assign e)) StrSet.empty exprs
+  | Comma (e1, e2) -> StrSet.union (bv_e in_lhs_assign e1) (bv_e in_lhs_assign e2)
   | VarDeclare (_, (_, Id s)) -> StrSet.singleton s
   | VarDeclare (_, _) -> failwith "Declaration must have an identifier" (*Should be unreachable*)
 
@@ -128,14 +130,15 @@ let rec aux_e env (pos,e) =
   | Unop (op, e) -> Ast.Unop (var env (op ^ "__1"), aux_e env e)
   | Binop (op, (e1,e2)) -> Ast.Binop (var env (op ^ "__2"), aux_e env e1, aux_e env e2)
   | VarAssign ((_,Id s), e2) -> Ast.VarAssign (var env s, aux_e env e2)
-  | VarAssign (_,_) -> failwith "Left side of assignment must be an identifier" (* and this should currently be unreachable given how PAst is built from Cst*)
+  | VarAssign ((loc1, Call ((_,Id "[]"), args)) ,e2) -> 
+      Ast.Call (
+        aux_e env (loc1, Id "[]<-"),
+        (List.map (aux_e env) args) @ [aux_e env e2]
+      )
+  | VarAssign (_,_) -> failwith ("Unexpected left-hand side in assignment. Got: " ^ show_e (pos,e))
   | Call (f, args) -> Ast.Call (aux_e env f, List.map (aux_e env) args)
-  | Ite (cond, then_, else_) -> 
-      let else_ast = match else_ with 
-      | None -> (Eid.unique (), Ast.Const Ast.CNull)
-      | Some e -> aux_e env e
-      in
-      Ast.Ite (aux_e env cond, aux_e env then_, else_ast)
+  | If (cond, then_, else_) -> 
+      Ast.If (aux_e env cond, aux_e env then_, Option.map (aux_e env) else_)
   | Return None -> Ast.Return None
   | Return (Some e) -> Ast.Return (Some (aux_e env e))
   | Break -> Ast.Break
@@ -144,7 +147,7 @@ let rec aux_e env (pos,e) =
   | Seq (e::es) -> List.fold_left (fun acc e ->
       Eid.unique (), Ast.Seq (acc, aux_e env e)) (aux_e env e) es |> snd
   | Comma _ -> failwith "Comma operator not supported yet"
-  | VarDeclare (_typ, (_,Id _s)) -> Ast.Noop (* Rather generate a AST.Declare somewhere from them*)
+  | VarDeclare (_typ, (_,Id _s)) -> Ast.Noop (* Rather generate a AST. Declare somewhere from them*)
   | VarDeclare (_, _) -> failwith "Declaration must have an identifier" (*Should be unreachable*)
   in
   (eid, e)
@@ -156,7 +159,7 @@ and transform env (pos, topl_unit) =
     let pid = List.fold_left add_var env.id (StrSet.elements param_vars) in
     let env = {id=pid} in 
     let params = List.map (fun (ty,name) -> ty,var env name) params in 
-    let body_vars = bv_e body in
+    let body_vars = bv_e false body in
     let eid = List.fold_left add_var env.id (StrSet.elements body_vars) in
     let env = {id=eid} in
     let e = List.fold_left (add_def pid eid) (aux_e env body) (StrSet.elements body_vars) in

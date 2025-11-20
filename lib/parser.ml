@@ -327,7 +327,7 @@ and aux_if_statement (if_stmt: if_statement) =
     |> Option.value ~default:(Position.end_of_position @@ fst ast_then)
   in
 
-  (Position.lex_join (conv_pos l1.start) l2,A.Ite (ast_cond, ast_then, ast_else)) (* TODO *)
+  (Position.lex_join (conv_pos l1.start) l2,A.If (ast_cond, ast_then, ast_else)) (* TODO *)
 
 let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
   match item with
