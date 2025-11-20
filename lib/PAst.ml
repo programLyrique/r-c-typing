@@ -106,7 +106,7 @@ let add_var env str =
   eid : variables
   e: expression to add after (let v = param in e)
   str: name of the variable to look at 
-  TODO: we already have explicit declarations in C so we should rather use them insteaf of detecting variables *)
+  TODO: we already have explicit declarations in C so we should rather use them instead of detecting variables *)
 let add_def pid eid e str =
    let v = StrMap.find str eid in
   match StrMap.find_opt str pid with
@@ -154,7 +154,7 @@ let rec aux_e env (pos,e) =
 and transform env (pos, topl_unit) = 
   let eid = Eid.unique_with_pos pos in
   let e = match topl_unit with 
-  | Fundef (ret_ty, _name, params, body) -> 
+  | Fundef (ret_ty, name, params, body) -> 
     let param_vars = bv_params params in
     let pid = List.fold_left add_var env.id (StrSet.elements param_vars) in
     let env = {id=pid} in 
@@ -163,6 +163,6 @@ and transform env (pos, topl_unit) =
     let eid = List.fold_left add_var env.id (StrSet.elements body_vars) in
     let env = {id=eid} in
     let e = List.fold_left (add_def pid eid) (aux_e env body) (StrSet.elements body_vars) in
-    Ast.Function (ret_ty, params, e) 
+    Ast.Function (name, ret_ty, params, e) 
   in
   (eid, e)

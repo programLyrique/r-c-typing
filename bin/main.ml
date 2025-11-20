@@ -1,7 +1,14 @@
 open R_c_typing
 open Cmdliner
+module System = Mlsem.System
 
 module StrMap = Map.Make(String)
+
+let _infer_types _mlsem_ast =
+  System.Config.infer_overload := false; 
+  (* TODO: add typesfor functions of the standard R C API*)
+
+  ()
 
 let main cst_opt ast_opt ast2_opt mlsem_opt filename =
   let cst = Parser.parse_file filename in

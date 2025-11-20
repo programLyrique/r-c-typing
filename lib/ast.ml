@@ -45,9 +45,9 @@ type e' =
 | If of e * e * e option
 | While of e * e
 (*| TyCheck of e * Types.Ty.t (* Test between an expression and a constant *)*)
-| Function of ctype * (ctype * Variable.t) list * e
+| Function of string * ctype * (ctype * Variable.t) list * e
 | Seq of e * e
-| Noop (* Hack for the declarations*)
+| Noop (* Hack for the declarations. We should rather use the declarations directly rather than doing the imprecise analysis of used variables in bv_e*)
 | Return of e option | Break | Next
 [@@deriving show]
 and e = Eid.t * e'
@@ -114,7 +114,7 @@ let rec aux_e (eid, e) =
     | Return e -> A.Return (match e with 
         | None -> (Eid.unique (), A.Void)
         | Some e -> aux_e e)
-    | Function (_ret_type, params, body) ->
+    | Function (_name, _ret_type, params, body) ->
       (*TODO: add projection for the tuples representing the arguments*)
 
       (* Suggested type decomposition, domain, type variable, body*)
