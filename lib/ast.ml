@@ -69,13 +69,7 @@ module BuiltinOp = struct
     List.find_opt f all
 end
 
-let tobool, tobool_t =
-  let v = MVariable.create Immut (Some "tobool") in
-  let def = Arrow.mk Ty.any Ty.bool in
-  let tt = Arrow.mk (Ty.disj [Prim.tt;Vecs.mk_singl Prim.tt]) Ty.tt in
-  let ff = Arrow.mk (Ty.disj [Prim.ff;Vecs.mk_singl Prim.ff]) Ty.ff in
-  let ty = Ty.conj [def;tt;ff] in
-  v, ty
+
 
 let typeof_const c = 
   match c with 
@@ -107,7 +101,7 @@ let rec aux_e (eid, e) =
         A.App (aux_e f, args)
     | If (cond, then_, else_) -> 
         let cond = aux_e cond in
-        let cond = (Eid.unique (), (A.App ((Eid.unique (), A.Var tobool), cond))) in
+        let cond = (Eid.unique (), (A.App ((Eid.unique (), A.Var Defs.tobool), cond))) in
         A.If (cond, Ty.tt, aux_e then_, Option.map aux_e else_)
     | While (_cond, _body) -> failwith "While loops not supported yet"
     | Seq (e1,e2) -> A.Seq (aux_e e1, aux_e e2)
@@ -115,11 +109,21 @@ let rec aux_e (eid, e) =
         | None -> (Eid.unique (), A.Void)
         | Some e -> aux_e e)
     | Function (_name, _ret_type, params, body) ->
-      (*TODO: add projection for the tuples representing the arguments*)
-
+      (* Create lets in the body for each argument: match parameter names with
+       type variable in the domain *)
+      let arg_types = List.map 
+        (function (typ, _) -> match typ with 
+          SEXP -> TVar.typ (TVar.mk TVar.KInfer None) 
+          | _ -> TVar.typ (TVar.mk TVar.KNoInfer None)) 
+          params
+      in  
+      let add_let body (p, ty) = 
+        Eid.unique(), A.Let ([], p, (Eid.unique (), A.Value (GTy.mk ty)), body)
+      in
+      let body = List.fold_left add_let (aux_e body) (List.combine (List.map snd params) arg_types) in
       (* Suggested type decomposition, domain, type variable, body*)
-      A.Lambda ([], GTy.mk @@ Tuple.mk (List.map (function (typ, _) -> match typ with SEXP -> TVar.typ (TVar.mk TVar.KInfer None) | _ -> TVar.typ (TVar.mk TVar.KNoInfer None)) params), 
-      MVariable.create Immut None, aux_e body) 
+      A.Lambda ([], GTy.mk @@ Tuple.mk arg_types, 
+      MVariable.create Immut None, body) 
     | Break -> A.Break
     | Next -> A.Break
     (* Lambda *)

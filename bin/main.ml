@@ -1,12 +1,27 @@
 open R_c_typing
 open Cmdliner
+open Mlsem.Common
+open Mlsem.Types
 module System = Mlsem.System
+module MVariable = Mlsem.Lang.MVariable
 
 module StrMap = Map.Make(String)
 
+(* idenv: str -> Variable.t 
+   env: typing environment: Variable.t -> TyScheme.ty 
+*)
+
+(**  Give the any type to any free variables (not in the environment) *)
+let extend_env mlast env =
+let fv = System.Ast.fv mlast in
+let dom = Env.domain env |> VarSet.of_list in
+let missing = VarSet.diff fv dom in
+missing |> VarSet.elements |> List.fold_left
+  (fun env v -> Env.add v (TyScheme.mk_mono GTy.dyn) env) env
+
 let _infer_types _mlsem_ast =
   System.Config.infer_overload := false; 
-  (* TODO: add typesfor functions of the standard R C API*)
+  (* TODO: add types for functions of the standard R C API*)
 
   ()
 
