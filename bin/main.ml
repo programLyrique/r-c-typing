@@ -7,6 +7,13 @@ module MVariable = Mlsem.Lang.MVariable
 
 module StrMap = Map.Make(String)
 
+type cmd_options = {
+  cst : bool;
+  past : bool;
+  ast : bool;
+  mlsem : bool;
+}
+
 
 (* idenv: str -> Variable.t 
    env: typing environment: Variable.t -> TyScheme.ty 
@@ -20,7 +27,7 @@ let missing = VarSet.diff fv dom in
 missing |> VarSet.elements |> List.fold_left
   (fun env v -> Env.add v (TyScheme.mk_mono GTy.dyn) env) env
 
-let infer_ast verbose (idenv, env) (ast : Ast.e) =
+let infer_ast opts (idenv, env) (ast : Ast.e) =
   try 
     let v = 
       match ast with 
@@ -28,7 +35,7 @@ let infer_ast verbose (idenv, env) (ast : Ast.e) =
       | _ -> failwith "Expected a function definition at the top level."
     in
     let mlsem_ast = Ast.to_mlsem ast in 
-    if verbose then 
+    if opts.ast then 
       Format.printf "%a@." Mlsem.System.Ast.pp mlsem_ast;
     let env = extend_env mlsem_ast env in
     let renvs = System.Refinement.refinement_envs env mlsem_ast in
@@ -43,18 +50,11 @@ let infer_ast verbose (idenv, env) (ast : Ast.e) =
     idenv, env
 
 (** past: the parsed AST *)
-let _infer_fun_def verbose (idenv, env) past = 
+let _infer_fun_def opts (idenv, env) past = 
   let e = PAst.transform  {PAst.id = idenv} past in
-  if verbose then
+  if opts.past then
     Printf.printf "%s\n" (Ast.show_e e);
- infer_ast verbose (idenv, env) e
-
-type cmd_options = {
-  cst : bool;
-  past : bool;
-  ast : bool;
-  mlsem : bool;
-}
+ infer_ast opts (idenv, env) e
 
 
 let main opts filename =
