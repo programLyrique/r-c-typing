@@ -35,7 +35,7 @@ let infer_ast opts (idenv, env) (ast : Ast.e) =
       | _ -> failwith "Expected a function definition at the top level."
     in
     let mlsem_ast = Ast.to_mlsem ast in 
-    if opts.ast then 
+    if opts.mlsem then 
       Format.printf "%a@." Mlsem.System.Ast.pp mlsem_ast;
     let env = extend_env mlsem_ast env in
     let renvs = System.Refinement.refinement_envs env mlsem_ast in
@@ -50,29 +50,23 @@ let infer_ast opts (idenv, env) (ast : Ast.e) =
     idenv, env
 
 (** past: the parsed AST *)
-let _infer_fun_def opts (idenv, env) past = 
+let infer_fun_def opts (idenv, env) past = 
   let e = PAst.transform  {PAst.id = idenv} past in
-  if opts.past then
+  if opts.ast then
     Printf.printf "%s\n" (Ast.show_e e);
  infer_ast opts (idenv, env) e
 
 
 let main opts filename =
+  System.Config.infer_overload := false ;
   let cst = Parser.parse_file filename in
   if opts.cst then Parser.print_res cst;
   let past = Parser.to_ast cst in
   if opts.past then
     Printf.printf "%s\n" (PAst.show_definitions past);
-  let env = {PAst.id = StrMap.empty} in
-  let asts = List.map (PAst.transform env) past in 
-  if opts.ast then
-    Printf.printf "%s\n" (Ast.show_funcs asts);
-  let mlsem_asts = List.map Ast.to_mlsem asts in
-  if opts.mlsem then
-    List.iter (fun mlsem_ast ->
-      Format.printf "%a@." Mlsem.System.Ast.pp mlsem_ast
-    ) mlsem_asts;
-  ()
+  let idenv = StrMap.empty in
+  let env = Defs.initial_env in
+  List.fold_left (infer_fun_def opts) (idenv, env) past |> ignore
 
 let cst_opt =
   let doc = "Print CST (concrete syntax tree)" in
