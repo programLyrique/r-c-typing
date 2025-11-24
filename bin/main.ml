@@ -7,6 +7,7 @@ module MVariable = Mlsem.Lang.MVariable
 
 module StrMap = Map.Make(String)
 
+
 (* idenv: str -> Variable.t 
    env: typing environment: Variable.t -> TyScheme.ty 
 *)
@@ -19,24 +20,55 @@ let missing = VarSet.diff fv dom in
 missing |> VarSet.elements |> List.fold_left
   (fun env v -> Env.add v (TyScheme.mk_mono GTy.dyn) env) env
 
-let _infer_types _mlsem_ast =
-  System.Config.infer_overload := false; 
-  (* TODO: add types for functions of the standard R C API*)
+let infer_ast verbose (idenv, env) (ast : Ast.e) =
+  try 
+    let v = 
+      match ast with 
+      | _,Ast.Function (name, _, _, _) -> MVariable.create Immut (Some name)
+      | _ -> failwith "Expected a function definition at the top level."
+    in
+    let mlsem_ast = Ast.to_mlsem ast in 
+    if verbose then 
+      Format.printf "%a@." Mlsem.System.Ast.pp mlsem_ast;
+    let env = extend_env mlsem_ast env in
+    let renvs = System.Refinement.refinement_envs env mlsem_ast in
+    let reconstructed = System.Reconstruction.infer env renvs mlsem_ast in
+    let typ = System.Checker.typeof_def env reconstructed mlsem_ast in
+    let typ = TyScheme.norm_and_simpl typ in 
+    Format.printf "%a: %a@.@." Variable.pp v TyScheme.pp_short typ ;
+    idenv, env
+  with System.Checker.Untypeable err ->
+    Format.printf "Untypeable: %s@." err.title;
+    err.descr |> Option.iter (Format.printf "%s@." ) ;
+    idenv, env
 
-  ()
+(** past: the parsed AST *)
+let _infer_fun_def verbose (idenv, env) past = 
+  let e = PAst.transform  {PAst.id = idenv} past in
+  if verbose then
+    Printf.printf "%s\n" (Ast.show_e e);
+ infer_ast verbose (idenv, env) e
 
-let main cst_opt ast_opt ast2_opt mlsem_opt filename =
+type cmd_options = {
+  cst : bool;
+  past : bool;
+  ast : bool;
+  mlsem : bool;
+}
+
+
+let main opts filename =
   let cst = Parser.parse_file filename in
-  if cst_opt then Parser.print_res cst;
-  let ast = Parser.to_ast cst in
-  if ast_opt then
-    Printf.printf "%s\n" (PAst.show_definitions ast);
+  if opts.cst then Parser.print_res cst;
+  let past = Parser.to_ast cst in
+  if opts.past then
+    Printf.printf "%s\n" (PAst.show_definitions past);
   let env = {PAst.id = StrMap.empty} in
-  let asts = List.map (PAst.transform env) ast in 
-  if ast2_opt then
+  let asts = List.map (PAst.transform env) past in 
+  if opts.ast then
     Printf.printf "%s\n" (Ast.show_funcs asts);
   let mlsem_asts = List.map Ast.to_mlsem asts in
-  if mlsem_opt then
+  if opts.mlsem then
     List.iter (fun mlsem_ast ->
       Format.printf "%a@." Mlsem.System.Ast.pp mlsem_ast
     ) mlsem_asts;
@@ -46,13 +78,13 @@ let cst_opt =
   let doc = "Print CST (concrete syntax tree)" in
   Arg.(value & flag & info ["cst"] ~doc)
 
-let ast_opt =
-  let doc = "Print AST (abstract syntax tree)" in
-  Arg.(value & flag & info ["ast"] ~doc)
+let past_opt =
+  let doc = "Print parsed AST" in
+  Arg.(value & flag & info ["past"] ~doc)
 
-let ast2_opt =
-  let doc = "Print AST2 (typed abstract syntax tree)" in
-  Arg.(value & flag & info ["ast2"] ~doc)
+let ast_opt =
+  let doc = "Print AST (typed abstract syntax tree)" in
+  Arg.(value & flag & info ["ast"] ~doc)
 
 let mlsem_opt = 
   let doc = "Print MLsem AST" in
@@ -67,10 +99,10 @@ let cmd =
   Cmd.v
     (Cmd.info "r-c-typing")
     (let+ cst = cst_opt
+     and+ past = past_opt
      and+ ast = ast_opt
-     and+ ast2 = ast2_opt
      and+ mlsem = mlsem_opt
      and+ filename = file_arg in
-     main cst ast ast2 mlsem filename)
+     main {cst; past; ast; mlsem} filename)
 
 let () = exit (Cmd.eval cmd)
