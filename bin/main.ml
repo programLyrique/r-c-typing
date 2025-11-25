@@ -21,17 +21,17 @@ type cmd_options = {
 
 (**  Give the any type to any free variables (not in the environment) *)
 let extend_env mlast env =
-let fv = System.Ast.fv mlast in
-let dom = Env.domain env |> VarSet.of_list in
-let missing = VarSet.diff fv dom in
-missing |> VarSet.elements |> List.fold_left
-  (fun env v -> Env.add v (TyScheme.mk_mono GTy.dyn) env) env
+  let fv = System.Ast.fv mlast in
+  let dom = Env.domain env |> VarSet.of_list in
+  let missing = VarSet.diff fv dom in
+  missing |> VarSet.elements |> List.fold_left
+    (fun env v -> Env.add v (TyScheme.mk_mono GTy.dyn) env) env
 
 let infer_ast opts (idenv, env) (ast : Ast.e) =
   try 
-    let v = 
+    let name,v = 
       match ast with 
-      | _,Ast.Function (name, _, _, _) -> MVariable.create Immut (Some name)
+      | _,Ast.Function (name, _, _, _) -> name,MVariable.create Immut (Some name)
       | _ -> failwith "Expected a function definition at the top level."
     in
     let mlsem_ast = Ast.to_mlsem ast in 
@@ -41,9 +41,13 @@ let infer_ast opts (idenv, env) (ast : Ast.e) =
     let renvs = System.Refinement.refinement_envs env mlsem_ast in
     let reconstructed = System.Reconstruction.infer env renvs mlsem_ast in
     let typ = System.Checker.typeof_def env reconstructed mlsem_ast in
-    let typ = TyScheme.norm_and_simpl typ in 
-    Format.printf "%a: %a@.@." Variable.pp v TyScheme.pp_short typ ;
-    idenv, env
+    let tys = TyScheme.norm_and_simpl typ in 
+    Format.printf "%a: %a@.@." Variable.pp v TyScheme.pp_short tys ;
+    let (vars, typ) = TyScheme.get tys in 
+    let typ = GTy.ub typ in 
+    Format.printf "Upper bound: %a@.@." Ty.pp typ ;
+    let tys = TyScheme.mk vars (GTy.mk typ) in
+    StrMap.add name v idenv, Env.add v tys env
   with System.Checker.Untypeable err ->
     Format.printf "Untypeable: %s@." err.title;
     err.descr |> Option.iter (Format.printf "%s@." ) ;
