@@ -46,6 +46,7 @@ let infer_ast opts (idenv, env) (ast : Ast.e) =
     let (vars, typ) = TyScheme.get tys in 
     let typ = GTy.ub typ in 
     Format.printf "Upper bound: %a@.@." Ty.pp typ ;
+    (* We only keep the upper bound as type for v and add it to the environment *)
     let tys = TyScheme.mk vars (GTy.mk typ) in
     StrMap.add name v idenv, Env.add v tys env
   with System.Checker.Untypeable err ->

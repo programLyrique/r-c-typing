@@ -13,6 +13,21 @@ TODO for the example in small.c:
   error
 *)
 
+let error = 
+  let v = MVariable.create Immut (Some "error") in
+  let ty = Arrow.mk Ty.empty Ty.any in 
+  v, ty
+
+let isInteger = 
+  let v = MVariable.create Immut (Some "isInteger") in
+  let ty = Arrow.mk Prim.int C.int in
+  v, ty
+
+let integer = 
+  let v = MVariable.create Immut (Some "INTEGER") in
+  let ty = Arrow.mk Prim.int Ty.any in
+  v, ty
+
 let tobool, tobool_t =
   let v = MVariable.create Immut (Some "tobool") in
   let def = Arrow.mk Ty.any Ty.bool in
@@ -22,7 +37,7 @@ let tobool, tobool_t =
   v, ty
 
 
-let defs = [tobool, tobool_t]
+let defs = [(tobool, tobool_t); error ; isInteger ; integer ]
 let initial_env =
   let add_def env (v,ty) =
     Env.add v (GTy.mk ty |> TyScheme.mk_poly) env
