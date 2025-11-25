@@ -25,7 +25,8 @@ let extend_env mlast env =
   let dom = Env.domain env |> VarSet.of_list in
   let missing = VarSet.diff fv dom in
   missing |> VarSet.elements |> List.fold_left
-    (fun env v -> (Format.printf "@.%a@." Variable.pp v; Env.add v (TyScheme.mk_mono GTy.dyn) env)) env
+    (fun env v -> (Printf.printf "Missing: %s at %s \n" (Variable.get_unique_name v) (Position.string_of_pos (Variable.get_location v));
+     Env.add v (TyScheme.mk_mono GTy.dyn) env)) env
 
 let infer_ast opts (idenv, env) (ast : Ast.e) =
   try 
@@ -64,6 +65,7 @@ let infer_fun_def opts (idenv, env) past =
 
 let main opts filename =
   System.Config.infer_overload := false ;
+  Mlsem.Types.Recording.start_recording ();
   let cst = Parser.parse_file filename in
   if opts.cst then Parser.print_res cst;
   let past = Parser.to_ast cst in
@@ -71,7 +73,9 @@ let main opts filename =
     Printf.printf "%s\n" (PAst.show_definitions past);
   let idenv = StrMap.empty in
   let env = Defs.initial_env in
-  List.fold_left (infer_fun_def opts) (idenv, env) past |> ignore
+  List.fold_left (infer_fun_def opts) (idenv, env) past |> ignore;
+  Mlsem.Types.Recording.save_to_file "mlsen_recording.json" (Mlsem.Types.Recording.tally_calls ());
+  ()
 
 let cst_opt =
   let doc = "Print CST (concrete syntax tree)" in
@@ -102,6 +106,7 @@ let cmd =
      and+ ast = ast_opt
      and+ mlsem = mlsem_opt
      and+ filename = file_arg in
-     main {cst; past; ast; mlsem} filename)
+     PEnv.sequential_handler PEnv.empty (fun filename -> main {cst; past; ast; mlsem} filename) filename |> fst)
+     
 
 let () = exit (Cmd.eval cmd)

@@ -20,12 +20,12 @@ let error =
 
 let isInteger = 
   let v = MVariable.create Immut (Some "isInteger") in
-  let ty = Arrow.mk (Vecs.mk_unsized Prim.int) C.not_zero in
+  let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.int]) C.not_zero in
   v, ty
 
 let integer = 
   let v = MVariable.create Immut (Some "INTEGER") in
-  let ty = Arrow.mk Prim.int C.int in
+  let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.int]) Ty.any in
   v, ty
 
 let tobool, tobool_t =
@@ -46,14 +46,14 @@ let logical_or =
   v, ty
 
 let neg = 
-  let v = MVariable.create Immut (Some "!") in
+  let v = MVariable.create Immut (Some "!__1") in
   let tt = Arrow.mk Ty.tt Ty.ff in
   let ff = Arrow.mk Ty.ff Ty.tt in
   let ty = Ty.conj [tt;ff] in
   v, ty
 
 let allocVector =
-  let v = MVariable.create Immut (Some "alloVector") in
+  let v = MVariable.create Immut (Some "allocVector") in
   let alpha = TVar.mk TVar.KInfer None |> TVar.typ in 
   let ty = Arrow.mk (Tuple.mk [(Ty.cap alpha Prim.any); C.int]) (Vecs.mk_unsized alpha)  in
   v, ty
@@ -65,12 +65,12 @@ let  length =
 
 let array_assignment =
   let v = MVariable.create Immut (Some "[]<-") in
-  let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.int; C.int; C.int]) C.void in
+  let ty = Arrow.mk (Tuple.mk [Ty.any; C.int; C.int]) C.void in
   v, ty
 
 let array_access =
   let v = MVariable.create Immut (Some "[]") in
-  let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.int; C.int]) C.int in
+  let ty = Arrow.mk (Tuple.mk [Ty.any; C.int]) C.int in
   v, ty
 
 let protect =
@@ -79,7 +79,12 @@ let protect =
   let ty = Arrow.mk alpha alpha in
   v, ty
 
-let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ; array_access ; logical_or ; length ; allocVector ; protect]
+let unprotect =
+  let v = MVariable.create Immut (Some "UNPROTECT") in
+  let ty = Arrow.mk C.int C.void in
+  v, ty
+
+let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ; array_access ; logical_or ; length ; allocVector ; protect ; unprotect ; neg]
 
 
 module StrMap = Map.Make(String)

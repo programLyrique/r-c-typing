@@ -92,7 +92,7 @@ let var env str =
     begin match Ast.BuiltinOp.find_builtin str with
     | None -> (
       match Defs.StrMap.find_opt str Defs.defs_map with 
-      | None -> MVariable.create Immut (Some str)
+      | None -> (Printf.printf "Creating fresh variable: %s\n" str; MVariable.create Immut (Some str))
       | Some v -> v
     )
     | Some v -> v
@@ -112,7 +112,7 @@ let add_var env str =
   str: name of the variable to look at 
   TODO: we already have explicit declarations in C so we should rather use them instead of detecting variables *)
 let add_def pid eid e str =
-   let v = StrMap.find str eid in
+  let v = StrMap.find str eid in
   match StrMap.find_opt str pid with
   | None -> Eid.unique (), Ast.Declare (v, e)
   | _ -> e
@@ -162,11 +162,11 @@ and transform env (pos, topl_unit) =
     let param_vars = bv_params params in
     let pid = List.fold_left add_var env.id (StrSet.elements param_vars) in
     let env = {id=pid} in 
-    let params = List.map (fun (ty,name) -> ty,var env name) params in 
     let body_vars = bv_e false body in
     let eid = List.fold_left add_var env.id (StrSet.elements body_vars) in
     let env = {id=eid} in
     let e = List.fold_left (add_def pid eid) (aux_e env body) (StrSet.elements body_vars) in
+    let params = List.map (fun (ty,name) -> ty,var env name) params in 
     Ast.Function (name, ret_ty, params, e) 
   in
   (eid, e)

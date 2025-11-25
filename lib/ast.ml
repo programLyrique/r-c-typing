@@ -87,7 +87,7 @@ let rec aux_e (eid, e) =
   let rec aux e = 
     match e with 
     | Const c -> A.Value (typeof_const c |> GTy.mk )
-    | Id v -> A.Var v 
+    | Id v -> (Printf.printf "var: %s\n" (Variable.get_unique_name  v);A.Var v )
     | Declare (v,e) -> A.Declare (v, aux_e e)
     | Let (v,e1,e2) -> A.Let ([], v, aux_e e1, aux_e e2)
     | VarAssign (v,e2) -> A.VarAssign (v, aux_e e2)
@@ -114,7 +114,7 @@ let rec aux_e (eid, e) =
       let arg_types = List.map 
         (function (typ, _) -> match typ with 
           SEXP -> TVar.typ (TVar.mk TVar.KInfer None) 
-          | _ -> TVar.typ (TVar.mk TVar.KNoInfer None)) 
+          | _ -> TVar.typ (TVar.mk TVar.KNoInfer None))
           params
       in  
       let add_let body (p, ty) = 

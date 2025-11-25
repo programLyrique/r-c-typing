@@ -7,19 +7,20 @@ module Prim = struct (* TODO: extension (for printing) *)
   let lgl =
     let t = Ty.disj [tt;ff] in
     (* Enum.define "lgl" |> Enum.typ *)
-    Ty.register "lgl" t ; t
+    PEnv.add_printer_param { extensions=[] ; aliases=[t,"lgl"] } ;
+    t
   let dbl = Enum.define "dbl" |> Enum.typ
   let clx = Enum.define "clx" |> Enum.typ
   let chr = Enum.define "chr" |> Enum.typ
   let raw = Enum.define "raw" |> Enum.typ
   let any =
     let t = Ty.disj [int;lgl;dbl;clx;chr;raw] in
-    Ty.add_printer_param { Sstt.Printer.aliases = [t, "prim"] ; Sstt.Printer.extensions = [] } ;
+    PEnv.add_printer_param { Sstt.Printer.aliases = [t, "prim"] ; Sstt.Printer.extensions = [] } ;
     t
   let na = Enum.define "na" |> Enum.typ
   let any_na =
     let t = Ty.disj [na;any] in
-    Ty.add_printer_param { Sstt.Printer.aliases = [t, "prim?"] ; Sstt.Printer.extensions = [] } ;
+    PEnv.add_printer_param { Sstt.Printer.aliases = [t, "prim?"] ; Sstt.Printer.extensions = [] } ;
     t
 end
 
@@ -102,5 +103,5 @@ module Vecs = struct
   let printer_builder =
     Printer.builder ~to_t:to_t ~map:map ~print:print
   let printer_params = Printer.{ aliases = []; extensions = [(tag, printer_builder)]}
-  let () = Mlsem.Types.Ty.add_printer_param printer_params
+  let () = Mlsem.Types.PEnv.add_printer_param printer_params
 end
