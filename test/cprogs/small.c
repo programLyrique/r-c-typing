@@ -24,3 +24,10 @@ SEXP incr(SEXP a) {
     UNPROTECT(1);
     return result;
 }
+
+SEXP build_int() {
+    SEXP result = PROTECT(allocVector(INTSXP, 1)); // INTSXP * int -> RInt 
+    INTEGER(result)[0] = 1;
+    UNPROTECT(1);
+    return result;
+}

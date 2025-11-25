@@ -25,6 +25,8 @@ end
 
 module C  = struct 
   let int = Enum.define "C_int" |> Enum.typ
+  let zero = Ty.interval (Some Z.zero) (Some Z.zero)
+  let not_zero = Ty.diff Ty.int zero
   let double = Enum.define "C_double" |> Enum.typ
   let str = Enum.define "C_str" |> Enum.typ
   let void = Enum.define "C_void" |> Enum.typ
@@ -44,6 +46,7 @@ module Vecs = struct
     let ty = Tuple.mk [Ty.cap v Prim.any_na ; Ty.cap l Mlsem.Types.Ty.int] in
     TagComp.mk (tag, ty) |> Descr.mk_tagcomp |> Ty.mk_descr
   let mk_singl v = mk v (Mlsem.Types.Ty.interval (Some Z.one) (Some Z.one))
+  let mk_unsized v = mk v Mlsem.Types.Ty.int
   let any = mk Ty.any Ty.any
 
   let map f l =
