@@ -90,7 +90,11 @@ let var env str =
   match StrMap.find_opt str env.id with 
  | None ->
     begin match Ast.BuiltinOp.find_builtin str with
-    | None -> MVariable.create Immut (Some str)
+    | None -> (
+      match Defs.StrMap.find_opt str Defs.defs_map with 
+      | None -> MVariable.create Immut (Some str)
+      | Some v -> v
+    )
     | Some v -> v
     end
   | Some v -> v

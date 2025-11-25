@@ -20,12 +20,12 @@ let error =
 
 let isInteger = 
   let v = MVariable.create Immut (Some "isInteger") in
-  let ty = Arrow.mk (Vecs.mk_unsized Prim.int) C.int in
+  let ty = Arrow.mk (Vecs.mk_unsized Prim.int) C.not_zero in
   v, ty
 
 let integer = 
   let v = MVariable.create Immut (Some "INTEGER") in
-  let ty = Arrow.mk Prim.int C.not_zero in
+  let ty = Arrow.mk Prim.int C.int in
   v, ty
 
 let tobool, tobool_t =
@@ -45,6 +45,19 @@ let logical_or =
   let ty = Ty.conj [tt;ff] in
   v, ty
 
+let neg = 
+  let v = MVariable.create Immut (Some "!") in
+  let tt = Arrow.mk Ty.tt Ty.ff in
+  let ff = Arrow.mk Ty.ff Ty.tt in
+  let ty = Ty.conj [tt;ff] in
+  v, ty
+
+let allocVector =
+  let v = MVariable.create Immut (Some "alloVector") in
+  let alpha = TVar.mk TVar.KInfer None |> TVar.typ in 
+  let ty = Arrow.mk (Tuple.mk [(Ty.cap alpha Prim.any); C.int]) (Vecs.mk_unsized alpha)  in
+  v, ty
+
 let  length =
   let v = MVariable.create Immut (Some "LENGTH") in
   let ty = Arrow.mk (Vecs.mk_unsized Prim.any) C.int in
@@ -52,15 +65,31 @@ let  length =
 
 let array_assignment =
   let v = MVariable.create Immut (Some "[]<-") in
-  let ty = Arrow.mk (Tuple.mk [Prim.int; C.int; C.int]) Ty.any in
+  let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.int; C.int; C.int]) C.void in
   v, ty
 
 let array_access =
   let v = MVariable.create Immut (Some "[]") in
-  let ty = Arrow.mk (Tuple.mk [Prim.int; C.int]) Ty.any in
+  let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.int; C.int]) C.int in
   v, ty
 
-let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ; array_access ; logical_or ; length ]
+let protect =
+  let v = MVariable.create Immut (Some "PROTECT") in
+  let alpha = TVar.mk TVar.KInfer None |> TVar.typ in 
+  let ty = Arrow.mk alpha alpha in
+  v, ty
+
+let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ; array_access ; logical_or ; length ; allocVector ; protect]
+
+
+module StrMap = Map.Make(String)
+let defs_map = List.fold_left 
+  (fun acc (v, _) -> 
+    match Variable.get_name v with 
+    | Some name -> StrMap.add name v acc
+    | None -> failwith "Definition variable must have a name."
+  ) StrMap.empty defs
+
 let initial_env =
   let add_def env (v,ty) =
     Env.add v (GTy.mk ty |> TyScheme.mk_poly) env

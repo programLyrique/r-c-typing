@@ -25,7 +25,7 @@ let extend_env mlast env =
   let dom = Env.domain env |> VarSet.of_list in
   let missing = VarSet.diff fv dom in
   missing |> VarSet.elements |> List.fold_left
-    (fun env v -> Env.add v (TyScheme.mk_mono GTy.dyn) env) env
+    (fun env v -> (Format.printf "@.%a@." Variable.pp v; Env.add v (TyScheme.mk_mono GTy.dyn) env)) env
 
 let infer_ast opts (idenv, env) (ast : Ast.e) =
   try 
@@ -37,7 +37,7 @@ let infer_ast opts (idenv, env) (ast : Ast.e) =
     let mlsem_ast = Ast.to_mlsem ast in 
     if opts.mlsem then 
       Format.printf "%a@." Mlsem.System.Ast.pp mlsem_ast;
-    let env = extend_env mlsem_ast env in
+    let _env = extend_env mlsem_ast env in
     let renvs = System.Refinement.refinement_envs env mlsem_ast in
     let reconstructed = System.Reconstruction.infer env renvs mlsem_ast in
     let typ = System.Checker.typeof_def env reconstructed mlsem_ast in
