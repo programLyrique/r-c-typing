@@ -67,7 +67,9 @@ let allocVector =
 
 let  length =
   let v = MVariable.create Immut (Some "LENGTH") in
-  let ty = Arrow.mk (Tuple.mk [(Vecs.mk_unsized Prim.any)]) C.int in
+  let scalar = Arrow.mk (Tuple.mk [(Vecs.mk_singl Prim.any)]) C.one in
+  let vec = Arrow.mk (Tuple.mk [(Vecs.mk_unsized Prim.any)]) C.not_one in
+  let ty = Ty.cap scalar vec in
   v, ty
 
 let array_assignment =
