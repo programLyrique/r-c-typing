@@ -30,7 +30,7 @@ type ctype =
  | Typedef of string
  (* SEXPs *)
  | SEXP
- | Any
+ | Any (* Do we actually need that?*)
  [@@deriving show]
 
 type e' =
@@ -44,7 +44,7 @@ type e' =
 | Call of e * e list
 | If of e * e * e option
 | While of e * e
-(*| TyCheck of e * Types.Ty.t (* Test between an expression and a constant *)*)
+| TyCheck of e * Ty.t (* Test between an expression and a constant *)
 | Function of string * ctype * (ctype * Variable.t) list * e
 | Seq of e * e
 | Noop (* Hack for the declarations. We should rather use the declarations directly rather than doing the imprecise analysis of used variables in bv_e*)
@@ -75,8 +75,8 @@ let typeof_const c =
   match c with 
   | CStr _ -> C.str
   | CDbl _ -> C.double
-  | CInt _ -> C.int
-  | CBool _ -> C.int
+  | CInt v -> Ty.interval (Some (Z.of_int v)) (Some (Z.of_int v))
+  | CBool v -> if v then C.not_zero else C.zero
   | CNull -> Null.null
   | CNa -> Prim.na
 
@@ -108,6 +108,11 @@ let rec aux_e (eid, e) =
     | Return e -> A.Return (match e with 
         | None -> (Eid.unique (), A.Void)
         | Some e -> aux_e e)
+    | TyCheck (e, ty) -> 
+        let e = aux_e e in 
+        let tt = Eid.unique (), A.Value (GTy.mk Ty.tt) in
+        let ff = Eid.unique (), A.Value (GTy.mk Ty.ff) in
+        A.Ite (e, ty, tt, ff)
     | Function (_name, _ret_type, params, body) ->
       (* Create lets in the body for each argument: match parameter names with
        type variable in the domain *)
@@ -132,5 +137,43 @@ let rec aux_e (eid, e) =
   in
   (eid, aux e)
 
+
+
+  let map f e = 
+    let rec aux (eid, e) = 
+      let e = match e with 
+      | Const _ | Id _ -> e
+      | Declare (v,e) -> Declare (v, aux e)
+      | Let (v,e1,e2) -> Let (v, aux e1, aux e2)
+      | VarAssign (v,e2) -> VarAssign (v, aux e2)
+      | Unop (op,e) -> Unop (op, aux e)
+      | Binop (op,e1,e2) -> Binop (op, aux e1, aux e2)
+      | Call (f,args) -> Call (aux f, List.map aux args)
+      | If (cond, then_, else_) -> 
+          If (aux cond, aux then_, Option.map aux else_)
+      | While (cond, body) -> While (aux cond, aux body)
+      | Seq (e1,e2) -> Seq (aux e1, aux e2)
+      | Return e -> Return (Option.map aux e)
+      | TyCheck (e, ty) -> TyCheck (aux e, ty)
+      | Function (name, ret_type, params, body) ->
+          Function (name, ret_type, params, aux body)
+      | Break -> Break
+      | Next -> Next
+      | Noop -> Noop
+    in
+    f (eid, e)
+  in aux e
+
+  let recognize_const_comparison e = 
+    let f = function 
+    | id, (Binop (v, e, (_, Const c)) | Binop (v, (_, Const c), e))
+    when Variable.equals v BuiltinOp.eq -> id, TyCheck (e, typeof_const c)
+    | id, (Binop (v, e, (_, Const c)) | Binop (v, (_, Const c), e))
+    when Variable.equals v BuiltinOp.neq -> id, TyCheck (e, Ty.neg (typeof_const c))
+    | e -> e
+    in
+    map f e
+
+
   let to_mlsem e = 
-    e |> aux_e |> Mlsem.Lang.Transform.transform
+    e |> recognize_const_comparison |> aux_e |> Mlsem.Lang.Transform.transform

@@ -64,7 +64,7 @@ let infer_fun_def opts (idenv, env) past =
 
 
 let main opts filename =
-  System.Config.infer_overload := false ;
+  System.Config.infer_overload := true ;
   Mlsem.Types.Recording.start_recording ();
   let cst = Parser.parse_file filename in
   if opts.cst then Parser.print_res cst;

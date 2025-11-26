@@ -15,7 +15,7 @@ TODO for the example in small.c:
 
 let error = 
   let v = MVariable.create Immut (Some "error") in
-  let ty = Arrow.mk Ty.empty Ty.any in 
+  let ty = Arrow.mk (Tuple.mk [Ty.empty]) Ty.any in 
   v, ty
 
 let isInteger = 
@@ -31,36 +31,43 @@ let integer =
 let tobool, tobool_t =
   let v = MVariable.create Immut (Some "tobool") in
   let def = Arrow.mk Ty.any Ty.bool in
-  let tt = Arrow.mk (Ty.disj [Prim.tt;Vecs.mk_singl Prim.tt]) Ty.tt in
-  let ff = Arrow.mk (Ty.disj [Prim.ff;Vecs.mk_singl Prim.ff]) Ty.ff in
-  let c_tt = Arrow.mk C.not_zero Ty.tt in 
-  let c_ff = Arrow.mk C.zero Ty.ff in
-  let ty = Ty.conj [def;tt;ff;c_tt;c_ff] in
+  (* We actually only care about this part for C*)
+  let tt = Arrow.mk (Ty.cup Ty.tt C.not_zero) Ty.tt in 
+  let ff = Arrow.mk (Ty.cup Ty.ff C.zero) Ty.ff in
+  let ty = Ty.conj [def;tt;ff] in
   v, ty
 
 let logical_or =
-  let v = MVariable.create Immut (Some "||") in
-  let tt = Arrow.mk (Ty.disj [Tuple.mk [Ty.tt; Ty.tt] ;Tuple.mk [Ty.tt; Ty.ff] ; Tuple.mk [Ty.ff;Ty.tt]]) Ty.tt in
-  let ff = Arrow.mk (Tuple.mk [Ty.ff; Ty.ff]) Ty.ff in
+  let v = MVariable.create Immut (Some "||__2") in
+
+  (* Only handle "C" booleans? *)
+  let tt = Arrow.mk (Ty.disj [Tuple.mk [Ty.cup Ty.tt C.not_zero; Ty.cup Ty.tt C.not_zero] ;
+    Tuple.mk [Ty.cup Ty.tt C.not_zero; Ty.cup Ty.ff C.zero] ; 
+    Tuple.mk [Ty.cup Ty.ff C.zero; Ty.cup Ty.tt C.not_zero]]) Ty.tt in
+  
+  let ff = Arrow.mk (Tuple.mk [Ty.cup Ty.ff C.not_zero; Ty.cup Ty.ff C.zero]) Ty.ff in
   let ty = Ty.conj [tt;ff] in
   v, ty
 
 let neg = 
   let v = MVariable.create Immut (Some "!__1") in
-  let tt = Arrow.mk Ty.tt Ty.ff in
-  let ff = Arrow.mk Ty.ff Ty.tt in
-  let ty = Ty.conj [tt;ff] in
+  let tt = Arrow.mk (Tuple.mk [Ty.cup C.not_zero Ty.tt]) Ty.ff in
+  let ff = Arrow.mk (Tuple.mk [Ty.cup C.zero Ty.ff]) Ty.tt in
+
+  let ty = Ty.conj  [tt;ff] in
   v, ty
 
 let allocVector =
   let v = MVariable.create Immut (Some "allocVector") in
   let alpha = TVar.mk TVar.KInfer None |> TVar.typ in 
-  let ty = Arrow.mk (Tuple.mk [(Ty.cap alpha Prim.any); C.int]) (Vecs.mk_unsized alpha)  in
+  let scalar = Arrow.mk (Tuple.mk [(Ty.cap alpha Prim.any); C.one]) (Vecs.mk_singl alpha) in
+  let vec = Arrow.mk (Tuple.mk [(Ty.cap alpha Prim.any); C.not_one]) (Vecs.mk_unsized alpha)  in
+  let ty = Ty.cap scalar vec in
   v, ty
 
 let  length =
   let v = MVariable.create Immut (Some "LENGTH") in
-  let ty = Arrow.mk (Vecs.mk_unsized Prim.any) C.int in
+  let ty = Arrow.mk (Tuple.mk [(Vecs.mk_unsized Prim.any)]) C.int in
   v, ty
 
 let array_assignment =
@@ -76,15 +83,28 @@ let array_access =
 let protect =
   let v = MVariable.create Immut (Some "PROTECT") in
   let alpha = TVar.mk TVar.KInfer None |> TVar.typ in 
-  let ty = Arrow.mk alpha alpha in
+  let ty = Arrow.mk (Tuple.mk [alpha]) alpha in
   v, ty
 
 let unprotect =
   let v = MVariable.create Immut (Some "UNPROTECT") in
-  let ty = Arrow.mk C.int C.void in
+  let ty = Arrow.mk (Tuple.mk [C.int]) C.void in
   v, ty
 
-let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ; array_access ; logical_or ; length ; allocVector ; protect ; unprotect ; neg]
+let intsxp =
+  let v = MVariable.create Immut (Some "INTSXP") in
+  let ty = Prim.int in
+  v, ty
+
+let plus = 
+  let v = MVariable.create Immut (Some "+__2") in
+  let alpha = TVar.mk TVar.KInfer None |> TVar.typ in
+  let ty = Arrow.mk (Tuple.mk [Ty.cap alpha C.int; Ty.cap alpha C.int]) (Ty.cap alpha Prim.int) in
+  v, ty
+
+let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ; 
+            array_access ; logical_or ; length ; allocVector ; protect ; 
+            unprotect ; neg ; intsxp ; plus]
 
 
 module StrMap = Map.Make(String)

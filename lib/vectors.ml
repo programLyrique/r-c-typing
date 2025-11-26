@@ -25,10 +25,13 @@ module Prim = struct (* TODO: extension (for printing) *)
 end
 
 module C  = struct 
-  let int = Enum.define "C_int" |> Enum.typ
+  let int = Ty.int
   let zero = Ty.interval (Some Z.zero) (Some Z.zero)
   let not_zero = Ty.diff Ty.int zero
   let double = Enum.define "C_double" |> Enum.typ
+
+  let one = Ty.interval (Some Z.one) (Some Z.one)
+  let not_one = Ty.diff Ty.int one
   let str = Enum.define "C_str" |> Enum.typ
   let void = Enum.define "C_void" |> Enum.typ
 end
