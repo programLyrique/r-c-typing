@@ -12,6 +12,7 @@ type cmd_options = {
   past : bool;
   ast : bool;
   mlsem : bool;
+  typing : bool;
 }
 
 
@@ -38,18 +39,24 @@ let infer_ast opts (idenv, env) (ast : Ast.e) =
     let mlsem_ast = Ast.to_mlsem ast in 
     if opts.mlsem then 
       Format.printf "%a@." Mlsem.System.Ast.pp mlsem_ast;
-    let _env = extend_env mlsem_ast env in
-    let renvs = System.Refinement.refinement_envs env mlsem_ast in
-    let reconstructed = System.Reconstruction.infer env renvs mlsem_ast in
-    let typ = System.Checker.typeof_def env reconstructed mlsem_ast in
-    let tys = TyScheme.norm_and_simpl typ in 
-    Format.printf "%a: %a@.@." Variable.pp v TyScheme.pp_short tys ;
-    let (vars, typ) = TyScheme.get tys in 
-    let typ = GTy.ub typ in 
-    Format.printf "Upper bound: %a@.@." Ty.pp typ ;
-    (* We only keep the upper bound as type for v and add it to the environment *)
-    let tys = TyScheme.mk vars (GTy.mk typ) in
-    StrMap.add name v idenv, Env.add v tys env
+
+    if opts.typing then
+        begin
+        let _env = extend_env mlsem_ast env in (*TODO: bring it back when the inference deals with any in a more appropriate way*)
+        let renvs = System.Refinement.refinement_envs env mlsem_ast in
+        let reconstructed = System.Reconstruction.infer env renvs mlsem_ast in
+        let typ = System.Checker.typeof_def env reconstructed mlsem_ast in
+        let tys = TyScheme.norm_and_simpl typ in 
+        Format.printf "%a: %a@.@." Variable.pp v TyScheme.pp_short tys ;
+        let (vars, typ) = TyScheme.get tys in 
+        let typ = GTy.ub typ in 
+        Format.printf "Upper bound: %a@.@." Ty.pp typ ;
+        (* We only keep the upper bound as type for v and add it to the environment *)
+        let tys = TyScheme.mk vars (GTy.mk typ) in
+        StrMap.add name v idenv, Env.add v tys env
+      end
+    else 
+      idenv,env
   with System.Checker.Untypeable err ->
     Format.printf "Untypeable: %s@." err.title;
     err.descr |> Option.iter (Format.printf "%s@." ) ;
@@ -93,9 +100,14 @@ let mlsem_opt =
   let doc = "Print MLsem AST" in
   Arg.(value & flag & info ["mlsem"] ~doc)
 
+let no_typing_opt =
+  let doc = "Disable type inference" in
+  Arg.(value & flag & info ["no-typing"] ~doc)
+
 let file_arg =
   let doc = "C source file to parse" in
   Arg.(required & pos 0 (some string) None & info [] ~docv:"FILE" ~doc)
+
 
 let cmd =
   let open Term.Syntax in
@@ -105,8 +117,9 @@ let cmd =
      and+ past = past_opt
      and+ ast = ast_opt
      and+ mlsem = mlsem_opt
+     and+ no_typing = no_typing_opt
      and+ filename = file_arg in
-     PEnv.sequential_handler PEnv.empty (fun filename -> main {cst; past; ast; mlsem} filename) filename |> fst)
+     PEnv.sequential_handler PEnv.empty (fun filename -> main {cst; past; ast; mlsem ; typing = not no_typing} filename) filename |> fst)
      
 
 let () = exit (Cmd.eval cmd)
