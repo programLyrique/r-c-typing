@@ -139,6 +139,8 @@ let rec aux_e env (pos,e) =
         aux_e env (loc1, Id "[]<-"),
         (List.map (aux_e env) args) @ [aux_e env e2]
       )
+  | VarAssign ((loc1, Unop (_op, e1)) ,e2) -> (* Currently, remove the * or & operator *)
+     aux_e env (loc1, VarAssign(e1, e2)) |> snd
   | VarAssign (_,_) -> failwith ("Unexpected left-hand side in assignment. Got: " ^ show_e (pos,e))
   | Call (f, args) -> Ast.Call (aux_e env f, List.map (aux_e env) args)
   | If (cond, then_, else_) -> 

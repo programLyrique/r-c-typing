@@ -100,8 +100,7 @@ let intsxp =
 
 let plus = 
   let v = MVariable.create Immut (Some "+__2") in
-  let alpha = TVar.mk TVar.KInfer None |> TVar.typ in
-  let ty = Arrow.mk (Tuple.mk [Ty.cap alpha C.int; Ty.cap alpha C.int]) (Ty.cap alpha Prim.int) in
+  let ty = Arrow.mk (Tuple.mk [C.int; C.int]) C.int in
   v, ty
 
 let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ; 

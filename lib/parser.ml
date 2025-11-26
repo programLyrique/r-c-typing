@@ -91,6 +91,7 @@ let rec aux_decl_name (decl : declarator) : string =
   match decl with
   | `Id tok -> token_to_string tok
   | `Func_decl (decl, _, _, _) -> aux_decl_name decl
+  | `Poin_decl (_,_,_,_,decl) -> aux_decl_name decl (* Should make it clear this is a pointer when it will be useful. *)
   | _ -> failwith "Not supported yet: function name"
 
 let aux_param (p: anon_choice_param_decl_4ac2852) = 
@@ -185,10 +186,21 @@ and aux_subscription_expression (subs: subscript_expression) =
   let idx = aux_expression index in
   let pos = Position.join (fst arr) (fst idx) in
   (pos, A.Call ((pos, A.Id "[]"), [arr; idx])) (* A usual function? Or a specific operator*)
+and aux_pointer_expression (poin: pointer_expression) =
+  let op, expr = poin in
+  let loc,op = match op with 
+    | `AMP (loc, _) -> (loc, "&")
+    | `STAR (loc, _) -> (loc, "*")
+  in
+
+  let e = aux_expression expr in
+  let pos = Position.join (loc_to_pos loc) (fst e) in
+  (pos, A.Unop (op, e))
 and aux_assign_left_expression (e: assignment_left_expression) : A.e =
   match e with 
   | `Id (loc, s) -> (loc_to_pos loc, A.Id s)
   | `Subs_exp expr -> aux_subscription_expression expr (*Like that so far, but may require special treatment *)
+  | `Poin_exp expr -> aux_pointer_expression expr
   | _ -> (
     Boilerplate.map_assignment_left_expression () e |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: left side of assignment must be an identifier"
