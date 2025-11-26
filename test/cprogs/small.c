@@ -41,6 +41,8 @@ int isIntScalar(SEXP a) {
     return 1;
 }
 
+
+// make_scalar and isIntScalar were correctly typed and stored in the typing environment
 SEXP check() {
     SEXP res = make_scalar();
     if(!isIntScalar(res)) {
