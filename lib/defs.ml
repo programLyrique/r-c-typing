@@ -3,15 +3,7 @@ open Mlsem.Types
 open Vectors
 module MVariable = Mlsem.Lang.MVariable
 
-(* Add here any known type definitions, for instance, from the R C API
-TODO for the example in small.c:
-  isInteger 
-  LENGTH
-  INTEGER
-  alloVector
-  PROTECT
-  error
-*)
+(* Add here any known type definitions, for instance, from the R C API *)
 
 let error = 
   let v = MVariable.create Immut (Some "error") in
@@ -40,12 +32,12 @@ let tobool, tobool_t =
 let logical_or =
   let v = MVariable.create Immut (Some "||__2") in
 
-  (* Only handle "C" booleans *)
+  (* Only handle "C" and mlsem booleans *)
   let tt = Arrow.mk (Ty.disj [Tuple.mk [Ty.cup Ty.tt C.not_zero; Ty.cup Ty.tt C.not_zero] ;
     Tuple.mk [Ty.cup Ty.tt C.not_zero; Ty.cup Ty.ff C.zero] ; 
     Tuple.mk [Ty.cup Ty.ff C.zero; Ty.cup Ty.tt C.not_zero]]) Ty.tt in
   
-  let ff = Arrow.mk (Tuple.mk [Ty.cup Ty.ff C.not_zero; Ty.cup Ty.ff C.zero]) Ty.ff in
+  let ff = Arrow.mk (Tuple.mk [Ty.cup Ty.ff C.zero; Ty.cup Ty.ff C.zero]) Ty.ff in
   let ty = Ty.conj [tt;ff] in
   v, ty
 
@@ -68,7 +60,7 @@ let allocVector =
 let  length =
   let v = MVariable.create Immut (Some "LENGTH") in
   let scalar = Arrow.mk (Tuple.mk [(Vecs.mk_singl Prim.any)]) C.one in
-  let vec = Arrow.mk (Tuple.mk [(Vecs.mk_unsized Prim.any)]) C.not_one in
+  let vec = Arrow.mk (Ty.diff (Tuple.mk [(Vecs.mk_unsized Prim.any)]) (Tuple.mk [(Vecs.mk_singl Prim.any)])) C.not_one in
   let ty = Ty.cap scalar vec in
   v, ty
 

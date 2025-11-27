@@ -17,6 +17,10 @@ let print_res (res: (CST.translation_unit, CST.extra) Tree_sitter_run.Parsing_re
     let tree = Boilerplate.map_translation_unit () prog in
     Raw_tree.to_channel stdout tree 
 
+let print_top_level_item (item: top_level_item) =
+  let tree = Boilerplate.map_top_level_item () item in
+  Raw_tree.to_channel stdout tree
+
 let process_res res = res
 (**
   Parse a file using FrontC and return the AST
@@ -350,7 +354,7 @@ let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
      let body = aux_body body in 
      Some (Mlsem.Common.Position.dummy, Fundef (return_type, name, params, body))
      ) 
-  | _ -> (Printf.printf "Not supported yet: top level item\n";None)
+  | _ -> (Printf.printf "Not supported yet: top level item\n";print_top_level_item item ; None)
 
 
 let aux_translation_unit tree =

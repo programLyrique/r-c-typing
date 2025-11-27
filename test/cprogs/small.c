@@ -38,11 +38,13 @@ int isIntScalar(SEXP a) {
     if (!isInteger(a) || LENGTH(a) != 1) {
         return 0;
     }
-    return 1;
+    else {
+        return 1;
+    }
 }
 
 
-// make_scalar and isIntScalar were correctly typed and stored in the typing environment
+//make_scalar and isIntScalar were correctly typed and stored in the typing environment
 SEXP check() {
     SEXP res = make_scalar();
     if(!isIntScalar(res)) {
