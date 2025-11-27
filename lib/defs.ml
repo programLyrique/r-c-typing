@@ -15,9 +15,19 @@ let isInteger =
   let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.int]) C.not_zero in
   v, ty
 
+let isReal = 
+  let v = MVariable.create Immut (Some "isReal") in
+  let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.dbl]) C.not_zero in
+  v, ty
+
 let integer = 
   let v = MVariable.create Immut (Some "INTEGER") in
   let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.int]) Ty.any in
+  v, ty
+
+let real = 
+  let v = MVariable.create Immut (Some "REAL") in
+  let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.dbl]) Ty.any in
   v, ty
 
 let tobool, tobool_t =
@@ -38,6 +48,17 @@ let logical_or =
     Tuple.mk [Ty.cup Ty.ff C.zero; Ty.cup Ty.tt C.not_zero]]) Ty.tt in
   
   let ff = Arrow.mk (Tuple.mk [Ty.cup Ty.ff C.zero; Ty.cup Ty.ff C.zero]) Ty.ff in
+  let ty = Ty.conj [tt;ff] in
+  v, ty
+
+let logical_and =
+  let v = MVariable.create Immut (Some "&&__2") in
+
+  (* Only handle "C" and mlsem booleans *)
+  let tt = Arrow.mk (Tuple.mk [Ty.cup Ty.tt C.not_zero; Ty.cup Ty.tt C.not_zero]) Ty.tt in
+  let ff = Arrow.mk (Ty.disj [Tuple.mk [Ty.cup Ty.ff C.zero; Ty.cup Ty.ff C.zero] ;
+    Tuple.mk [Ty.cup Ty.tt C.not_zero; Ty.cup Ty.ff C.zero] ; 
+    Tuple.mk [Ty.cup Ty.ff C.zero; Ty.cup Ty.tt C.not_zero]]) Ty.ff in
   let ty = Ty.conj [tt;ff] in
   v, ty
 
@@ -90,14 +111,22 @@ let intsxp =
   let ty = Prim.int in
   v, ty
 
+let realsxp =
+  let v = MVariable.create Immut (Some "REALSXP") in
+  let ty = Prim.dbl in
+  v, ty
+
 let plus = 
   let v = MVariable.create Immut (Some "+__2") in
-  let ty = Arrow.mk (Tuple.mk [C.int; C.int]) C.int in
+  let int_ty = Arrow.mk (Tuple.mk [C.int; C.int]) C.int in
+  let real_ty = Arrow.mk (Tuple.mk [C.double; C.double]) C.double in
+  let ty = Ty.cap int_ty real_ty in
   v, ty
 
 let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ; 
             array_access ; logical_or ; length ; allocVector ; protect ; 
-            unprotect ; neg ; intsxp ; plus]
+            unprotect ; neg ; intsxp ; plus; realsxp ; real ; isReal ;
+            logical_and ]
 
 
 module StrMap = Map.Make(String)

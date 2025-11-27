@@ -180,6 +180,13 @@ and aux_not_bin_expression (e : expression_not_binary) =
       A.Unop (op, expr))
   | `Subs_exp expr -> 
       aux_subscription_expression expr
+  | `Cond_exp (cond, _, Some (`Exp then_), _, else_) -> 
+      let cond = aux_expression cond in
+      let then_ = aux_expression then_ in
+      let else_ = aux_expression else_ in
+      let pos = exprs_to_pos cond then_ in
+      let pos = Position.join pos (fst else_) in
+      (pos, A.If (cond, then_, Some else_))
   | _ -> (
     Boilerplate.map_expression_not_binary () e |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: not binary expressions"

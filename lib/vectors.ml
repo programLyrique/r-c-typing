@@ -33,6 +33,11 @@ module C  = struct
   let one = Ty.interval (Some Z.one) (Some Z.one)
   let not_one = Ty.diff Ty.int one
   let str = Enum.define "C_str" |> Enum.typ
+
+  let any = 
+    let t = Ty.disj [int; double; str] in
+    PEnv.add_printer_param { Sstt.Printer.aliases = [t, "C_prim"] ; Sstt.Printer.extensions = [] } ;
+    t
   let void = Enum.define "C_void" |> Enum.typ
 end
 
