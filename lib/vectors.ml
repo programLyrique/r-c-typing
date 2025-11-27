@@ -92,11 +92,15 @@ module Vecs = struct
       Format.fprintf fmt "%a[%a](%a)" Tag.pp tag
        Printer.print_descr l Printer.print_descr v
     in
+    let print_atom_neg fmt (v,l) =
+      let sym,_,_ = unop_info Neg in
+      Format.fprintf fmt "%s%a" sym print_atom (v,l)
+    in
     let print_line prec assoc fmt (a, ns) =
       if ns <> [] then
         let sym,_,_ as opinfo = varop_info Cap in
-        fprintf prec assoc opinfo fmt "%a%s..."
-          print_atom a sym
+        fprintf prec assoc opinfo fmt "%a%s%a"
+          print_atom a sym (print_seq print_atom_neg sym) ns
       else
         Format.fprintf fmt "%a" print_atom a
     in

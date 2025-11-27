@@ -18,8 +18,6 @@ SEXP change_int(SEXP result) {
     return result;
 }
 
-
-
 SEXP errorIntScalar(SEXP a) {
     if (!isInteger(a) || LENGTH(a) != 1) {
         error("Input must be a single integer"); // Ty.empty -> Ty.any
@@ -38,9 +36,7 @@ int isIntScalar(SEXP a) {
     if (!isInteger(a) || LENGTH(a) != 1) {
         return 0;
     }
-    else {
-        return 1;
-    }
+    return 1;
 }
 
 
