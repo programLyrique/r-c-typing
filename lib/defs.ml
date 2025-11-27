@@ -40,7 +40,7 @@ let tobool, tobool_t =
 let logical_or =
   let v = MVariable.create Immut (Some "||__2") in
 
-  (* Only handle "C" booleans? *)
+  (* Only handle "C" booleans *)
   let tt = Arrow.mk (Ty.disj [Tuple.mk [Ty.cup Ty.tt C.not_zero; Ty.cup Ty.tt C.not_zero] ;
     Tuple.mk [Ty.cup Ty.tt C.not_zero; Ty.cup Ty.ff C.zero] ; 
     Tuple.mk [Ty.cup Ty.ff C.zero; Ty.cup Ty.tt C.not_zero]]) Ty.tt in

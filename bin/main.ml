@@ -50,7 +50,7 @@ let infer_ast opts (idenv, env) (ast : Ast.e) =
         Format.printf "%a: %a@.@." Variable.pp v TyScheme.pp_short tys ;
         let (vars, typ) = TyScheme.get tys in 
         let typ = GTy.ub typ in 
-        Format.printf "Upper bound: %a@.@." Ty.pp typ ;
+        (*Format.printf "%a: upper bound= %a@.@." Variable.pp v  Ty.pp typ ;*)
         (* We only keep the upper bound as type for v and add it to the environment *)
         let tys = TyScheme.mk vars (GTy.mk typ) in
         StrMap.add name v idenv, Env.add v tys env
