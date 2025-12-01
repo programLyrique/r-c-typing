@@ -13,7 +13,7 @@ end
 
 type const =
  | CStr of string 
- | CFloat of string 
+ | CFloat of float 
  | CInt of int 
  | CNull
  | CNa
@@ -68,7 +68,7 @@ let rec bv_e in_lhs_assign (_,e) =
   | Unop (_, e) -> bv_e in_lhs_assign e
   | Binop (_, (e1,e2)) -> StrSet.union (bv_e in_lhs_assign e1) (bv_e in_lhs_assign e2)
   | VarAssign ((_,Id s), e2) -> (StrSet.singleton s) |> StrSet.union (bv_e in_lhs_assign e2)
-  | VarAssign (e,_) -> bv_e true e (* Grooss overapproximation! Left side of assignment, we want to collect identifiers in the lhs. Args will be detected as been "assigned". *)
+  | VarAssign (e,_) -> bv_e true e (* Gross overapproximation! Left side of assignment, we want to collect identifiers in the lhs. Args will be detected as been "assigned". *)
   | Call (f, args) -> List.fold_left (fun acc arg -> StrSet.union acc (bv_e in_lhs_assign arg)) (bv_e  false f) args
   | If (cond, then_, else_) -> 
       let acc = bv_e in_lhs_assign cond |> StrSet.union (bv_e in_lhs_assign then_) in

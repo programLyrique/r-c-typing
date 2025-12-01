@@ -60,10 +60,10 @@ let locs_to_pos (loc1: Loc.t) (loc2: Loc.t) : Position.t =
   let end_pos = conv_pos loc2.end_ in
   Position.lex_join start_pos end_pos
 
-  let exprs_to_pos (expr1: A.e) (expr2: A.e) : Position.t =
-    let pos1, _ = expr1 in
-    let pos2, _ = expr2 in
-    Position.join pos1 pos2
+let exprs_to_pos (expr1: A.e) (expr2: A.e) : Position.t =
+  let pos1, _ = expr1 in
+  let pos2, _ = expr2 in
+  Position.join pos1 pos2
 
 
 let aux_primitive_type t = 
@@ -157,10 +157,18 @@ and aux_string (s: string_) =
     let end_loc = fst (List.nth pos_str (List.length pos_str - 1) ) in
     (locs_to_pos start_loc end_loc, A.Const (A.CStr str))
   | _ -> failwith "Not supported yet: strings with escaped characters or concatenated strings"
+and aux_num_lit  s = 
+  A.Const(
+    try 
+      A.CInt (int_of_string s)
+  with 
+    | Failure _ -> A.CFloat (Float.of_string s)
+  )
+    
 and aux_not_bin_expression (e : expression_not_binary) = 
   match e with 
   | `Id (loc, s) -> (loc_to_pos loc, A.Id s)
-  | `Num_lit (loc, s) -> (loc_to_pos loc, A.Const (A.CInt (int_of_string s)))
+  | `Num_lit (loc, s) -> (loc_to_pos loc, aux_num_lit s)
   | `Null _ -> (Position.dummy, A.Const A.CNull)
   | `Call_exp  call -> aux_call_expression call
   | `Str s -> aux_string s

@@ -22,12 +22,12 @@ let isReal =
 
 let integer = 
   let v = MVariable.create Immut (Some "INTEGER") in
-  let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.int]) Ty.any in
+  let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.int]) C.int_ptr in
   v, ty
 
 let real = 
   let v = MVariable.create Immut (Some "REAL") in
-  let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.dbl]) Ty.any in
+  let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.dbl]) C.double_ptr in
   v, ty
 
 let tobool, tobool_t =
@@ -87,12 +87,16 @@ let  length =
 
 let array_assignment =
   let v = MVariable.create Immut (Some "[]<-") in
-  let ty = Arrow.mk (Tuple.mk [Ty.any; C.int; C.int]) C.void in
+
+  let alpha = TVar.mk TVar.KInfer None |> TVar.typ in
+  let ty = Arrow.mk (Tuple.mk [C.mk_ptr alpha; C.int; alpha]) C.void in
   v, ty
 
 let array_access =
   let v = MVariable.create Immut (Some "[]") in
-  let ty = Arrow.mk (Tuple.mk [Ty.any; C.int]) C.int in
+  let alpha = TVar.mk TVar.KInfer None |> TVar.typ in
+
+  let ty = Arrow.mk (Tuple.mk [C.mk_ptr alpha; C.int]) alpha in
   v, ty
 
 let protect =

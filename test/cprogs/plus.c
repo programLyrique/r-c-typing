@@ -47,15 +47,27 @@ SEXP r_plus_scalar(SEXP a, SEXP b) {
          INTEGER(result)[0] = INTEGER(a)[0] + INTEGER(b)[0];
          UNPROTECT(1);
          return result;
-    } else{
-         double va = /*isInteger(a) ? INTEGER(a)[0] :*/ REAL(a)[0];
-         double vb = /*isInteger(b) ? INTEGER(b)[0] :*/ REAL(b)[0];
+    } else {
+        //  double va = /*isInteger(a) ? INTEGER(a)[0] :*/ REAL(a)[0];
+        //  double vb = /*isInteger(b) ? INTEGER(b)[0] :*/ REAL(b)[0];
          SEXP result = PROTECT(allocVector(REALSXP, 1));
-         REAL(result)[0] = va + vb;
+         REAL(result)[0] = REAL(a)[0] + REAL(b)[0];
          UNPROTECT(1);
          return result;
     }
 }
+
+// SEXP incr_real(SEXP a) {
+//     if (!isReal(a) || LENGTH(a) != 1) {
+//         error("Input must be a single real"); // Ty.empty -> Ty.any
+//     }
+//     double val = REAL(a)[0]; // real[1] -> C_double
+//     val = val + 1.0; // (C_double,C_double) -> C_double
+//     SEXP result = PROTECT(allocVector(REALSXP, 1)); // REALSXP * 1 -> real[1] 
+//     REAL(result)[0] = val;
+//     UNPROTECT(1);
+//     return result;
+// }
 
 // SEXP r_plus_scalar_real(SEXP a, SEXP b) {
 //    // real only
@@ -64,3 +76,18 @@ SEXP r_plus_scalar(SEXP a, SEXP b) {
 //     UNPROTECT(1);
 //     return result;
 // }
+
+SEXP make_int_or_float(int test) {
+    SEXP result;
+    if (test == 1) {
+        result = PROTECT(allocVector(INTSXP, 1)); 
+        INTEGER(result)[0] = 42;
+        UNPROTECT(1);
+        return result;
+    } else {
+         result = PROTECT(allocVector(INTSXP, 2)); 
+        INTEGER(result)[0] = 42;
+        UNPROTECT(1);
+        return result;
+    }
+}

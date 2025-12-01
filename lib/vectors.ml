@@ -39,6 +39,14 @@ module C  = struct
     PEnv.add_printer_param { Sstt.Printer.aliases = [t, "C_prim"] ; Sstt.Printer.extensions = [] } ;
     t
   let void = Enum.define "C_void" |> Enum.typ
+
+  let mk_ptr=
+    let pt_tag = Tag.define "ptr" in
+    function ty -> Tag.mk pt_tag ty 
+
+  let int_ptr = mk_ptr int
+  let double_ptr = mk_ptr double
+  
 end
 
 

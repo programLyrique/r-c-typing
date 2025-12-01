@@ -10,7 +10,7 @@ type label = string
 
 type const =
 | CStr of string
-| CDbl of string
+| CDbl of float
 | CInt of int
 | CBool of bool
 | CNull
@@ -117,9 +117,8 @@ let rec aux_e (eid, e) =
       (* Create lets in the body for each argument: match parameter names with
        type variable in the domain *)
       let arg_types = List.map 
-        (function (typ, _) -> match typ with 
-          SEXP -> TVar.typ (TVar.mk TVar.KInfer None) 
-          | _ -> TVar.typ (TVar.mk TVar.KNoInfer None))
+        (function _ -> 
+          TVar.typ (TVar.mk TVar.KInfer None)) 
           params
       in  
       let add_let body (p, ty) = 
