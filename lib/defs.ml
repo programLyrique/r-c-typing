@@ -24,6 +24,15 @@ let isReal =
   let ty = Ty.cap tt ff in
   v, ty
 
+let is_scalar =
+  let v = MVariable.create Immut (Some "IS_SCALAR") in
+  let tt_int = Arrow.mk (Tuple.mk [Vecs.mk_singl Prim.int]) C.one in
+  let tt_dbl = Arrow.mk (Tuple.mk [Vecs.mk_singl Prim.dbl]) C.one in
+  let ff_int = Arrow.mk (Tuple.mk [Ty.diff (Vecs.mk_unsized Prim.int) (Vecs.mk_singl Prim.int)]) C.zero in
+  let ff_dbl = Arrow.mk (Tuple.mk [Ty.diff (Vecs.mk_unsized Prim.dbl) (Vecs.mk_singl Prim.dbl)]) C.zero in
+  let ty = Ty.conj [tt_int; tt_dbl; ff_int; ff_dbl] in
+  v, ty
+
 let integer = 
   let v = MVariable.create Immut (Some "INTEGER") in
   let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.int]) C.int_ptr in
@@ -76,7 +85,7 @@ let neg =
 
 let allocVector =
   let v = MVariable.create Immut (Some "allocVector") in
-  let alpha = TVar.mk TVar.KInfer None |> TVar.typ in 
+  let alpha = TVar.mk KInfer None |> TVar.typ in 
   let scalar = Arrow.mk (Tuple.mk [(Ty.cap alpha Prim.any); C.one]) (Vecs.mk_singl alpha) in
   let vec = Arrow.mk (Tuple.mk [(Ty.cap alpha Prim.any); C.not_one]) (Vecs.mk_unsized alpha)  in
   let ty = Ty.cap scalar vec in
@@ -92,20 +101,20 @@ let  length =
 let array_assignment =
   let v = MVariable.create Immut (Some "[]<-") in
 
-  let alpha = TVar.mk TVar.KInfer None |> TVar.typ in
+  let alpha = TVar.mk KInfer None |> TVar.typ in
   let ty = Arrow.mk (Tuple.mk [C.mk_ptr alpha; C.int; alpha]) C.void in
   v, ty
 
 let array_access =
   let v = MVariable.create Immut (Some "[]") in
-  let alpha = TVar.mk TVar.KInfer None |> TVar.typ in
+  let alpha = TVar.mk KInfer None |> TVar.typ in
 
   let ty = Arrow.mk (Tuple.mk [C.mk_ptr alpha; C.int]) alpha in
   v, ty
 
 let protect =
   let v = MVariable.create Immut (Some "PROTECT") in
-  let alpha = TVar.mk TVar.KInfer None |> TVar.typ in 
+  let alpha = TVar.mk KInfer None |> TVar.typ in 
   let ty = Arrow.mk (Tuple.mk [alpha]) alpha in
   v, ty
 
@@ -129,7 +138,7 @@ let plus =
   let int_ty = Arrow.mk (Tuple.mk [C.int; C.int]) C.int in
   let real_ty = Arrow.mk (Tuple.mk [C.double; C.double]) C.double in
   let _num_ty = Arrow.mk (Tuple.mk [C.num; C.num]) C.num in
-  let ty = Ty.conj [int_ty; real_ty] in
+  let ty = Ty.conj [int_ty; real_ty ; _num_ty] in
   v, ty
 
 let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ; 

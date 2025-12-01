@@ -100,6 +100,24 @@ int test_isInt2(SEXP a) {
     return isInteger(a) ? 1 : 0;
 }
 
+SEXP r_plus_scalar_strict(SEXP a, SEXP b) {
+   // int and real 
+    if (isInteger(a) && isInteger(b)) {
+         SEXP result = PROTECT(allocVector(INTSXP, 1));
+         INTEGER(result)[0] = INTEGER(a)[0] + INTEGER(b)[0];
+         UNPROTECT(1);
+         return result;
+    } else if (isReal(a) && isReal(b)) {
+        SEXP result = PROTECT(allocVector(REALSXP, 1));
+        REAL(result)[0] = REAL(a)[0] + REAL(b)[0];
+        UNPROTECT(1);
+        return result;
+    }
+    else { // removing that will add one overload for plus
+       error("Inputs must be both integer or both real"); 
+    }
+}
+
 SEXP r_plus_scalar(SEXP a, SEXP b) {
    // int and real 
     if (isInteger(a) && isInteger(b)) {
@@ -111,8 +129,11 @@ SEXP r_plus_scalar(SEXP a, SEXP b) {
         double va = isInteger(a) ? INTEGER(a)[0] : REAL(a)[0];
         double vb = isInteger(b) ? INTEGER(b)[0] : REAL(b)[0];
         SEXP result = PROTECT(allocVector(REALSXP, 1));
-        REAL(result)[0] = va + vb;//plus only currently works on homogeneous types. There should be some kind of automatic casts
+        REAL(result)[0] = va + vb;
         UNPROTECT(1);
         return result;
+    }
+    else { // removing that will add one overload for plus
+       error("Inputs must be both integer or both real"); 
     }
 }

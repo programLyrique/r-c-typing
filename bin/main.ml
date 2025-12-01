@@ -78,7 +78,7 @@ let infer_fun_def opts (idenv, env) past =
     match past with 
     | _,PAst.Fundef (_,name, _, _) -> name
   in
-  let visible = Option.map (fun s -> contains_substring name s ) opts.filter |> Option.value  ~default:false in 
+  let visible = Option.map (fun s -> contains_substring name s ) opts.filter |> Option.value  ~default:true in 
 
   let e = PAst.transform  {PAst.id = idenv} past in
   if opts.ast && visible then

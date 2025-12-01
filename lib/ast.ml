@@ -103,12 +103,15 @@ let rec aux_e (eid, e) =
     | If (cond, then_, else_) -> 
         let cond = aux_e cond in
         let cond = (Eid.unique (), (A.App ((Eid.unique (), A.Var Defs.tobool), cond))) in
-        A.If (cond, Ty.tt, aux_e then_, Option.map aux_e else_)
+        A.If (cond, GTy.mk Ty.tt, aux_e then_, Option.map aux_e else_)
     | Ite (cond, then_, else_) -> 
         let cond = aux_e cond in
         let cond = (Eid.unique (), (A.App ((Eid.unique (), A.Var Defs.tobool), cond))) in
-        A.Ite (cond, Ty.tt, aux_e then_, aux_e else_)
-    | While (_cond, _body) -> failwith "While loops not supported yet"
+        A.Ite (cond, GTy.mk Ty.tt, aux_e then_, aux_e else_)
+    | While (cond, body) -> 
+        let cond = aux_e cond in
+        let cond = (Eid.unique (), (A.App ((Eid.unique (), A.Var Defs.tobool), cond))) in
+        A.While (cond, GTy.mk Ty.tt, aux_e body)
     | Seq (e1,e2) -> A.Seq (aux_e e1, aux_e e2)
     | Return e -> A.Return (match e with 
         | None -> (Eid.unique (), A.Void)
@@ -117,13 +120,13 @@ let rec aux_e (eid, e) =
         let e = aux_e e in 
         let tt = Eid.unique (), A.Value (GTy.mk Ty.tt) in
         let ff = Eid.unique (), A.Value (GTy.mk Ty.ff) in
-        A.Ite (e, ty, tt, ff)
+        A.Ite (e, GTy.mk ty, tt, ff)
     | Function (_name, _ret_type, params, body) ->
       (* Create lets in the body for each argument: match parameter names with
        type variable in the domain *)
       let arg_types = List.map 
         (function _ -> 
-          TVar.typ (TVar.mk TVar.KInfer None)) 
+          TVar.typ (TVar.mk KInfer None)) 
           params
       in  
       let add_let body (p, ty) = 

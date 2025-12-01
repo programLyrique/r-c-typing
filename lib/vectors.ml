@@ -59,7 +59,7 @@ module Vecs = struct
   open Sstt.Prec
   open Sstt
 
-  let tag = Sstt.Tag.mk' "v" (Sstt.Tag.Monotonic {preserves_cap=true; preserves_cup=false})
+  let tag = Sstt.Tag.mk' "v" (Sstt.Tag.Monotonic {preserves_cap=true; preserves_cup=false ; preserves_extremum=true})
   let mk v l =
     let ty = Tuple.mk [Ty.cap v Prim.any_na ; Ty.cap l Mlsem.Types.Ty.int] in
     TagComp.mk (tag, ty) |> Descr.mk_tagcomp |> Ty.mk_descr

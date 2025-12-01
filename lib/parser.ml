@@ -261,14 +261,19 @@ and aux_expression_statement (expr_stmt: expression_statement) =
   | (Some comma_expr, _) -> aux_comma_expression comma_expr
   | (None, (loc,_)) -> (loc_to_pos loc, A.Return None)
 
+and aux_for_cond (_stmts: for_statement_body) =
+  failwith "Not supported yet: for loop condition"
 
 and aux_for_statement (for_stmt: for_statement) =
   let _,_,_body,_,_stmt = for_stmt in
+  (* Encode the for loop as a while loop. But rather at PAst -> ast?*)
   failwith "Not supported yet: for statement"
 
 and aux_while_statement (while_stmt: while_statement) =
-  let _,_cond,_body = while_stmt in
-  failwith "Not supported yet: while statement"
+  let (loc1, _),cond,body = while_stmt in
+  let b = aux_statement body in
+  let pos = Position.join (loc_to_pos loc1) (fst b) in
+  pos,A.While (aux_paren_expr cond, b)
 
 and aux_do_statement (do_stmt: do_statement) =
   let _,_body,_,_cond,_ = do_stmt in
