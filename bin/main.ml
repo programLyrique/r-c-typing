@@ -13,8 +13,17 @@ type cmd_options = {
   ast : bool;
   mlsem : bool;
   typing : bool;
+  debug : bool;
+  filter: string option;
 }
 
+(* TODO: better to build the regex only once *)
+let contains_substring s sub =
+  let open Str in
+  try
+    ignore (search_forward (regexp_string sub) s 0);
+    true
+  with Not_found -> false
 
 (* idenv: str -> Variable.t 
    env: typing environment: Variable.t -> TyScheme.ty 
@@ -30,16 +39,16 @@ let extend_env mlast env =
      Env.add v (TyScheme.mk_mono GTy.dyn) env)) env
 
 let infer_ast opts (idenv, env) (ast : Ast.e) =
+  let name,v = 
+    match ast with 
+    | _,Ast.Function (name, _, _, _) -> name,MVariable.create Immut (Some name)
+    | _ -> failwith "Expected a function definition at the top level."
+  in
+  let visible = Option.map (fun s -> contains_substring name s ) opts.filter |> Option.value  ~default:false in 
+  let mlsem_ast = Ast.to_mlsem ast in 
+  if opts.mlsem && visible then 
+    Format.printf "%a@." Mlsem.System.Ast.pp mlsem_ast;
   try 
-    let name,v = 
-      match ast with 
-      | _,Ast.Function (name, _, _, _) -> name,MVariable.create Immut (Some name)
-      | _ -> failwith "Expected a function definition at the top level."
-    in
-    let mlsem_ast = Ast.to_mlsem ast in 
-    if opts.mlsem then 
-      Format.printf "%a@." Mlsem.System.Ast.pp mlsem_ast;
-
     if opts.typing then
         begin
         let _env = extend_env mlsem_ast env in (*TODO: bring it back when the inference deals with any in a more appropriate way*)
@@ -47,7 +56,7 @@ let infer_ast opts (idenv, env) (ast : Ast.e) =
         let reconstructed = System.Reconstruction.infer env renvs mlsem_ast in
         let typ = System.Checker.typeof_def env reconstructed mlsem_ast in
         let tys = TyScheme.norm_and_simpl typ in 
-        Format.printf "%a: %a@.@." Variable.pp v TyScheme.pp_short tys ;
+        if visible then Format.printf "%a: %a@.@." Variable.pp v TyScheme.pp_short tys ;
         let (vars, typ) = TyScheme.get tys in 
         let typ = GTy.ub typ in 
         (*Format.printf "%a: upper bound= %a@.@." Variable.pp v  Ty.pp typ ;*)
@@ -60,6 +69,8 @@ let infer_ast opts (idenv, env) (ast : Ast.e) =
   with System.Checker.Untypeable err ->
     Format.printf "Untypeable: %s@." err.title;
     err.descr |> Option.iter (Format.printf "%s@." ) ;
+    if not opts.mlsem && opts.debug  then (* Still print the mlsem ast*)
+      Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp mlsem_ast ;
     idenv, env
 
 (** past: the parsed AST *)
@@ -104,6 +115,14 @@ let no_typing_opt =
   let doc = "Disable type inference" in
   Arg.(value & flag & info ["no-typing"] ~doc)
 
+let debug_opt = 
+  let doc = "Enable debug mode" in
+  Arg.(value & flag & info ["debug"] ~doc)
+
+let filter_opt =
+  let doc = "Filter output to only *show* variables matching the given substring" in
+  Arg.(value & opt (some string) None & info ["f";"filter"] ~docv:"SUBSTRING" ~doc)
+
 let file_arg =
   let doc = "C source file to parse" in
   Arg.(required & pos 0 (some string) None & info [] ~docv:"FILE" ~doc)
@@ -118,8 +137,10 @@ let cmd =
      and+ ast = ast_opt
      and+ mlsem = mlsem_opt
      and+ no_typing = no_typing_opt
+     and+ debug = debug_opt
+     and+ filter = filter_opt
      and+ filename = file_arg in
-     PEnv.sequential_handler PEnv.empty (fun filename -> main {cst; past; ast; mlsem ; typing = not no_typing} filename) filename |> fst)
+     PEnv.sequential_handler PEnv.empty (fun filename -> main {cst; past; ast; mlsem ; typing = not no_typing ; debug ; filter} filename) filename |> fst)
      
 
 let () = exit (Cmd.eval cmd)
