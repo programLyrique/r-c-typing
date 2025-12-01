@@ -38,13 +38,12 @@ let extend_env mlast env =
     (fun env v -> (Printf.printf "Missing: %s at %s \n" (Variable.get_unique_name v) (Position.string_of_pos (Variable.get_location v));
      Env.add v (TyScheme.mk_mono GTy.dyn) env)) env
 
-let infer_ast opts (idenv, env) (ast : Ast.e) =
+let infer_ast visible opts (idenv, env) (ast : Ast.e) =
   let name,v = 
     match ast with 
     | _,Ast.Function (name, _, _, _) -> name,MVariable.create Immut (Some name)
     | _ -> failwith "Expected a function definition at the top level."
   in
-  let visible = Option.map (fun s -> contains_substring name s ) opts.filter |> Option.value  ~default:false in 
   let mlsem_ast = Ast.to_mlsem ast in 
   if opts.mlsem && visible then 
     Format.printf "%a@." Mlsem.System.Ast.pp mlsem_ast;
@@ -75,10 +74,16 @@ let infer_ast opts (idenv, env) (ast : Ast.e) =
 
 (** past: the parsed AST *)
 let infer_fun_def opts (idenv, env) past = 
+  let name = 
+    match past with 
+    | _,PAst.Fundef (_,name, _, _) -> name
+  in
+  let visible = Option.map (fun s -> contains_substring name s ) opts.filter |> Option.value  ~default:false in 
+
   let e = PAst.transform  {PAst.id = idenv} past in
-  if opts.ast then
+  if opts.ast && visible then
     Printf.printf "%s\n" (Ast.show_e e);
- infer_ast opts (idenv, env) e
+ infer_ast visible opts (idenv, env) e
 
 
 let main opts filename =

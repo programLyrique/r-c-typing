@@ -36,6 +36,7 @@ type const =
   | VarAssign of e * e
   | Call of e * e list 
   | If of e * e * e option
+  | Ite of e * e * e (* For ternary conditions *)
   | Return of e option
   | Break
   | Next
@@ -76,6 +77,9 @@ let rec bv_e in_lhs_assign (_,e) =
       | None -> acc
       | Some e -> StrSet.union acc (bv_e in_lhs_assign e)
       end
+  | Ite (cond, then_, else_) -> 
+      let acc = bv_e in_lhs_assign cond |> StrSet.union (bv_e in_lhs_assign then_) in
+      StrSet.union acc (bv_e in_lhs_assign else_)
   | Return None -> StrSet.empty
   | Return (Some e) -> bv_e in_lhs_assign e
   | Seq exprs -> List.fold_left (fun acc e -> StrSet.union acc (bv_e in_lhs_assign e)) StrSet.empty exprs
@@ -145,6 +149,8 @@ let rec aux_e env (pos,e) =
   | Call (f, args) -> Ast.Call (aux_e env f, List.map (aux_e env) args)
   | If (cond, then_, else_) -> 
       Ast.If (aux_e env cond, aux_e env then_, Option.map (aux_e env) else_)
+  | Ite (cond, then_, else_) -> 
+      Ast.Ite (aux_e env cond, aux_e env then_, aux_e env else_) 
   | Return None -> Ast.Return None
   | Return (Some e) -> Ast.Return (Some (aux_e env e))
   | Break -> Ast.Break

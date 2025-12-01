@@ -194,7 +194,7 @@ and aux_not_bin_expression (e : expression_not_binary) =
       let else_ = aux_expression else_ in
       let pos = exprs_to_pos cond then_ in
       let pos = Position.join pos (fst else_) in
-      (pos, A.If (cond, then_, Some else_))
+      (pos, A.Ite (cond, then_, else_))
   | _ -> (
     Boilerplate.map_expression_not_binary () e |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: not binary expressions"

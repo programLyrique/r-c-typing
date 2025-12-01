@@ -87,13 +87,17 @@ int test_int_or_real(SEXP a) {
     } 
 }
 
-int test_int(SEXP a) {
+int test_isInt(SEXP a) {
     if (isInteger(a)) {
         return 1;
     } 
     else {
         return 0;
     }
+}
+
+int test_isInt2(SEXP a) {
+    return isInteger(a) ? 1 : 0;
 }
 
 SEXP r_plus_scalar(SEXP a, SEXP b) {
@@ -103,12 +107,12 @@ SEXP r_plus_scalar(SEXP a, SEXP b) {
          INTEGER(result)[0] = INTEGER(a)[0] + INTEGER(b)[0];
          UNPROTECT(1);
          return result;
-    } else if (isReal(a) && isReal(b)) {
-        //  double va = /*isInteger(a) ? INTEGER(a)[0] :*/ REAL(a)[0];
-        //  double vb = /*isInteger(b) ? INTEGER(b)[0] :*/ REAL(b)[0];
-         SEXP result = PROTECT(allocVector(REALSXP, 1));
-         REAL(result)[0] = REAL(a)[0] + REAL(b)[0];
-         UNPROTECT(1);
-         return result;
+    } else if (isReal(a) || isReal(b)) {
+        double va = isInteger(a) ? INTEGER(a)[0] : REAL(a)[0];
+        double vb = isInteger(b) ? INTEGER(b)[0] : REAL(b)[0];
+        SEXP result = PROTECT(allocVector(REALSXP, 1));
+        REAL(result)[0] = va + vb;//plus only currently works on homogeneous types. There should be some kind of automatic casts
+        UNPROTECT(1);
+        return result;
     }
 }

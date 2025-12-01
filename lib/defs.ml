@@ -19,7 +19,9 @@ let isInteger =
 
 let isReal = 
   let v = MVariable.create Immut (Some "isReal") in
-  let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.dbl]) C.one in
+   let tt = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.dbl]) C.one in
+  let ff = Arrow.mk (Tuple.mk [(Ty.neg (Vecs.mk_unsized Prim.dbl))]) C.zero in
+  let ty = Ty.cap tt ff in
   v, ty
 
 let integer = 
@@ -126,7 +128,8 @@ let plus =
   let v = MVariable.create Immut (Some "+__2") in
   let int_ty = Arrow.mk (Tuple.mk [C.int; C.int]) C.int in
   let real_ty = Arrow.mk (Tuple.mk [C.double; C.double]) C.double in
-  let ty = Ty.cap int_ty real_ty in
+  let _num_ty = Arrow.mk (Tuple.mk [C.num; C.num]) C.num in
+  let ty = Ty.conj [int_ty; real_ty] in
   v, ty
 
 let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ; 

@@ -33,6 +33,7 @@ module C  = struct
   let one = Ty.interval (Some Z.one) (Some Z.one)
   let not_one = Ty.diff Ty.int one
   let str = Enum.define "C_str" |> Enum.typ
+  let num = Ty.disj [int; double]
 
   let any = 
     let t = Ty.disj [int; double; str] in

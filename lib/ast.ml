@@ -43,6 +43,7 @@ type e' =
 | Binop of Variable.t * e * e
 | Call of e * e list
 | If of e * e * e option
+| Ite of e * e * e (* For ternary conditions *)
 | While of e * e
 | TyCheck of e * Ty.t (* Test between an expression and a constant *)
 | Function of string * ctype * (ctype * Variable.t) list * e
@@ -103,6 +104,10 @@ let rec aux_e (eid, e) =
         let cond = aux_e cond in
         let cond = (Eid.unique (), (A.App ((Eid.unique (), A.Var Defs.tobool), cond))) in
         A.If (cond, Ty.tt, aux_e then_, Option.map aux_e else_)
+    | Ite (cond, then_, else_) -> 
+        let cond = aux_e cond in
+        let cond = (Eid.unique (), (A.App ((Eid.unique (), A.Var Defs.tobool), cond))) in
+        A.Ite (cond, Ty.tt, aux_e then_, aux_e else_)
     | While (_cond, _body) -> failwith "While loops not supported yet"
     | Seq (e1,e2) -> A.Seq (aux_e e1, aux_e e2)
     | Return e -> A.Return (match e with 
@@ -150,6 +155,8 @@ let rec aux_e (eid, e) =
       | Call (f,args) -> Call (aux f, List.map aux args)
       | If (cond, then_, else_) -> 
           If (aux cond, aux then_, Option.map aux else_)
+      | Ite (cond, then_, else_) ->
+          Ite (aux cond, aux then_, aux else_)
       | While (cond, body) -> While (aux cond, aux body)
       | Seq (e1,e2) -> Seq (aux e1, aux e2)
       | Return e -> Return (Option.map aux e)
