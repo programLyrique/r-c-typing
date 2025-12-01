@@ -12,12 +12,14 @@ let error =
 
 let isInteger = 
   let v = MVariable.create Immut (Some "isInteger") in
-  let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.int]) C.not_zero in
+  let tt = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.int]) C.one in
+  let ff = Arrow.mk (Tuple.mk [(Ty.neg (Vecs.mk_unsized Prim.int))]) C.zero in
+  let ty = Ty.cap tt ff in
   v, ty
 
 let isReal = 
   let v = MVariable.create Immut (Some "isReal") in
-  let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.dbl]) C.not_zero in
+  let ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.dbl]) C.one in
   v, ty
 
 let integer = 
