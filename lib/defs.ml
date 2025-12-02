@@ -83,6 +83,14 @@ let neg =
   let ty = Ty.conj  [tt;ff] in
   v, ty
 
+  let inferior_strict = 
+  let v = MVariable.create Immut (Some "<__2") in
+  let int_ty = Arrow.mk (Tuple.mk [C.int; C.int]) Ty.bool in
+  let dbl_ty = Arrow.mk (Tuple.mk [C.double; C.double]) Ty.bool in
+  let num_ty = Arrow.mk (Tuple.mk [C.num; C.num]) Ty.bool in
+  let ty = Ty.conj [int_ty; dbl_ty; num_ty] in
+  v, ty
+
 let allocVector =
   let v = MVariable.create Immut (Some "allocVector") in
   let alpha = TVar.mk KInfer None |> TVar.typ in 
@@ -144,7 +152,7 @@ let plus =
 let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ; 
             array_access ; logical_or ; length ; allocVector ; protect ; 
             unprotect ; neg ; intsxp ; plus; realsxp ; real ; isReal ;
-            logical_and ]
+            logical_and ; inferior_strict]
 
 
 module StrMap = Map.Make(String)
