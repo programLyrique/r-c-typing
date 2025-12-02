@@ -15,6 +15,7 @@ type const =
  | CStr of string 
  | CFloat of float 
  | CInt of int 
+ | CBool of bool
  | CNull
  | CNa
  [@@deriving show]
@@ -141,6 +142,7 @@ let aux_const c =
   | CInt i -> Ast.CInt i
   | CNull -> Ast.CNull
   | CNa -> Ast.CNa
+  | CBool b -> Ast.CBool b
 
 
 let rec aux_e env (pos,e) = 

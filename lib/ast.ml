@@ -22,6 +22,7 @@ type ctype =
  | Int
  | Float 
  | Char
+ | Bool
  | Ptr of ctype
  | Array of ctype * int option
  | Struct of string * (ctype * string) list

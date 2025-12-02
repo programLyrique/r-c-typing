@@ -18,6 +18,14 @@ module Prim = struct (* TODO: extension (for printing) *)
     PEnv.add_printer_param { Sstt.Printer.aliases = [t, "prim"] ; Sstt.Printer.extensions = [] } ;
     t
   let na = Enum.define "na" |> Enum.typ
+  let int_na =
+    let t = Ty.disj [int;na] in
+    PEnv.add_printer_param { Sstt.Printer.aliases = [t, "int?"] ; Sstt.Printer.extensions = [] } ;
+    t
+  let dbl_na =
+    let t = Ty.disj [dbl;na] in
+    PEnv.add_printer_param { Sstt.Printer.aliases = [t, "dbl?"] ; Sstt.Printer.extensions = [] } ;
+    t
   let any_na =
     let t = Ty.disj [na;any] in
     PEnv.add_printer_param { Sstt.Printer.aliases = [t, "prim?"] ; Sstt.Printer.extensions = [] } ;
@@ -47,6 +55,15 @@ module C  = struct
 
   let int_ptr = mk_ptr int
   let double_ptr = mk_ptr double
+
+  let na = Enum.define "na" |> Enum.typ (* There is also a C NA!*)
+
+  let int_na =
+    (* It is also INT_MIN but maybe let's not get too specific here! *)
+    let t = Ty.disj [int;na] in
+    PEnv.add_printer_param { Sstt.Printer.aliases = [t, "C_int?"] ; Sstt.Printer.extensions = [] } ;
+    t
+
   
 end
 

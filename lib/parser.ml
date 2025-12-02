@@ -72,6 +72,7 @@ let aux_primitive_type t =
   | "char" -> Ast.Char
   | "short" | "int" | "long" -> Ast.Int
   | "float" | "double" -> Ast.Float
+  | "bool" -> Ast.Bool
   | _ -> failwith ("Unknown primitive type: " ^ t)
 
 let aux_struct _struc = []
@@ -217,6 +218,9 @@ and aux_not_bin_expression (e : expression_not_binary) =
       let pos = Position.join pos (fst else_) in
       (pos, A.Ite (cond, then_, else_))
   | `Update_exp expr -> aux_update_expression expr
+  | `Paren_exp expr -> aux_paren_expr expr
+  | `True (loc,_) -> (loc_to_pos loc, A.Const (A.CBool true))
+  | `False (loc,_) -> (loc_to_pos loc, A.Const (A.CBool false))
   | _ -> (
     Boilerplate.map_expression_not_binary () e |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: not binary expressions"
@@ -298,7 +302,7 @@ and aux_expression_statement (expr_stmt: expression_statement) =
 and aux_for_cond (stmts: for_statement_body) =
   let decl,cond,_,incr = stmts in
   let init = match decl with 
-  | `Decl _ -> failwith "Not supported yet: declaration in for loop init"
+  | `Decl decl -> aux_declarations decl
   | `Opt_choice_exp_SEMI expr -> aux_expression_statement expr
   in
   let cond = Option.map aux_comma_expression cond in 

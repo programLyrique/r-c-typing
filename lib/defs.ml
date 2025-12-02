@@ -91,6 +91,14 @@ let neg =
   let ty = Ty.conj [int_ty; dbl_ty; num_ty] in
   v, ty
 
+let superior_strict = 
+  let v = MVariable.create Immut (Some ">__2") in
+  let int_ty = Arrow.mk (Tuple.mk [C.int; C.int]) Ty.bool in
+  let dbl_ty = Arrow.mk (Tuple.mk [C.double; C.double]) Ty.bool in
+  let num_ty = Arrow.mk (Tuple.mk [C.num; C.num]) Ty.bool in
+  let ty = Ty.conj [int_ty; dbl_ty; num_ty] in
+  v, ty
+
 let allocVector =
   let v = MVariable.create Immut (Some "allocVector") in
   let alpha = TVar.mk KInfer None |> TVar.typ in 
@@ -104,6 +112,11 @@ let  length =
   let scalar = Arrow.mk (Tuple.mk [(Vecs.mk_singl Prim.any)]) C.one in
   let vec = Arrow.mk (Ty.diff (Tuple.mk [(Vecs.mk_unsized Prim.any)]) (Tuple.mk [(Vecs.mk_singl Prim.any)])) C.not_one in
   let ty = Ty.cap scalar vec in
+  v, ty
+
+let xlength =
+  let v = MVariable.create Immut (Some "XLENGTH") in
+  let _,ty = length in 
   v, ty
 
 let array_assignment =
@@ -141,12 +154,34 @@ let realsxp =
   let ty = Prim.dbl in
   v, ty
 
+let na_integer =
+  let v = MVariable.create Immut (Some "NA_INTEGER") in
+  let ty = C.int_na in
+  v, ty
+
 let plus = 
   let v = MVariable.create Immut (Some "+__2") in
   let int_ty = Arrow.mk (Tuple.mk [C.int; C.int]) C.int in
   let real_ty = Arrow.mk (Tuple.mk [C.double; C.double]) C.double in
-  let _num_ty = Arrow.mk (Tuple.mk [C.num; C.num]) C.num in
-  let ty = Ty.conj [int_ty; real_ty ; _num_ty] in
+  let num_ty = Arrow.mk (Tuple.mk [C.num; C.num]) C.num in
+  let na_int_ty = Arrow.mk (Ty.disj [Tuple.mk [C.int_na; C.int_na]; Tuple.mk [C.int_na ; C.int]; Tuple.mk [C.int ; C.int_na]]) C.int_na in
+  let ty = Ty.conj [int_ty; real_ty ; num_ty ; na_int_ty] in
+  v, ty
+
+let minus = 
+  let v = MVariable.create Immut (Some "-__2") in
+  let int_ty = Arrow.mk (Tuple.mk [C.int; C.int]) C.int in
+  let real_ty = Arrow.mk (Tuple.mk [C.double; C.double]) C.double in
+  let num_ty = Arrow.mk (Tuple.mk [C.num; C.num]) C.num in
+
+  let na_int_ty = Arrow.mk (Ty.disj [Tuple.mk [C.int_na; C.int_na]; Tuple.mk [C.int_na ; C.int]; Tuple.mk [C.int ; C.int_na]]) C.int_na in
+  let ty = Ty.conj [int_ty; real_ty ; num_ty ; na_int_ty] in
+  v, ty
+
+let modulo =
+  let v = MVariable.create Immut (Some "%__2") in
+  let int_ty = Arrow.mk (Tuple.mk [C.int; C.int]) C.int in
+  let ty = int_ty in
   v, ty
 
 let incr = 
@@ -157,10 +192,22 @@ let incr =
   let ty = Ty.conj [int_ty; real_ty ; num_ty] in
   v, ty
 
+let r_int_min =
+  let v = MVariable.create Immut (Some "R_INT_MIN") in
+  let ty = C.int in
+  v, ty
+
+let r_int_max =
+  let v = MVariable.create Immut (Some "R_INT_MAX") in
+  let ty = C.int in
+  v, ty
+
+
 let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ; 
-            array_access ; logical_or ; length ; allocVector ; protect ; 
-            unprotect ; neg ; intsxp ; plus; realsxp ; real ; isReal ;
-            logical_and ; inferior_strict ; incr]
+            array_access ; logical_or ; length ; xlength ; allocVector ; protect ; 
+            unprotect ; neg ; intsxp ; plus; minus; realsxp ; real ; isReal ; is_scalar ;
+            logical_and ; inferior_strict ; incr ; modulo ; superior_strict ;
+            na_integer ; r_int_min ; r_int_max ]
 
 
 module StrMap = Map.Make(String)
