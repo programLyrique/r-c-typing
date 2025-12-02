@@ -176,6 +176,26 @@ and aux_not_bin_expression (e : expression_not_binary) =
       let lhs = aux_assign_left_expression e1 in
       let rhs = aux_expression e2 in
       (exprs_to_pos lhs rhs, A.VarAssign (lhs, rhs))
+  | `Assign_exp (e1, op, e2) -> 
+      let lhs = aux_assign_left_expression e1 in
+      let rhs = aux_expression e2 in
+      let pos = exprs_to_pos lhs rhs in
+      let binop = 
+        match op with 
+        | `PLUSEQ _ -> "+"
+        | `DASHEQ _ -> "-"
+        | `STAREQ _ -> "*"
+        | `SLASHEQ _ -> "/"
+        | `PERCEQ _ -> "%"
+        | `AMPEQ _ -> "&"
+        | `BAREQ _ -> "|"
+        | `HATEQ _ -> "^"
+        | `LTLTEQ _ -> "<<"
+        | `GTGTEQ _ -> ">>"
+        | `EQ _ -> failwith "Unreachable: `EQ handled in previous case"
+      in
+      let rhs = (exprs_to_pos lhs rhs, A.Binop (binop, (lhs, rhs))) in
+      (pos, A.VarAssign (lhs, rhs))
   | `Un_exp (op, e1) -> 
       let loc1,op = match op with 
         | `DASH (loc, _) -> (loc, "-")
@@ -195,10 +215,23 @@ and aux_not_bin_expression (e : expression_not_binary) =
       let pos = exprs_to_pos cond then_ in
       let pos = Position.join pos (fst else_) in
       (pos, A.Ite (cond, then_, else_))
+  | `Update_exp expr -> aux_update_expression expr
   | _ -> (
     Boilerplate.map_expression_not_binary () e |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: not binary expressions"
   )
+and aux_update_expression (e: update_expression) =
+  (* For typing purposes, we don't care about whether it is pre or post incr/decr*)
+  let (op,e) = match e with
+  | `Choice_DASHDASH_exp (op, e) -> (op, aux_expression e)
+  | `Exp_choice_DASHDASH (e,op) -> (op, aux_expression e)
+  in
+  let op = match op with 
+    | `DASHDASH (loc, _) -> (loc, "--")
+    | `PLUSPLUS (loc, _) -> (loc, "++")
+  in
+  let pos = Position.join (loc_to_pos (fst op)) (fst e) in
+  (pos, A.Unop (snd op, e))
 and aux_subscription_expression (subs: subscript_expression) =
   let expr, _, index, _ = subs in
   let arr = aux_expression expr in
@@ -261,13 +294,21 @@ and aux_expression_statement (expr_stmt: expression_statement) =
   | (Some comma_expr, _) -> aux_comma_expression comma_expr
   | (None, (loc,_)) -> (loc_to_pos loc, A.Return None)
 
-and aux_for_cond (_stmts: for_statement_body) =
-  failwith "Not supported yet: for loop condition"
+and aux_for_cond (stmts: for_statement_body) =
+  let decl,cond,_,incr = stmts in
+  let init = match decl with 
+  | `Decl _ -> failwith "Not supported yet: declaration in for loop init"
+  | `Opt_choice_exp_SEMI expr -> aux_expression_statement expr
+  in
+  let cond = Option.map aux_comma_expression cond in 
+  let incr = Option.map aux_comma_expression incr in
+  init, cond, incr
 
 and aux_for_statement (for_stmt: for_statement) =
-  let _,_,_body,_,_stmt = for_stmt in
-  (* Encode the for loop as a while loop. But rather at PAst -> ast?*)
-  failwith "Not supported yet: for statement"
+  let (loc1,_),_,for_exprs,_,stmt = for_stmt in
+  let init, cond, incr = aux_for_cond for_exprs in
+  let body = aux_statement stmt in 
+  (Position.join (loc_to_pos loc1) (fst body), A.For (init, cond, incr, body))
 
 and aux_while_statement (while_stmt: while_statement) =
   let (loc1, _),cond,body = while_stmt in

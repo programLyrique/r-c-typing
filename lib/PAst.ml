@@ -38,6 +38,7 @@ type const =
   | If of e * e * e option
   | Ite of e * e * e (* For ternary conditions *)
   | While of e * e
+  | For of e * e option * e option * e (*init, condition, incr, body *)
   | Return of e option
   | Break
   | Next
@@ -84,6 +85,14 @@ let rec bv_e in_lhs_assign (_,e) =
   | While (cond, body) -> 
       let acc = bv_e in_lhs_assign cond |> StrSet.union (bv_e in_lhs_assign body) in
       acc
+  | For (init, cond, incr, body) ->
+      let acc = bv_e in_lhs_assign init |> StrSet.union (match cond with 
+        | None -> StrSet.empty
+        | Some e -> bv_e in_lhs_assign e) in
+      let acc = StrSet.union acc (match incr with 
+        | None -> StrSet.empty
+        | Some e -> bv_e in_lhs_assign e) in
+      StrSet.union acc (bv_e in_lhs_assign body)
   | Return None -> StrSet.empty
   | Return (Some e) -> bv_e in_lhs_assign e
   | Seq exprs -> List.fold_left (fun acc e -> StrSet.union acc (bv_e in_lhs_assign e)) StrSet.empty exprs
@@ -156,6 +165,24 @@ let rec aux_e env (pos,e) =
   | Ite (cond, then_, else_) -> 
       Ast.Ite (aux_e env cond, aux_e env then_, aux_e env else_) 
   | While (cond, body) -> Ast.While (aux_e env cond, aux_e env body)
+  | For (init, cond, incr, body) -> 
+      (* Transform For into While *)
+      let init_e = aux_e env init in
+      let cond_e = match cond with 
+        | None -> (Eid.unique (), Ast.Const (Ast.CBool true))
+        | Some e -> aux_e env e
+      in
+      let incr_e = match incr with 
+        | None -> (Eid.unique (), Ast.Const (Ast.CNull))
+        | Some e -> aux_e env e
+      in
+      let while_body = 
+        let body_e = aux_e env body in
+        let seq_e = Eid.unique (), Ast.Seq (body_e, incr_e) in
+        seq_e
+      in
+      let while_e = Eid.unique (), Ast.While (cond_e, while_body) in
+      Ast.Seq (init_e, while_e)
   | Return None -> Ast.Return None
   | Return (Some e) -> Ast.Return (Some (aux_e env e))
   | Break -> Ast.Break
