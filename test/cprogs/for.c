@@ -4,10 +4,10 @@ SEXP sum_all(SEXP v) {
     if(!isReal(v)) {
         error("Input must be a real vector");
     }
-    R_xlen_t n = XLENGTH(v);
+    int n = LENGTH(v);
     double total = 0.0;
     double *vals = REAL(v);
-    R_xlen_t i = 0;
+    int i = 0;
     for (i = 0; i < n; i++) {
         total += vals[i];
     }

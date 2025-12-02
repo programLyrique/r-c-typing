@@ -177,6 +177,7 @@ and aux_not_bin_expression (e : expression_not_binary) =
       let rhs = aux_expression e2 in
       (exprs_to_pos lhs rhs, A.VarAssign (lhs, rhs))
   | `Assign_exp (e1, op, e2) -> 
+      (* Expand a op= e into a = a op e *)
       let lhs = aux_assign_left_expression e1 in
       let rhs = aux_expression e2 in
       let pos = exprs_to_pos lhs rhs in

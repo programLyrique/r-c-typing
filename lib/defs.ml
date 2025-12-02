@@ -149,10 +149,18 @@ let plus =
   let ty = Ty.conj [int_ty; real_ty ; _num_ty] in
   v, ty
 
+let incr = 
+  let v = MVariable.create Immut (Some "++__1") in
+  let int_ty = Arrow.mk (Tuple.mk [C.int]) C.int in
+  let real_ty = Arrow.mk (Tuple.mk [C.double]) C.double in
+  let num_ty = Arrow.mk (Tuple.mk [C.num]) C.num in
+  let ty = Ty.conj [int_ty; real_ty ; num_ty] in
+  v, ty
+
 let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ; 
             array_access ; logical_or ; length ; allocVector ; protect ; 
             unprotect ; neg ; intsxp ; plus; realsxp ; real ; isReal ;
-            logical_and ; inferior_strict]
+            logical_and ; inferior_strict ; incr]
 
 
 module StrMap = Map.Make(String)
