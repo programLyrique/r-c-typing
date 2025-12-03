@@ -58,19 +58,6 @@ and e = Eid.t * e'
 type funcs = e list (* list of function definitions *)
 [@@deriving show]
 
-module BuiltinOp = struct
-  let eq = MVariable.create Immut (Some "==__2")
-  let neq = MVariable.create Immut (Some "!=__2")
-  let all = [ eq ; neq ]
-  let find_builtin str =
-    let f v =
-      match Variable.get_name v with
-      | None -> false
-      | Some name -> String.equal name str
-    in
-    List.find_opt f all
-end
-
 
 
 let typeof_const c = 
@@ -177,9 +164,9 @@ let rec aux_e (eid, e) =
   let recognize_const_comparison e = 
     let f = function 
     | id, (Binop (v, e, (_, Const c)) | Binop (v, (_, Const c), e))
-    when Variable.equals v BuiltinOp.eq -> id, TyCheck (e, typeof_const c)
+    when Variable.equals v Defs.BuiltinOp.eq -> id, TyCheck (e, typeof_const c)
     | id, (Binop (v, e, (_, Const c)) | Binop (v, (_, Const c), e))
-    when Variable.equals v BuiltinOp.neq -> id, TyCheck (e, Ty.neg (typeof_const c))
+    when Variable.equals v Defs.BuiltinOp.neq -> id, TyCheck (e, Ty.neg (typeof_const c))
     | e -> e
     in
     map f e

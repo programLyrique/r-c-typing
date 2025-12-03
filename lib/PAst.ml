@@ -107,7 +107,7 @@ type env = { id: Variable.t StrMap.t }
 let var env str = 
   match StrMap.find_opt str env.id with 
  | None ->
-    begin match Ast.BuiltinOp.find_builtin str with
+    begin match Defs.BuiltinOp.find_builtin str with
     | None -> (
       match Defs.StrMap.find_opt str Defs.defs_map with 
       | None -> (Printf.printf "Creating fresh variable: %s\n" str; MVariable.create Immut (Some str))

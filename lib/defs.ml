@@ -205,6 +205,25 @@ let mk_prim_sym name prim_ty =
   let v = MVariable.create Immut (Some name) in
   v, prim_ty
 
+
+module BuiltinOp = struct
+let eq = MVariable.create Immut (Some "==__2")
+let neq = MVariable.create Immut (Some "!=__2")
+let all = [ eq ; neq ]
+let find_builtin str =
+  let f v =
+    match Variable.get_name v with
+    | None -> false
+    | Some name -> String.equal name str
+  in
+  List.find_opt f all
+end
+let eq = 
+  let v = BuiltinOp.eq in
+  let alpha = TVar.mk KInfer None |> TVar.typ in 
+  let ty = Arrow.mk (Tuple.mk [alpha; alpha]) Ty.bool in
+  v, ty
+
 let prim_syms = List.map 
   (fun (name, prim_ty) -> mk_prim_sym name prim_ty)
   [ ("INTSXP", Prim.int);
@@ -229,7 +248,7 @@ let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ;
             array_access ; logical_or ; length ; xlength ; allocVector ; protect ; 
             unprotect ; neg ; plus; minus ; real ; isReal ; is_scalar ;
             logical_and ; inferior_strict ; incr ; modulo ; superior_strict ;
-            na_integer ; r_int_min ; r_int_max ; typeof ] @ prim_syms
+            na_integer ; r_int_min ; r_int_max ; typeof ; eq ] @ prim_syms
 
 
 module StrMap = Map.Make(String)
