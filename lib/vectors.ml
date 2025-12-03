@@ -13,6 +13,19 @@ module Prim = struct (* TODO: extension (for printing) *)
   let clx = Enum.define "clx" |> Enum.typ
   let chr = Enum.define "chr" |> Enum.typ
   let raw = Enum.define "raw" |> Enum.typ
+
+  let nil = Enum.define "nil" |> Enum.typ
+
+  let vlist = Enum.define "list" |> Enum.typ
+
+  let expr = Enum.define "expr" |> Enum.typ
+
+  let closure = Enum.define "closure" |> Enum.typ
+
+  let sym = Enum.define "symbol" |> Enum.typ
+
+  let pairlist = Enum.define "pairlist" |> Enum.typ
+  let env = Enum.define "env" |> Enum.typ
   let any =
     let t = Ty.disj [int;lgl;dbl;clx;chr;raw] in
     PEnv.add_printer_param { Sstt.Printer.aliases = [t, "prim"] ; Sstt.Printer.extensions = [] } ;
