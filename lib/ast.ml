@@ -162,11 +162,21 @@ let rec aux_e (eid, e) =
   in aux e
 
   let recognize_const_comparison e = 
-    let f = function 
-    | id, (Binop (v, e, (_, Const c)) | Binop (v, (_, Const c), e))
-    when Variable.equals v Defs.BuiltinOp.eq -> id, TyCheck (e, typeof_const c)
-    | id, (Binop (v, e, (_, Const c)) | Binop (v, (_, Const c), e))
-    when Variable.equals v Defs.BuiltinOp.neq -> id, TyCheck (e, Ty.neg (typeof_const c))
+    let f expr = match expr with 
+    | id, (Binop (op, e, (_, Const c)) | Binop (op, (_, Const c), e))
+    when Variable.equals op Defs.BuiltinOp.eq -> id, TyCheck (e, typeof_const c)
+    | id, (Binop (op, e, (_, Id v)) | Binop (op, (_, Id v), e))
+    when Variable.equals op Defs.BuiltinOp.eq -> 
+      (match Defs.BuiltinVar.find_builtin v with 
+      | Some built -> id, TyCheck (e, built)
+      | None -> expr)
+    | id, (Binop (op, e, (_, Const c)) | Binop (op, (_, Const c), e))
+    when Variable.equals op Defs.BuiltinOp.neq -> id, TyCheck (e, Ty.neg (typeof_const c))
+    | id, (Binop (op, e, (_, Id v)) | Binop (op, (_, Id v), e))
+    when Variable.equals op Defs.BuiltinOp.neq -> 
+      (match Defs.BuiltinVar.find_builtin v with 
+      | Some built -> id, TyCheck (e, Ty.neg built)
+      | None -> expr)
     | e -> e
     in
     map f e

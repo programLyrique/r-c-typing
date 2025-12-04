@@ -7,12 +7,14 @@ SEXP mk_value(SEXP a) {
         INTEGER(result)[0] = INTEGER(a)[0];
         UNPROTECT(1);
         return result;
-    } else if (TYPEOF(a) == ENVSXP) {
-        SEXP result = PROTECT(allocVector(INTSXP, 1));
-        INTEGER(result)[0] = 2;
-        UNPROTECT(1);
-        return result;
-    } else {
+    }    
+    //  else if (TYPEOF(a) == ENVSXP) {
+    //     SEXP result = PROTECT(allocVector(INTSXP, 1));
+    //     INTEGER(result)[0] = 2;
+    //     UNPROTECT(1);
+    //     return result;
+    // } 
+    else {
         error("Input must be integer or real");
     }
 }

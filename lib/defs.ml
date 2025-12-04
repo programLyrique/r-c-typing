@@ -197,13 +197,10 @@ let typeof =
   let v = MVariable.create Immut (Some "TYPEOF") in
   let alpha = TVar.mk KInfer None |> TVar.typ in 
   let vec_ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized alpha ]) alpha in
-  let other_ty = Arrow.mk (Tuple.mk [Ty.cap alpha (Ty.neg Vecs.any)]) alpha in
+  let other_ty = Arrow.mk (Tuple.mk [Ty.diff alpha Vecs.any]) alpha in
   let ty = Ty.cap vec_ty other_ty in
   v, ty
 
-let mk_prim_sym name prim_ty =
-  let v = MVariable.create Immut (Some name) in
-  v, prim_ty
 
 
 module BuiltinOp = struct
@@ -218,37 +215,52 @@ let find_builtin str =
   in
   List.find_opt f all
 end
+
+
 let eq = 
   let v = BuiltinOp.eq in
-  let alpha = TVar.mk KInfer None |> TVar.typ in 
-  let ty = Arrow.mk (Tuple.mk [alpha; alpha]) Ty.bool in
+  let ty = Arrow.mk (Tuple.mk [Ty.any; Ty.any]) Ty.bool in
   v, ty
 
-let prim_syms = List.map 
-  (fun (name, prim_ty) -> mk_prim_sym name prim_ty)
-  [ ("INTSXP", Prim.int);
-    ("REALSXP", Prim.dbl);
-    ("RAWSXP", Prim.raw);
-    ("CPLXSXP", Prim.clx);
-    ("STRSXP", Prim.chr);
-    ("LGLSXP", Prim.lgl);
-    ("NILSXP", Prim.nil);
-    ("VECSXP", Prim.vlist);
-    ("EXPRSXP", Prim.expr);
-    ("CLOSXP", Prim.closure);
-    ("SYMSXP", Prim.sym);
-    ("LISTSXP", Prim.pairlist);
-    ("ENVSXP", Prim.env);
-    ("ANYSXP", Prim.any);
-  ]
+module BuiltinVar = struct
+  let mk_prim_sym name prim_ty =
+  let v = MVariable.create Immut (Some name) in
+  v, prim_ty
 
+  let prim_syms = List.map 
+    (fun (name, prim_ty) -> mk_prim_sym name prim_ty)
+    [ ("INTSXP", Prim.int);
+      ("REALSXP", Prim.dbl);
+      ("RAWSXP", Prim.raw);
+      ("CPLXSXP", Prim.clx);
+      ("STRSXP", Prim.chr);
+      ("LGLSXP", Prim.lgl);
+      ("NILSXP", Prim.nil);
+      ("VECSXP", Prim.vlist);
+      ("EXPRSXP", Prim.expr);
+      ("CLOSXP", Prim.closure);
+      ("SYMSXP", Prim.sym);
+      ("LISTSXP", Prim.pairlist);
+      ("ENVSXP", Prim.env);
+      ("ANYSXP", Prim.any);
+    ]
 
+let find_builtin str =
+  List.assoc_opt str prim_syms
+
+(* This one can raise an exception *)
+let get_builtin str = 
+  List.assoc str prim_syms
+
+let has_builtin str =
+  List.mem_assoc str prim_syms
+end
 
 let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ; 
             array_access ; logical_or ; length ; xlength ; allocVector ; protect ; 
             unprotect ; neg ; plus; minus ; real ; isReal ; is_scalar ;
             logical_and ; inferior_strict ; incr ; modulo ; superior_strict ;
-            na_integer ; r_int_min ; r_int_max ; typeof ; eq ] @ prim_syms
+            na_integer ; r_int_min ; r_int_max ; typeof ; eq ] @ BuiltinVar.prim_syms
 
 
 module StrMap = Map.Make(String)
