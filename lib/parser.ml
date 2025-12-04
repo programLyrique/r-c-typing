@@ -337,8 +337,8 @@ and aux_non_case_statement (stmt: non_case_statement) =
   | `Brk_stmt ((l1, _), (l2, _)) -> (locs_to_pos l1 l2, Return None)
   | `Cont_stmt ((l1, _), (l2, _)) -> (locs_to_pos l1 l2, Return None)
   | `Goto_stmt ((l1, _),_, (l2, _)) -> (locs_to_pos l1 l2, Return None)
-  | `Labe_stmt _ -> (Mlsem.Common.Position.dummy, Return None)
-  | `Switch_stmt _ -> (Mlsem.Common.Position.dummy, Return None)
+  | `Labe_stmt _ -> failwith "Not supported yet: labeled statements"
+  | `Switch_stmt _ -> failwith "Not supported yet: switch statements"
   | `Attr_stmt _ -> failwith "Not supported yet: attribute statements"
   | _ -> failwith "Not supported yet: Seh_try and Seh_leave statements"
 

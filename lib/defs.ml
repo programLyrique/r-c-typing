@@ -224,13 +224,13 @@ let eq =
   v, ty
 
 module BuiltinVar = struct
-  let mk_prim_sym name prim_ty =
+  let mk_builtin name ty =
   let v = MVariable.create Immut (Some name) in
-  v, prim_ty
+  v, ty
 
-  let prim_syms = List.map 
-    (fun (name, prim_ty) -> mk_prim_sym name prim_ty)
-    [ ("INTSXP", Prim.int);
+  let all = List.map 
+    (fun (name, ty) -> mk_builtin name ty)
+    [ ("INTSXP", Prim.int); (* Primitive types*)
       ("REALSXP", Prim.dbl);
       ("RAWSXP", Prim.raw);
       ("CPLXSXP", Prim.clx);
@@ -244,21 +244,25 @@ module BuiltinVar = struct
       ("LISTSXP", Prim.pairlist);
       ("ENVSXP", Prim.env);
       ("ANYSXP", Prim.any);
+      (* Booleans*)
+      ("TRUE", C.one);
+      ("FALSE", C.zero);
     ]
 
+
 let find_builtin str =
-  List.assoc_opt str prim_syms
+  List.assoc_opt str all
 
 
 let has_builtin str =
-  List.mem_assoc str prim_syms
+  List.mem_assoc str all
 end
 
 let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ; 
             array_access ; logical_or ; length ; xlength ; allocVector ; protect ; 
             unprotect ; neg ; plus; minus ; real ; isReal ; is_scalar ;
             logical_and ; inferior_strict ; incr ; modulo ; superior_strict ;
-            na_integer ; r_int_min ; r_int_max ; typeof ; eq ] @ BuiltinVar.prim_syms
+            na_integer ; r_int_min ; r_int_max ; typeof ; eq ] @ BuiltinVar.all
 
 
 module StrMap = Map.Make(String)
