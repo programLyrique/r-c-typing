@@ -197,8 +197,9 @@ let typeof =
   let v = MVariable.create Immut (Some "TYPEOF") in
   let alpha = TVar.mk KInfer None |> TVar.typ in 
   let vec_ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized alpha ]) alpha in
-  let other_ty = Arrow.mk (Tuple.mk [Ty.diff alpha Vecs.any]) alpha in
-  let ty = Ty.cap vec_ty other_ty in
+  let other_ty = Arrow.mk (Tuple.mk [Ty.diff alpha (Ty.cup Vecs.any Prim.any)]) alpha in
+  (* primitive scalar types (Prim.any) cannot be arguments of TYPEOF*)
+  let ty = Ty.conj [vec_ty; other_ty] in 
   v, ty
 
 
@@ -248,9 +249,6 @@ module BuiltinVar = struct
 let find_builtin str =
   List.assoc_opt str prim_syms
 
-(* This one can raise an exception *)
-let get_builtin str = 
-  List.assoc str prim_syms
 
 let has_builtin str =
   List.mem_assoc str prim_syms
