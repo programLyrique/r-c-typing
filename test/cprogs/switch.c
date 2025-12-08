@@ -11,15 +11,23 @@
 //     }
 // }
 
-RBoolean isInteger(SEXP a) {
-    switch (TYPEOF(s))
+RBoolean isInteger2(SEXP a) {
+    switch (TYPEOF(a))
     {
     case INTSXP:
         return TRUE;
         break;
     
     default:
-        return FALSE;
+        error("Input must be an integer vector");
         break;
+    }
+}
+
+RBoolean isInteger3(SEXP a) {
+    if(TYPEOF(a) == INTSXP) {
+        return TRUE;
+    } else {
+        error("Input must be an integer vector");
     }
 }

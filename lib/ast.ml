@@ -48,6 +48,7 @@ type e' =
 | While of e * e
 | TyCheck of e * Ty.t (* Test between an expression and a constant *)
 | Function of string * ctype * (ctype * Variable.t) list * e
+| Switch of e * (e * e * bool) list (* expression on which to switch, and then case/default (Noop), their bodies and whether it had a break*)
 | Seq of e * e
 | Noop (* Hack for the declarations. We should rather use the declarations directly rather than doing the imprecise analysis of used variables in bv_e*)
 | Return of e option | Break | Next
@@ -65,7 +66,7 @@ let typeof_const c =
   | CStr _ -> C.str
   | CDbl _ -> C.double
   | CInt v -> Ty.interval (Some (Z.of_int v)) (Some (Z.of_int v))
-  | CBool v -> if v then C.not_zero else C.zero
+  | CBool v -> if v then C.one else C.zero
   | CNull -> Null.null
   | CNa -> Prim.na
 
@@ -124,6 +125,26 @@ let rec aux_e (eid, e) =
       (* Suggested type decomposition, domain, type variable, body*)
       A.Lambda ([], GTy.mk @@ Tuple.mk arg_types, 
       MVariable.create Immut None, body) 
+    | Switch (e, cases) ->
+        let e = aux_e e in
+        let make_pattern_case acc (case_e, body_e, has_break) =
+          let case_ty = match case_e with 
+            | _,Const c -> typeof_const c 
+            | _,Id v -> (match Defs.BuiltinVar.find_builtin v with 
+                | Some ty -> ty
+                | None -> failwith "Invalid switch case expression: unknown define")
+            | _,Noop -> Ty.any (* Default case *)
+            | _ -> failwith "Invalid switch case expression"
+          in
+          let body = aux_e body_e in
+          if has_break || List.is_empty acc then 
+            (A.PType case_ty, body) :: acc
+          else 
+            let last_case, last_body = List.hd acc in
+            let new_body = Eid.unique (), A.Seq (last_body, body) in
+            (A.POr (last_case, (A.PType case_ty)), new_body) :: (List.tl acc)
+        in
+        A.PatMatch (e, List.fold_left make_pattern_case [] cases |> List.rev)
     | Break -> A.Break
     | Next -> A.Break
     (* Lambda *)
@@ -154,6 +175,9 @@ let rec aux_e (eid, e) =
       | TyCheck (e, ty) -> TyCheck (aux e, ty)
       | Function (name, ret_type, params, body) ->
           Function (name, ret_type, params, aux body)
+      | Switch (e, cases) ->
+          let cases = List.map (fun (case_e, body_e, has_break) -> (aux case_e, aux body_e, has_break)) cases in
+          Switch (aux e, cases)
       | Break -> Break
       | Next -> Next
       | Noop -> Noop

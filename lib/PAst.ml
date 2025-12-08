@@ -21,8 +21,6 @@ type const =
  [@@deriving show]
 
 
-
-
  type top_level_unit' = 
   | Fundef of Ast.ctype * string * param list * e
   [@@deriving show]
@@ -45,6 +43,9 @@ type const =
   | Next
   | Seq of e list
   | Comma of e * e
+  | Case of e * e
+  | Default of e
+  | Switch of e * e list  (* expression on which to switch, list of cases/default *)
   [@@deriving show]
  and param = Ast.ctype * string
   [@@deriving show]
@@ -96,6 +97,11 @@ let rec bv_e in_lhs_assign (_,e) =
       StrSet.union acc (bv_e in_lhs_assign body)
   | Return None -> StrSet.empty
   | Return (Some e) -> bv_e in_lhs_assign e
+  | Case (e1, e2) -> StrSet.union (bv_e in_lhs_assign e1) (bv_e in_lhs_assign e2)
+  | Default e -> bv_e in_lhs_assign e
+  | Switch (e, cases) ->
+      let acc = bv_e in_lhs_assign e in
+      List.fold_left (fun acc case -> StrSet.union acc (bv_e in_lhs_assign case)) acc cases
   | Seq exprs -> List.fold_left (fun acc e -> StrSet.union acc (bv_e in_lhs_assign e)) StrSet.empty exprs
   | Comma (e1, e2) -> StrSet.union (bv_e in_lhs_assign e1) (bv_e in_lhs_assign e2)
   | VarDeclare (_, (_, Id s)) -> StrSet.singleton s
@@ -189,6 +195,34 @@ let rec aux_e env (pos,e) =
   | Return (Some e) -> Ast.Return (Some (aux_e env e))
   | Break -> Ast.Break
   | Next -> Ast.Next
+  | Switch  (e, cases) -> 
+      let remove_break body =
+        match body with 
+        | Seq sts -> 
+            let has_break, sts = List.fold_left (fun (had_break, acc) stmt ->
+              if had_break then (true, acc)
+              else match stmt with 
+              | _, Break -> (true, acc)
+              | _ -> (false, acc @ [stmt])
+            ) (false, []) sts 
+            in 
+            (has_break, Seq sts)
+        | Break -> (true, Const CNull)
+        | e -> (false, e)
+      in
+      let aux_cases = function
+        | _,Case (case_e, body_e) -> 
+          let pos,b = body_e in 
+          let has_break,b = remove_break b in 
+           (aux_e env case_e, aux_e env (pos,b), has_break)
+        | _,Default body_e -> 
+          let pos,b = body_e in 
+          let has_break,b = remove_break b in
+          ((Eid.unique (), Ast.Noop), aux_e env (pos, b), has_break) 
+        | _ -> failwith "Invalid case in switch"
+      in
+      Ast.Switch (aux_e env e, List.map aux_cases cases)
+  | Case _ | Default _ -> failwith "Case and Default should be inside a switch"
   | Seq [] -> Ast.Const Ast.CNull
   | Seq (e::es) -> List.fold_left (fun acc e ->
       Eid.unique (), Ast.Seq (acc, aux_e env e)) (aux_e env e) es |> snd
@@ -212,3 +246,30 @@ and transform env (pos, topl_unit) =
     Ast.Function (name, ret_ty, params, e) 
   in
   (eid, e)
+
+let map f e = 
+  let rec aux (pos, e) = 
+    let e = match e with 
+    | Const _ | Id _ | Break | Next -> e
+    | Unop (op, e1) -> Unop (op, aux e1)
+    | Binop (op, (e1, e2)) -> Binop (op, (aux e1, aux e2))
+    | VarDeclare (ty, e1) -> VarDeclare (ty, aux e1)
+    | VarAssign (e1, e2) -> VarAssign (aux e1, aux e2)
+    | Call (f, args) -> Call (aux f, List.map aux args)
+    | If (cond, then_, else_) -> 
+        If (aux cond, aux then_, Option.map aux else_)
+    | Ite (cond, then_, else_) ->
+        Ite (aux cond, aux then_, aux else_)
+    | While (cond, body) -> While (aux cond, aux body)
+    | For (init, cond, incr, body) ->
+        For (aux init, Option.map aux cond, Option.map aux incr, aux body)
+    | Return e -> Return (Option.map aux e)
+    | Case (e1, e2) -> Case (aux e1, aux e2)
+    | Default e1 -> Default (aux e1)
+    | Switch (e1, cases) -> Switch (aux e1, List.map aux cases)
+    | Seq exprs -> Seq (List.map aux exprs)
+    | Comma (e1, e2) -> Comma (aux e1, aux e2)
+    in
+    f (pos, e)
+  in aux e
+

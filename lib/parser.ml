@@ -325,6 +325,20 @@ and aux_do_statement (do_stmt: do_statement) =
   let _,_body,_,_cond,_ = do_stmt in
   failwith "Not supported yet: do statement"
 
+and aux_compound_stmt (stmt: compound_statement) = 
+  let (l1,_),block_items,(l2,_) = stmt in
+  let stmts = List.map aux_block_item block_items in
+  (locs_to_pos l1 l2, A.Seq stmts)
+
+and aux_switch_statement (switch_stmt: switch_statement) =
+  let (loc1,_),expr,cases = switch_stmt in
+  let expr  = aux_paren_expr expr in
+  let body = aux_compound_stmt cases in
+
+  match body with 
+  | pos, A.Seq lst -> (Position.join (loc_to_pos loc1) pos, A.Switch (expr, lst))
+  | _ -> failwith "Unexpected body in switch statement"
+
 and aux_non_case_statement (stmt: non_case_statement) =
   match stmt with
   | `Ret_stmt ret -> aux_return_statement ret
@@ -334,17 +348,46 @@ and aux_non_case_statement (stmt: non_case_statement) =
   | `For_stmt for_stmt -> aux_for_statement for_stmt
   | `While_stmt while_stmt -> aux_while_statement while_stmt
   | `Do_stmt do_stmt -> aux_do_statement do_stmt
-  | `Brk_stmt ((l1, _), (l2, _)) -> (locs_to_pos l1 l2, Return None)
-  | `Cont_stmt ((l1, _), (l2, _)) -> (locs_to_pos l1 l2, Return None)
+  | `Brk_stmt ((l1, _), (l2, _)) -> (locs_to_pos l1 l2, A.Break)
+  | `Cont_stmt ((l1, _), (l2, _)) -> (locs_to_pos l1 l2, A.Next)
   | `Goto_stmt ((l1, _),_, (l2, _)) -> (locs_to_pos l1 l2, Return None)
   | `Labe_stmt _ -> failwith "Not supported yet: labeled statements"
-  | `Switch_stmt _ -> failwith "Not supported yet: switch statements"
+  | `Switch_stmt st -> aux_switch_statement st
   | `Attr_stmt _ -> failwith "Not supported yet: attribute statements"
   | _ -> failwith "Not supported yet: Seh_try and Seh_leave statements"
 
+and aux_case_statement (case_stmt: case_statement) =
+  let (case, _, body) = case_stmt in 
+  let case_body = List.map (function 
+   | `Choice_attr_stmt st -> aux_non_case_statement st
+   | `Decl decls -> aux_declarations decls
+   | `Type_defi _typs -> failwith "Type definitions in case statements are not supported yet"
+  ) body
+  in
+  let first_loc = 
+    match case_body with
+    | [] -> Position.dummy
+    | (pos, _) :: _ -> pos
+  in
+  let last_loc = 
+    match List.rev case_body with
+    | [] -> Position.dummy
+    | (pos, _) :: _ -> pos
+  in
+  let case_body = (Position.join first_loc last_loc, A.Seq case_body) in
+  match case with 
+  | `Case_exp ((loc1,_), e) ->
+    let e = aux_expression e in
+    let pos = Position.join (loc_to_pos loc1) last_loc in
+    (pos, A.Case (e, case_body))
+  | `Defa ((loc1,_)) ->
+    let pos = Position.join (loc_to_pos loc1) last_loc in
+    (pos, A.Default (case_body))
+
+
 and aux_statement (stmt: statement) =
  match stmt with 
- | `Case_stmt _ -> failwith "Case statements are not supported yet"
+ | `Case_stmt st -> aux_case_statement st
  | `Choice_attr_stmt st -> aux_non_case_statement st
 and aux_declaration typ (decl: anon_choice_opt_ms_call_modi_decl_decl_opt_gnu_asm_exp_2fa2f9e) =
   match decl with 
