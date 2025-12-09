@@ -92,6 +92,13 @@ let aux_decl_spec decl_spec =
   let (_, type_spec, _) = decl_spec in
   aux_type_spec type_spec
 
+let aux_type_descriptor (type_desc: type_descriptor) : Ast.ctype =
+  let (_qualifiers1, type_spec, _qualifiers2, _abstract_decl) = type_desc in
+  let base_type = aux_type_spec type_spec in
+  (* For now, ignore qualifiers and abstract declarators
+     TODO: Handle const, volatile, pointers, arrays, etc. *)
+  base_type
+
 let rec aux_decl_name (decl : declarator) : string =
   match decl with
   | `Id tok -> token_to_string tok
@@ -221,6 +228,11 @@ and aux_not_bin_expression (e : expression_not_binary) =
   | `Paren_exp expr -> aux_paren_expr expr
   | `True (loc,_) -> (loc_to_pos loc, A.Const (A.CBool true))
   | `False (loc,_) -> (loc_to_pos loc, A.Const (A.CBool false))
+  | `Cast_exp ((loc1,_), typ, _, expr) ->
+      let e = aux_expression expr in
+      let cast_type = aux_type_descriptor typ in
+      let pos = Position.join (loc_to_pos loc1) (fst e) in
+      (pos, A.Cast (cast_type, e))
   | _ -> (
     Boilerplate.map_expression_not_binary () e |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: not binary expressions"

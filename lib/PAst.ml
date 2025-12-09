@@ -46,6 +46,7 @@ type const =
   | Case of e * e
   | Default of e
   | Switch of e * e list  (* expression on which to switch, list of cases/default *)
+  | Cast of Ast.ctype * e (* Type cast expression *)
   [@@deriving show]
  and param = Ast.ctype * string
   [@@deriving show]
@@ -104,6 +105,7 @@ let rec bv_e in_lhs_assign (_,e) =
       List.fold_left (fun acc case -> StrSet.union acc (bv_e in_lhs_assign case)) acc cases
   | Seq exprs -> List.fold_left (fun acc e -> StrSet.union acc (bv_e in_lhs_assign e)) StrSet.empty exprs
   | Comma (e1, e2) -> StrSet.union (bv_e in_lhs_assign e1) (bv_e in_lhs_assign e2)
+  | Cast (_, e) -> bv_e in_lhs_assign e
   | VarDeclare (_, (_, Id s)) -> StrSet.singleton s
   | VarDeclare (_, _) -> failwith "Declaration must have an identifier" (*Should be unreachable*)
 
@@ -230,6 +232,7 @@ let rec aux_e env (pos,e) =
   | Seq (e::es) -> List.fold_left (fun acc e ->
       Eid.unique (), Ast.Seq (acc, aux_e env e)) (aux_e env e) es |> snd
   | Comma _ -> failwith "Comma operator not supported yet"
+  | Cast (ty, e) -> Ast.Cast (ty, aux_e env e)
   | VarDeclare (_typ, (_,Id _s)) -> Ast.Noop (* Rather generate a AST. Declare somewhere from them*)
   | VarDeclare (_, _) -> failwith "Declaration must have an identifier" (*Should be unreachable*)
   in
@@ -272,6 +275,7 @@ let map f e =
     | Switch (e1, cases) -> Switch (aux e1, List.map aux cases)
     | Seq exprs -> Seq (List.map aux exprs)
     | Comma (e1, e2) -> Comma (aux e1, aux e2)
+    | Cast (ty, e) -> Cast (ty, aux e)
     in
     f (pos, e)
   in aux e

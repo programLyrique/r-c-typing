@@ -47,6 +47,7 @@ type e' =
 | Ite of e * e * e (* For ternary conditions *)
 | While of e * e
 | TyCheck of e * Ty.t (* Test between an expression and a constant *)
+| Cast of ctype * e (* Type cast expression *)
 | Function of string * ctype * (ctype * Variable.t) list * e
 | Switch of e * (e * e * bool) list (* expression on which to switch, and then case/default (Noop), their bodies and whether it had a break*)
 | Seq of e * e
@@ -110,6 +111,8 @@ let rec aux_e (eid, e) =
         let tt = Eid.unique (), A.Value (GTy.mk Ty.tt) in
         let ff = Eid.unique (), A.Value (GTy.mk Ty.ff) in
         A.Ite (e, GTy.mk ty, tt, ff)
+    | Cast (_ty, e) -> aux_e e |> snd (* For now, just return the expression without the cast
+                               TODO: Handle actual type casting in MLsem *)
     | Function (_name, _ret_type, params, body) ->
       (* Create lets in the body for each argument: match parameter names with
        type variable in the domain *)
@@ -178,6 +181,7 @@ let rec aux_e (eid, e) =
       | Seq (e1,e2) -> Seq (aux e1, aux e2)
       | Return e -> Return (Option.map aux e)
       | TyCheck (e, ty) -> TyCheck (aux e, ty)
+      | Cast (ty, e) -> Cast (ty, aux e)
       | Function (name, ret_type, params, body) ->
           Function (name, ret_type, params, aux body)
       | Switch (e, cases) ->

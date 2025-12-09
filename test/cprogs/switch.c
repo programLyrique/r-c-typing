@@ -30,7 +30,7 @@ RBoolean checkList(SEXP s) {
     }
 }
 
-Rboolean isVectorList(SEXP s)
+INLINE_FUN Rboolean isVectorList(SEXP s)
 {
     switch (TYPEOF(s)) {
     case VECSXP:
