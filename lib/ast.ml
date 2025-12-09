@@ -140,11 +140,16 @@ let rec aux_e (eid, e) =
           if has_break || List.is_empty acc then 
             (A.PType case_ty, body) :: acc
           else 
-            let last_case, last_body = List.hd acc in
+            let _last_case, last_body = List.hd acc in
+            (* if there are no break in the current case, then the current case will also execute the 
+              body of the next case(s) until reaching a break, so we merge those bodies. *)
             let new_body = Eid.unique (), A.Seq (last_body, body) in
-            (A.POr (last_case, (A.PType case_ty)), new_body) :: (List.tl acc)
+            (A.PType case_ty, new_body) :: acc
         in
-        A.PatMatch (e, List.fold_left make_pattern_case [] cases |> List.rev)
+        (* We start from the reverse list because we want to merge bodies of cases with the one 
+        before when there is a break. So we start with the default case, then the one before
+         and so on *)
+        A.PatMatch (e, List.fold_left make_pattern_case [] (List.rev cases))
     | Break -> A.Break
     | Next -> A.Break
     (* Lambda *)
@@ -188,16 +193,16 @@ let rec aux_e (eid, e) =
   let recognize_const_comparison e = 
     let f expr = match expr with 
     | id, (Binop (op, e, (_, Const c)) | Binop (op, (_, Const c), e))
-    when Variable.equals op Defs.BuiltinOp.eq -> id, TyCheck (e, typeof_const c)
+    when Variable.equal op Defs.BuiltinOp.eq -> id, TyCheck (e, typeof_const c)
     | id, (Binop (op, e, (_, Id v)) | Binop (op, (_, Id v), e))
-    when Variable.equals op Defs.BuiltinOp.eq -> 
+    when Variable.equal op Defs.BuiltinOp.eq -> 
       (match Defs.BuiltinVar.find_builtin v with 
       | Some built -> id, TyCheck (e, built)
       | None -> expr)
     | id, (Binop (op, e, (_, Const c)) | Binop (op, (_, Const c), e))
-    when Variable.equals op Defs.BuiltinOp.neq -> id, TyCheck (e, Ty.neg (typeof_const c))
+    when Variable.equal op Defs.BuiltinOp.neq -> id, TyCheck (e, Ty.neg (typeof_const c))
     | id, (Binop (op, e, (_, Id v)) | Binop (op, (_, Id v), e))
-    when Variable.equals op Defs.BuiltinOp.neq -> 
+    when Variable.equal op Defs.BuiltinOp.neq -> 
       (match Defs.BuiltinVar.find_builtin v with 
       | Some built -> id, TyCheck (e, Ty.neg built)
       | None -> expr)

@@ -196,18 +196,21 @@ let rec aux_e env (pos,e) =
   | Break -> Ast.Break
   | Next -> Ast.Next
   | Switch  (e, cases) -> 
+      (*Detects break and return; remove break*)
       let remove_break body =
         match body with 
         | Seq sts -> 
-            let has_break, sts = List.fold_left (fun (had_break, acc) stmt ->
+            let has_break_or_return, sts = List.fold_left (fun (had_break, acc) stmt ->
               if had_break then (true, acc)
               else match stmt with 
               | _, Break -> (true, acc)
+              | _, Return _ -> (true, acc @ [stmt])
               | _ -> (false, acc @ [stmt])
             ) (false, []) sts 
             in 
-            (has_break, Seq sts)
+            (has_break_or_return, Seq sts)
         | Break -> (true, Const CNull)
+        | Return _ -> (true, body)
         | e -> (false, e)
       in
       let aux_cases = function
