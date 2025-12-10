@@ -183,6 +183,18 @@ let incr =
   let ty = Ty.conj [int_ty; real_ty ; num_ty] in
   v, ty
 
+let deref =
+  let v = MVariable.create Immut (Some "*__1") in
+  let alpha = TVar.mk KInfer None |> TVar.typ in
+  let ty = Arrow.mk (Tuple.mk [C.mk_ptr alpha]) alpha in
+  v, ty
+
+let reference = 
+  let v = MVariable.create Immut (Some "&__1") in
+  let alpha = TVar.mk KInfer None |> TVar.typ in
+  let ty = Arrow.mk (Tuple.mk [alpha]) (C.mk_ptr alpha) in
+  v, ty
+
 let r_int_min =
   let v = MVariable.create Immut (Some "R_INT_MIN") in
   let ty = C.int in
@@ -240,10 +252,13 @@ module BuiltinVar = struct
       ("VECSXP", Prim.vlist);
       ("EXPRSXP", Prim.expr);
       ("CLOSXP", Prim.closure);
+      ("CHARSXP", Prim.chr); (* We should actually differentiate between STRSXP and CHARSXP: STRSXP is a vector of CHARSXP?*)
       ("SYMSXP", Prim.sym);
       ("LISTSXP", Prim.pairlist);
+      ("LANGSXP", Prim.lang);
       ("ENVSXP", Prim.env);
       ("ANYSXP", Ty.cup Vecs.any Prim.any);
+      ("DOTSXP", Ty.any); (* TODO: replace by the actual type: a list with an any tail*)
       (* Booleans*)
       ("TRUE", C.one);
       ("FALSE", C.zero);
@@ -262,7 +277,8 @@ let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ;
             array_access ; logical_or ; length ; xlength ; allocVector ; protect ; 
             unprotect ; neg ; plus; minus ; real ; isReal ; is_scalar ;
             logical_and ; inferior_strict ; incr ; modulo ; superior_strict ;
-            na_integer ; r_int_min ; r_int_max ; typeof ; eq ] @ BuiltinVar.all
+            na_integer ; r_int_min ; r_int_max ; typeof ; eq ; deref ;
+            reference ] @ BuiltinVar.all
 
 
 module StrMap = Map.Make(String)

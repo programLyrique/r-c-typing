@@ -20,6 +20,8 @@ module Prim = struct (* TODO: extension (for printing) *)
 
   let expr = Enum.define "expr" |> Enum.typ
 
+  let lang = Enum.define "language" |> Enum.typ
+
   let closure = Enum.define "closure" |> Enum.typ
 
   let sym = Enum.define "symbol" |> Enum.typ
@@ -31,7 +33,7 @@ module Prim = struct (* TODO: extension (for printing) *)
     PEnv.add_printer_param { Sstt.Printer.aliases = [t, "scalar"] ; Sstt.Printer.extensions = [] } ;
     t
   let any = 
-    let t = Ty.disj [int;lgl;dbl;clx;chr;raw;nil;vlist;expr;closure;sym;pairlist;env] in
+    let t = Ty.disj [int;lgl;dbl;clx;chr;raw;nil;vlist;expr;closure;sym;pairlist;env;lang] in
     PEnv.add_printer_param { Sstt.Printer.aliases = [t, "prim"] ; Sstt.Printer.extensions = [] } ;
     t
   let na = Enum.define "na" |> Enum.typ
@@ -58,7 +60,14 @@ module C  = struct
   let one = Ty.interval (Some Z.one) (Some Z.one)
   let not_one = Ty.diff Ty.int one
   let str = Enum.define "C_str" |> Enum.typ
+
+  let char = Enum.define "C_char" |> Enum.typ
   let num = Ty.disj [int; double]
+
+  let bool = 
+    let t = Ty.disj [zero; one] in
+    PEnv.add_printer_param { Sstt.Printer.aliases = [t, "C_bool"] ; Sstt.Printer.extensions = [] } ;
+    t
 
   let any = 
     let t = Ty.disj [int; double; str] in

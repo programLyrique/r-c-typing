@@ -47,6 +47,8 @@ let infer_ast visible opts (idenv, env) (ast : Ast.e) =
   let mlsem_ast = Ast.to_mlsem ast in 
   if opts.mlsem && visible then 
     Format.printf "%a@." Mlsem.System.Ast.pp mlsem_ast;
+  if opts.debug then
+    Format.printf "Type inference for function %s@." name;
   try 
     if opts.typing then
         begin

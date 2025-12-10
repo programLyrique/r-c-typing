@@ -9,6 +9,7 @@ type label = string
 [@@deriving show]
 
 type const =
+| CChar of char
 | CStr of string
 | CDbl of float
 | CInt of int
@@ -64,12 +65,25 @@ type funcs = e list (* list of function definitions *)
 
 let typeof_const c = 
   match c with 
+  | CChar _ -> C.char
   | CStr _ -> C.str
   | CDbl _ -> C.double
   | CInt v -> Ty.interval (Some (Z.of_int v)) (Some (Z.of_int v))
   | CBool v -> if v then C.one else C.zero
   | CNull -> Null.null
   | CNa -> Prim.na
+
+let rec typeof_ctype ct = 
+  match ct with 
+  | Void -> C.void
+  | Int -> C.int
+  | Float -> C.double
+  | Char -> C.char
+  | Bool -> C.bool
+  | Ptr ty -> C.mk_ptr (typeof_ctype ty)
+  | SEXP -> Prim.any
+  | Any -> C.any
+  | _ -> failwith ("Type not supported yet in typeof_ctype: " ^ show_ctype ct)
 
 (* Transformation to MLsem ast
   GTy is used for gradual types, Ty for "normal" types
@@ -111,8 +125,8 @@ let rec aux_e (eid, e) =
         let tt = Eid.unique (), A.Value (GTy.mk Ty.tt) in
         let ff = Eid.unique (), A.Value (GTy.mk Ty.ff) in
         A.Ite (e, GTy.mk ty, tt, ff)
-    | Cast (_ty, e) -> aux_e e |> snd (* For now, just return the expression without the cast
-                               TODO: Handle actual type casting in MLsem *)
+    | Cast (ty, e) -> let e = aux_e e in 
+        A.TypeCoerce (e, typeof_ctype ty |> GTy.mk , SA.NoCheck)
     | Function (_name, _ret_type, params, body) ->
       (* Create lets in the body for each argument: match parameter names with
        type variable in the domain *)
@@ -135,7 +149,7 @@ let rec aux_e (eid, e) =
             | _,Const c -> typeof_const c 
             | _,Id v -> (match Defs.BuiltinVar.find_builtin v with 
                 | Some ty -> ty
-                | None -> failwith "Invalid switch case expression: unknown define")
+                | None -> failwith ("Invalid switch case expression: unknown define " ^ (Variable.get_unique_name v)))
             | _,Noop -> Ty.any (* Default case *)
             | _ -> failwith "Invalid switch case expression"
           in

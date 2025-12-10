@@ -13,6 +13,7 @@ end
 
 type const =
  | CStr of string 
+ | CChar of char
  | CFloat of float 
  | CInt of int 
  | CBool of bool
@@ -145,6 +146,7 @@ let add_def pid eid e str =
 
 let aux_const c = 
   match c with 
+  | CChar c -> Ast.CChar c
   | CStr s -> Ast.CStr s 
   | CFloat s -> Ast.CDbl s
   | CInt i -> Ast.CInt i

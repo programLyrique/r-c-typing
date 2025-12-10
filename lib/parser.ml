@@ -92,12 +92,21 @@ let aux_decl_spec decl_spec =
   let (_, type_spec, _) = decl_spec in
   aux_type_spec type_spec
 
+(* For pointers *)
+let rec aux_abstract_declarator (base_type: Ast.ctype) (abs_decl: abstract_declarator option) =
+  let aux = function 
+    `Abst_poin_decl (_,_,_,decl) -> Ast.Ptr (aux_abstract_declarator base_type decl)
+    | _ -> failwith "Not supported yet: abstract declarator"
+  in
+  Option.fold ~none:base_type
+    ~some:aux abs_decl
+
 let aux_type_descriptor (type_desc: type_descriptor) : Ast.ctype =
-  let (_qualifiers1, type_spec, _qualifiers2, _abstract_decl) = type_desc in
+  let (_qualifiers1, type_spec, _qualifiers2, abstract_decl) = type_desc in
   let base_type = aux_type_spec type_spec in
   (* For now, ignore qualifiers and abstract declarators
      TODO: Handle const, volatile, pointers, arrays, etc. *)
-  base_type
+  aux_abstract_declarator base_type abstract_decl
 
 let rec aux_decl_name (decl : declarator) : string =
   match decl with
@@ -172,11 +181,21 @@ and aux_num_lit  s =
   with 
     | Failure _ -> A.CFloat (Float.of_string s)
   )
+
+and aux_char_lit (c: char_literal) = 
+  let (start, c, (loc2,_)) = c in 
+  let loc1,c = match (start,c) with 
+   | `SQUOT (loc1,_), [`Imm_tok_pat_36637e2 (_,c)] -> assert (String.length c == 1);loc1, c.[0]
+   | _ -> failwith "Not supported yet: char literals with escape sequences"
+  in
+  let pos = locs_to_pos loc1 loc2 in
+  (pos, A.Const (A.CChar c))
     
 and aux_not_bin_expression (e : expression_not_binary) = 
   match e with 
   | `Id (loc, s) -> (loc_to_pos loc, A.Id s)
   | `Num_lit (loc, s) -> (loc_to_pos loc, aux_num_lit s)
+  | `Char_lit c -> aux_char_lit c
   | `Null _ -> (Position.dummy, A.Const A.CNull)
   | `Call_exp  call -> aux_call_expression call
   | `Str s -> aux_string s
@@ -233,9 +252,10 @@ and aux_not_bin_expression (e : expression_not_binary) =
       let cast_type = aux_type_descriptor typ in
       let pos = Position.join (loc_to_pos loc1) (fst e) in
       (pos, A.Cast (cast_type, e))
+  | `Poin_exp expr -> aux_pointer_expression expr
   | _ -> (
     Boilerplate.map_expression_not_binary () e |> Tree_sitter_run.Raw_tree.to_channel stderr ;
-    failwith "Not supported yet: not binary expressions"
+    failwith "Not supported yet: expresion_not_binary"
   )
 and aux_update_expression (e: update_expression) =
   (* For typing purposes, we don't care about whether it is pre or post incr/decr*)
