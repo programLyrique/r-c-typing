@@ -41,3 +41,36 @@ INLINE_FUN Rboolean isVectorList(SEXP s)
     }
 }
 
+
+INLINE_FUN R_len_t length2(SEXP s)
+{
+    switch (TYPEOF(s)) {
+    case NILSXP:
+	return 0;
+    case LGLSXP:
+    case INTSXP:
+    case REALSXP:
+    //case CPLXSXP:
+    // case STRSXP:
+    // case CHARSXP:
+    // case VECSXP:
+    // case EXPRSXP:
+    // case RAWSXP:
+	return LENGTH(s);
+    // case LISTSXP:
+    // case LANGSXP:
+    // case DOTSXP:
+    // {
+	// int i = 0;
+	// while (s != NULL && s != R_NilValue) {
+	//     i++;
+	//     s = CDR(s);
+	// }
+	// return i;
+    // }
+    // case ENVSXP:
+	// return Rf_envlength(s);
+    default:
+	return 1;
+    }
+}

@@ -205,6 +205,19 @@ let r_int_max =
   let ty = C.int in
   v, ty
 
+let envlength = 
+  let v = MVariable.create Immut (Some "Rf_envlength") in
+  let ty = Arrow.mk (Tuple.mk [Prim.env]) C.int in
+  v, ty
+
+let cdr = 
+  let v = MVariable.create Immut (Some "CDR") in
+  let pairlist_ty = Arrow.mk (Tuple.mk [Prim.pairlist]) (Prim.pairlist) in
+  let lang_ty = Arrow.mk (Tuple.mk [Prim.lang]) (Prim.lang) in
+  let dotsxp_ty = Arrow.mk (Tuple.mk [Ty.any]) Ty.any in
+  let ty = Ty.conj [pairlist_ty; lang_ty; dotsxp_ty] in
+  v, ty
+
 let typeof = 
   let v = MVariable.create Immut (Some "TYPEOF") in
   let alpha = TVar.mk KInfer None |> TVar.typ in 
@@ -262,6 +275,8 @@ module BuiltinVar = struct
       (* Booleans*)
       ("TRUE", C.one);
       ("FALSE", C.zero);
+      (* SPecial values *)
+      ("R_NilValue", Prim.nil);
     ]
 
 
@@ -278,7 +293,7 @@ let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ;
             unprotect ; neg ; plus; minus ; real ; isReal ; is_scalar ;
             logical_and ; inferior_strict ; incr ; modulo ; superior_strict ;
             na_integer ; r_int_min ; r_int_max ; typeof ; eq ; deref ;
-            reference ] @ BuiltinVar.all
+            reference; envlength ; cdr ] @ BuiltinVar.all
 
 
 module StrMap = Map.Make(String)
