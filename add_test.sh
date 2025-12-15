@@ -45,7 +45,7 @@ RULE1="(rule
  (alias   runtest)
  (deps    cprogs/$C_FILE)
  (action  (with-stdout-to $1.output
-              (run %{exe:typing_test.exe} ../../../test/cprogs/$C_FILE))))"
+              (run %{exe:typing_test.exe} %{dep:cprogs/$C_FILE}))))"
 
 # Create the rule for diffing
 echo "$RULE1" >> "$DUNE_INC_FILE"
