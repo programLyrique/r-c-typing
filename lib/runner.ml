@@ -66,7 +66,7 @@ let infer_ast visible opts (idenv, env) (ast : Ast.e) =
     else 
       idenv,env
   with System.Checker.Untypeable err ->
-    Format.printf "Untypeable: %s@." err.title;
+    Format.printf "%s:@.untypeable: %s@." name err.title;
     err.descr |> Option.iter (Format.printf "%s@." ) ;
     if not opts.mlsem && opts.debug  then (* Still print the mlsem ast*)
       Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp mlsem_ast ;

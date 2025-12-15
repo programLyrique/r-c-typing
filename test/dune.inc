@@ -136,3 +136,14 @@
   narrowing_comp.output)
  (action
   (diff cprogs/narrowing_comp.expected narrowing_comp.output)))
+(rule
+ (alias   runtest)
+ (deps    cprogs/error-vs-fail.c)
+ (action  (with-stdout-to error-vs-fail.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/error-vs-fail.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/error-vs-fail.c cprogs/error-vs-fail.expected)
+ (action  (diff cprogs/error-vs-fail.expected error-vs-fail.output)))
+
