@@ -10,6 +10,11 @@ let error =
   let ty = Arrow.mk (Tuple.mk [Ty.empty]) Ty.any in 
   v, ty
 
+let fail = 
+  let v = MVariable.create Immut (Some "fail") in
+  let ty = Arrow.mk (Tuple.mk [Ty.any]) Ty.empty in 
+  v, ty
+
 let isInteger = 
   let v = MVariable.create Immut (Some "isInteger") in
   let tt = Arrow.mk (Tuple.mk [Vecs.mk_unsized Prim.int]) C.one in
@@ -293,7 +298,7 @@ let defs = [(tobool, tobool_t); error ; isInteger ; integer ; array_assignment ;
             unprotect ; neg ; plus; minus ; real ; isReal ; is_scalar ;
             logical_and ; inferior_strict ; incr ; modulo ; superior_strict ;
             na_integer ; r_int_min ; r_int_max ; typeof ; eq ; deref ;
-            reference; envlength ; cdr ] @ BuiltinVar.all
+            reference; envlength ; cdr ; fail ] @ BuiltinVar.all
 
 
 module StrMap = Map.Make(String)
