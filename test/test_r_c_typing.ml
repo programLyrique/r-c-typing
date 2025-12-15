@@ -1,1 +1,0 @@
-print_endline "R_c_typing module loaded successfully"

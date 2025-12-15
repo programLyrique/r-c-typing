@@ -1,4 +1,11 @@
 (test
  (name parser_test)
- (libraries r_c_typing FrontC ppx_import)
+ (libraries r_c_typing ppx_import)
  (preprocess (staged_pps ppx_import)))
+
+(executable
+ (name typing_test)
+ (modules typing_test)
+ (libraries r_c_typing))
+
+ (include dune.inc)
