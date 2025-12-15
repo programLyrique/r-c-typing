@@ -84,3 +84,14 @@
 
 
 
+(rule
+ (alias   runtest)
+ (deps    cprogs/narrowing_comp.c)
+ (action  (with-stdout-to narrowing_comp.output
+              (run %{exe:typing_test.exe} ../../../test/cprogs/narrowing_comp.c))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/narrowing_comp.c cprogs/narrowing_comp.expected)
+ (action  (diff cprogs/narrowing_comp.expected narrowing_comp.output)))
+
