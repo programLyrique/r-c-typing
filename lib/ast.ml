@@ -224,6 +224,12 @@ let rec aux_e (eid, e) =
       (match Defs.BuiltinVar.find_builtin v with 
       | Some built -> id, TyCheck (e, Ty.neg built)
       | None -> expr)
+    | id, (Binop (op, e, (_, Const (CInt c))) | Binop (op, (_, Const (CInt c)), e))
+    when Variable.equal op Defs.BuiltinOp.inf_strict -> 
+      id, TyCheck (e, Ty.interval None (Some (Z.of_int (c - 1)))) (* Ty.interval is closed by < is open on the right*)
+    | id, (Binop (op, e, (_, Const (CInt c))) | Binop (op, (_, Const (CInt c)), e))
+    when Variable.equal op Defs.BuiltinOp.sup_strict -> 
+      id, TyCheck (e, Ty.interval (Some (Z.of_int (c + 1))) None) (* Ty.interval is closed by > is open on the left*)
     | e -> e
     in
     map f e

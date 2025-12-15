@@ -88,21 +88,6 @@ let neg =
   let ty = Ty.conj  [tt;ff] in
   v, ty
 
-  let inferior_strict = 
-  let v = MVariable.create Immut (Some "<__2") in
-  let int_ty = Arrow.mk (Tuple.mk [C.int; C.int]) Ty.bool in
-  let dbl_ty = Arrow.mk (Tuple.mk [C.double; C.double]) Ty.bool in
-  let num_ty = Arrow.mk (Tuple.mk [C.num; C.num]) Ty.bool in
-  let ty = Ty.conj [int_ty; dbl_ty; num_ty] in
-  v, ty
-
-let superior_strict = 
-  let v = MVariable.create Immut (Some ">__2") in
-  let int_ty = Arrow.mk (Tuple.mk [C.int; C.int]) Ty.bool in
-  let dbl_ty = Arrow.mk (Tuple.mk [C.double; C.double]) Ty.bool in
-  let num_ty = Arrow.mk (Tuple.mk [C.num; C.num]) Ty.bool in
-  let ty = Ty.conj [int_ty; dbl_ty; num_ty] in
-  v, ty
 
 let allocVector =
   let v = MVariable.create Immut (Some "allocVector") in
@@ -114,9 +99,9 @@ let allocVector =
 
 let  length =
   let v = MVariable.create Immut (Some "LENGTH") in
-  let scalar = Arrow.mk (Tuple.mk [(Vecs.mk_singl Prim.any_scalar)]) C.one in
-  let vec = Arrow.mk (Ty.diff (Tuple.mk [(Vecs.mk_unsized Prim.any_scalar)]) (Tuple.mk [(Vecs.mk_singl Prim.any)])) C.not_one in
-  let ty = Ty.cap scalar vec in
+  let alpha = TVar.mk KInfer None |> TVar.typ in
+  let vec = Arrow.mk  (Tuple.mk [(Vecs.mk Prim.any_scalar alpha)]) alpha in
+  let ty = vec in
   v, ty
 
 let xlength =
@@ -237,7 +222,10 @@ let typeof =
 module BuiltinOp = struct
 let eq = MVariable.create Immut (Some "==__2")
 let neq = MVariable.create Immut (Some "!=__2")
-let all = [ eq ; neq ]
+
+let inf_strict = MVariable.create Immut (Some "<__2")
+let sup_strict = MVariable.create Immut (Some ">__2")
+let all = [ eq ; neq ; inf_strict ; sup_strict ]
 let find_builtin str =
   let f v =
     match Variable.get_name v with
@@ -251,6 +239,22 @@ end
 let eq = 
   let v = BuiltinOp.eq in
   let ty = Arrow.mk (Tuple.mk [Ty.any; Ty.any]) Ty.bool in
+  v, ty
+
+let inferior_strict = 
+  let v = BuiltinOp.inf_strict in
+  let int_ty = Arrow.mk (Tuple.mk [C.int; C.int]) Ty.bool in
+  let dbl_ty = Arrow.mk (Tuple.mk [C.double; C.double]) Ty.bool in
+  let num_ty = Arrow.mk (Tuple.mk [C.num; C.num]) Ty.bool in
+  let ty = Ty.conj [int_ty; dbl_ty; num_ty] in
+  v, ty
+
+let superior_strict = 
+  let v = BuiltinOp.sup_strict in
+  let int_ty = Arrow.mk (Tuple.mk [C.int; C.int]) Ty.bool in
+  let dbl_ty = Arrow.mk (Tuple.mk [C.double; C.double]) Ty.bool in
+  let num_ty = Arrow.mk (Tuple.mk [C.num; C.num]) Ty.bool in
+  let ty = Ty.conj [int_ty; dbl_ty; num_ty] in
   v, ty
 
 module BuiltinVar = struct
