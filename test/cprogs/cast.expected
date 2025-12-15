@@ -1,0 +1,8 @@
+test_simple_cast: () -> int
+
+test_multiple_casts: () -> int
+
+test_nested_cast: () -> int
+
+test_ptr_cast: () -> int
+
