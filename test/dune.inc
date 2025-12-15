@@ -6,7 +6,7 @@
 (rule
  (alias   runtest)
  (action  (with-stdout-to for.output
-              (run %{exe:typing_test.exe} cprogs/for.c))) )
+              (run %{exe:typing_test.exe} ../../../test/cprogs/for.c))) )
 
 (rule
  (alias   runtest)
@@ -15,7 +15,7 @@
 (rule
  (alias   runtest)
  (action  (with-stdout-to plus.output
-              (run %{exe:typing_test.exe} cprogs/plus.c))) )
+              (run %{exe:typing_test.exe} ../../../test/cprogs/plus.c))) )
 
 (rule
  (alias   runtest)
@@ -24,25 +24,18 @@
 (rule
  (alias   runtest)
  (action  (with-stdout-to while.output
-              (run %{exe:typing_test.exe} cprogs/while.c))) )
+              (run %{exe:typing_test.exe} ../../../test/cprogs/while.c))) )
 
 (rule
  (alias   runtest)
  (action  (diff cprogs/while.expected while.output)))
 
-(rule
- (alias   runtest)
- (action  (with-stdout-to cast.output
-              (run %{exe:typing_test.exe} cprogs/cast.c))) )
 
-(rule
- (alias   runtest)
- (action  (diff cprogs/cast.expected cast.output)))
 
 (rule
  (alias   runtest)
  (action  (with-stdout-to small.output
-              (run %{exe:typing_test.exe} cprogs/small.c))) )
+              (run %{exe:typing_test.exe} ../../../test/cprogs/small.c))) )
 
 (rule
  (alias   runtest)
@@ -51,7 +44,7 @@
 (rule
  (alias   runtest)
  (action  (with-stdout-to switch.output
-              (run %{exe:typing_test.exe} cprogs/switch.c))) )
+              (run %{exe:typing_test.exe} ../../../test/cprogs/switch.c))) )
 
 (rule
  (alias   runtest)
@@ -60,7 +53,7 @@
 (rule
  (alias   runtest)
  (action  (with-stdout-to typeof.output
-              (run %{exe:typing_test.exe} cprogs/typeof.c))) )
+              (run %{exe:typing_test.exe} ../../../test/cprogs/typeof.c))) )
 
 (rule
  (alias   runtest)

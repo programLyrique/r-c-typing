@@ -1,0 +1,28 @@
+Not supported yet: top level item
+Prep_incl (
+  (
+    "#include"
+    System_lib_str "<Rinternals.h>"
+    "\n"
+  )
+)
+r_plus_scalar_real: (v[int](dbl), v[int](dbl)) -> v[1](dbl)
+
+make_int_or_float: ((int \ 0 | true) -> v[1](int)) & ((~(int | bool)) | (0 | false) -> v[int](int))
+
+incr_real: (v[1](dbl)) -> v[1](dbl)
+
+test_int_or_real: ((~(v[int](dbl) | v[int](int))) -> ()) & ((v[int](dbl)) -> 0) & ((v[int](int)) -> 1)
+
+test_isInt: ((~(v[int](int))) -> 0) & ((v[int](int)) -> 1)
+
+test_isInt2: ((~(v[int](int))) -> 0) & ((v[int](int)) -> 1)
+
+r_plus_scalar_strict: ((v[int](dbl), v[int](dbl)) -> v[1](dbl)) & ((v[int](int), v[int](int)) -> v[1](int))
+
+r_plus_scalar: ((x1, x1) -> v[1](int)) & ((x2, x2) | (x2, x1) | (x1, x2) -> v[1](dbl)) where x1 = v[int](int) and x2 = v[int](dbl)
+
+r_plus_all: ((~(v[int](int)), x2) -> empty) & ((x2, x2) -> x2) & ((x1, x1) -> x1) & ((x1, x3) | (x3, x3) -> x3) & ((x2, x4) | (x4, x4) -> x4) where x1 = v[1](int) and x2 = v[int](int) and x3 = v[1](dbl) and x4 = v[int](dbl)
+
+R_integer_plus: ((int, 0, any) | (int, (1..), ~Null) | (int, (1..), Null) | (int, (..-1), ~Null) | (int, (..-1), Null) -> C_int?) & ((x1, (1..), ~Null) | (x1, (1..), Null) | (x1, C_double | 0, any) | (x1, (..-1), ~Null) | (x1, (..-1), Null) -> C_double | na | int) where x1 = C_double | int
+

@@ -1,0 +1,20 @@
+Not supported yet: top level item
+Prep_incl (
+  (
+    "#include"
+    System_lib_str "<Rinternals.h>"
+    "\n"
+  )
+)
+change_int: ∀'a. (x1) -> x1 where x1 = 'a & (v[int](int))
+
+errorIntScalar: (v[1](int)) -> ()
+
+make_scalar: () -> v[1](int)
+
+isIntScalar: ((v[1](int)) -> 1) & ((v[int](int)) -> C_bool) & ((v[int](scalar) & ~v[int](int)) | (v[int \ 1](int)) -> 0)
+
+check: () -> 0
+
+incr: (v[1](int)) -> v[1](int)
+

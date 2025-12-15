@@ -1,0 +1,18 @@
+Not supported yet: top level item
+Prep_incl (
+  (
+    "#include"
+    System_lib_str "<Rinternals.h>"
+    "\n"
+  )
+)
+isInteger2: ((v[int](int)) -> 1) & ((nil | list | expr | language | closure | symbol | pairlist | env | (v[int](tt | ff | dbl | clx | chr | raw))) -> 0) & ((nil | list | expr | language | closure | symbol | pairlist | env | (v[int](scalar))) -> C_bool)
+
+isInteger3: ((v[int](int)) -> 1) & ((nil | list | expr | language | closure | symbol | pairlist | env | (v[int](tt | ff | dbl | clx | chr | raw))) -> 0) & ((nil | list | expr | language | closure | symbol | pairlist | env | (v[int](scalar))) -> C_bool)
+
+checkList: ((list) -> 1) & ((nil | expr | language | closure | symbol | pairlist | env | (v[int](scalar))) -> 0)
+
+isVectorList: ((nil | language | closure | symbol | pairlist | env | (v[int](scalar))) -> 0) & ((expr) | (list) -> 1)
+
+length2: ∀'a,'b,'c,'d,'e,'f,'g,'h,'i,'j,'k,'l,'m,'n. ((v[x1](scalar) & ~v[int](x2) & ~v[int](x3) & ~v[int](x4)) -> 1 | 'n | 'm | 'a) & ((v[x1](tt | ff | int | dbl) & ~v[int](x2) & ~v[int](x3) & ~v[int](x4)) -> 'n | 'm | 'a) & ((v['l & 'b & int](x4) & ~v[int](x2) & ~v[int](x3)) -> 1 | 'l | 'b) & ((v['l & 'b & int](int | dbl) & ~v[int](x2) & ~v[int](x3)) -> 'l | 'b) & ((v['k & 'c & int](x3) & ~v[int](x2) & ~v[int](x4)) -> 1 | 'k | 'c) & ((v['k & 'c & int](tt | ff | dbl) & ~v[int](x2) & ~v[int](x4)) -> 'k | 'c) & ((v['d & int](dbl | clx | chr | raw) & ~v[int](x2)) -> 1 | 'd) & ((v['d & int](dbl)) -> 'd) & ((v['j & 'e & int](x2) & ~v[int](x3) & ~v[int](x4)) -> 1 | 'j | 'e) & ((v['j & 'e & int](tt | ff | int) & ~v[int](x3) & ~v[int](x4)) -> 'j | 'e) & ((v['f & int](int | clx | chr | raw) & ~v[int](x3) & ~v[int](int)) -> 1 | 'f) & ((v['g & int](tt | ff | clx | chr | raw) & ~v[int](x4) & ~v[int](lgl)) -> 1 | 'g) & ((v['h & int](lgl)) -> 'h) & ((v['i & int](int)) -> 'i) & ((list | expr | language | closure | symbol | pairlist | env | (v[int](clx | chr | raw))) -> 1) & ((nil) -> 0) where x1 = 'n & 'm & 'a & int and x2 = tt | ff | int | clx | chr | raw and x3 = tt | ff | dbl | clx | chr | raw and x4 = int | dbl | clx | chr | raw
+
