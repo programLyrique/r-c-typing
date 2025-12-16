@@ -2,35 +2,154 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    env:
+      PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
     steps:
+      # Checkout repository
       - uses: actions/checkout@v4
+
+      # Set up OCaml environment
       - name: Set up OCaml
-        uses: ocaml/setup-ocaml@v2
+        uses: ocaml/setup-ocaml@v3
         with:
-          ocaml-compiler: "4.14.0"
-      - name: Update system packages
-        run: sudo apt-get update
-      - name: Install system dependencies
-        run: sudo apt-get install -y m4 pkg-config
+          ocaml-compiler: 5.3.0
+          dune-cache: true # Enables caching for faster builds
+
+
+      - name: Configure opam networking
+        run: |
+          opam option jobs=2
+          opam option swh-fallback=true
+
+      # --- OPAM caching ---
+
+      # Cache OPAM downloaded archives (optional, small speedup)
+      - name: Cache OPAM downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.opam/download-cache
+          key: ${{ runner.os }}-opam-downloads
+
+      # Cache the entire OPAM switch (compiled packages + pins)
+      - name: Cache OPAM switch
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.opam
+            _opam
+          key: ${{ runner.os }}-opam-${{ hashFiles('**/opam.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-opam-
+
+      # --- Rust caching ---
+
+      - name: Cache Rust dependencies for tree-sitter-cli
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            r-parser/core/downloads/tree-sitter/target
+          key: ${{ runner.os }}-tree-sitter-${{ hashFiles('r-parser/core/downloads/tree-sitter/target/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-tree-sitter-
+
+
+      - name: Preinstall ocamlfind
+        run: |
+          eval $(opam env)
+          opam install ocamlfind dune --yes
+
+      # Set up dune
+      - name: Set up dune
+        run: opam install dune --yes
+
+      # Pin  packages in dependency order
+      - name: Pin private dep packages SST, MLsem
+        run: |
+          eval $(opam env)
+          opam pin add sstt git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/sstt.git#srp --yes
+          opam pin add sstt-repl git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/sstt.git#srp --yes
+          opam pin add sstt-bin git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/sstt.git#srp --yes
+
+          for pkg in mlsem-types mlsem-common mlsem-system mlsem-lang mlsem mlsem-app mlsem-bin; do
+            opam pin add $pkg git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/MLsem.git --yes
+          done
+
+      # FIX: Pin cmdliner to 1.0.4 to fix "Unbound value Term.info" error
+      - name: Pin cmdliner version
+        run: opam install cmdliner.1.0.4 --yes
+
+      # Install r-parser dependency from private repo
+      - name: Install r-parser
+        run: |
+          # Use the PAT to clone the private repository
+          git clone https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/r-parser.git
+          cd r-parser
+
+          # 2. Configure git to rewrite all submodule SSH URLs to HTTPS.
+          # This allows the submodule update to succeed without SSH keys.
+          sed -i 's|git@github.com:|https://github.com/|' .gitmodules
+          
+          export CARGO_TARGET_DIR=$PWD/core/downloads/tree-sitter/target
+          opam exec -- bash -c "make update && make setup"
+          # Build and install the dependency
+          opam exec -- bash -c make
+          cd core
+          # opam exec -- dune install --only=ocaml-tree-sitter
+          opam pin add tree-sitter . --kind=path --yes
+          cd ../..
+
+      - name: Export tree-sitter environment variables
+        run: |
+          echo "TREESITTER_INCDIR=$GITHUB_WORKSPACE/r-parser/core/tree-sitter/include" >> $GITHUB_ENV
+          echo "TREESITTER_LIBDIR=$GITHUB_WORKSPACE/r-parser/core/tree-sitter/lib" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/r-parser/core/tree-sitter/lib" >> $GITHUB_ENV
+
+      - name: Debug tree-sitter paths
+        run: |
+          ls $TREESITTER_INCDIR/tree_sitter/api.h
+          ls $TREESITTER_LIBDIR/libtree-sitter.so
+
+      # Install dependencies
       - name: Install dependencies
         run: opam install . --deps-only --with-test --with-doc --yes
+
+      # Install bisect_ppx
       - name: Install bisect_ppx
         run: opam install bisect_ppx --yes
-      - name: Build with coverage
-        run: opam exec -- dune build @runtest --instrument-with bisect_ppx
-      - name: Run tests
-        run: opam exec -- dune runtest
+
+      # Run tests
+      - name: Build and run tests
+        run: | 
+          opam exec -- dune clean
+          mkdir -p _coverage
+          opam exec -- env BISSECT_COVERAGE_OUTPUT=_coverage dune runtest --instrument-with bisect_ppx --verbose
+          ls -l _coverage || echo "_coverage is empty"
+
+      # Generate coverage report
       - name: Generate coverage report
         run: opam exec -- bisect-ppx-report html
+
+      # Upload coverage report as artifact
       - name: Upload coverage report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: _coverage
+
+      # Optionally: comment coverage on PR
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          message: |
+            **Coverage report generated**
+            [View coverage report](https://github.com/${{ github.repository }}/suites/${{ github.run_id }}/artifacts)
