@@ -1,5 +1,7 @@
 # R C typing
 
+[![CI](https://github.com/programLyrique/r-c-typing/actions/workflows/ci.yml/badge.svg)](https://github.com/programLyrique/r-c-typing/actions/workflows/ci.yml)
+
 Type functions written in C using the R C API to R types.
 
 
