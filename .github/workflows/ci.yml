@@ -131,7 +131,7 @@ jobs:
         run: | 
           opam exec -- dune clean
           mkdir -p _coverage
-          opam exec -- env BISSECT_COVERAGE_OUTPUT=_coverage dune runtest --instrument-with bisect_ppx --verbose
+          opam exec -- env BISSECT_COVERAGE_OUTPUT=_coverage dune runtest --instrument-with bisect_ppx --verbose --force
           ls -l _coverage || echo "_coverage is empty"
 
       # Generate coverage report
