@@ -388,6 +388,14 @@ and aux_non_case_statement (stmt: non_case_statement) =
   | `Attr_stmt _ -> failwith "Not supported yet: attribute statements"
   | _ -> failwith "Not supported yet: Seh_try and Seh_leave statements"
 
+and aux_top_level_statement (stmt: top_level_statement) =
+  match stmt with 
+  | `Top_level_exp_stmt (Some exp, (loc2,_)) -> 
+      let e = aux_not_bin_expression exp in
+      let pos = Position.join (fst e) (loc_to_pos loc2) in
+      (pos, A.Return (Some e))
+  | _ -> failwith "Not supported yet: top level statements without expression"
+
 and aux_case_statement (case_stmt: case_statement) =
   let (case, _, body) = case_stmt in 
   let case_body = List.map (function 
@@ -484,7 +492,39 @@ and aux_if_statement (if_stmt: if_statement) =
     |> Option.value ~default:(Position.end_of_position @@ fst ast_then)
   in
 
-  (Position.lex_join (conv_pos l1.start) l2,A.If (ast_cond, ast_then, ast_else)) (* TODO *)
+  (Position.lex_join (conv_pos l1.start) l2,A.If (ast_cond, ast_then, ast_else)) 
+
+and aux_prep_func_def (func_def: preproc_function_def) = 
+  let ((loc1, _), name, params, body, (loc2,_)) = func_def in
+  let name = token_to_string name in
+  let _,params,(end_param,_) = params in 
+  let aux_prep_param (p: anon_choice_stmt_id_d3c4b5f) = 
+    match p with 
+    | `Id (_,s) -> s
+    | `DOTDOTDOT (loc, _) -> failwith ("Not supported yet: variadic parameter in preprocessor function at " ^ (Position.string_of_lex_pos (conv_pos loc.start)))
+  in
+  let params = Option.fold ~none:[] ~some:(fun (p1, others) -> 
+    aux_prep_param p1 :: List.map (fun (_, p) -> aux_prep_param p) others
+  ) params |> 
+    List.map (fun p -> (Ast.Any, p)) 
+  in
+  let body = match body with 
+    | None -> (locs_to_pos end_param loc2, A.Return None)
+    | Some (_loc3,comp) -> 
+      let res = parse_string comp in
+      match res.program with
+      | None -> failwith ("Failed to parse preprocessor function body for " ^ name)
+      | Some tu -> 
+        Printf.printf "List length: %d\n" (List.length tu);
+        let items = List.filter_map (fun item -> 
+          match item with 
+          | `Top_level_stmt stmt -> Some (aux_top_level_statement stmt)
+          | _ -> Printf.printf "Not supported yet: top level item in define";
+              print_top_level_item item; None
+        ) tu in 
+        List.hd items
+  in
+  (locs_to_pos loc1 loc2, A.Fundef (Ast.Any, name, params, body))
 
 let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
   match item with
@@ -495,6 +535,7 @@ let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
      let body = aux_body body in 
      Some (Mlsem.Common.Position.dummy, Fundef (return_type, name, params, body))
      ) 
+  | `Prep_func_def func_def -> Some (aux_prep_func_def func_def)
   | _ -> (Printf.printf "Not supported yet: top level item\n";print_top_level_item item ; None)
 
 
