@@ -86,6 +86,8 @@ let infer_fun_def opts (idenv, env) past =
  infer_ast visible opts (idenv, env) e
 
 let run_on_file opts filename idenv env =
+  if not (Sys.file_exists filename) then
+    failwith (Printf.sprintf "File not found: %s" filename);
   let cst = Parser.parse_file filename in
   if opts.cst then Parser.print_res cst;
   let past = Parser.to_ast cst in
