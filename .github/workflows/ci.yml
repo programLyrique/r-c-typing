@@ -91,6 +91,7 @@ jobs:
       - name: Install r-parser
         run: |
           # Use the PAT to clone the private repository
+          rm -rf r-parser
           git clone https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/r-parser.git
           cd r-parser
 
