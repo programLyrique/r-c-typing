@@ -1,5 +1,5 @@
 (library
  (name r_c_typing)
- (libraries r-c-typing.c mlsem)
+ (libraries r-c-typing.c mlsem rstt)
  (preprocess (pps ppx_deriving.show))
  (instrumentation (backend bisect_ppx)))
