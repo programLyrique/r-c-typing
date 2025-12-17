@@ -60,6 +60,20 @@ jobs:
           key: ${{ runner.os }}-tree-sitter-${{ hashFiles('r-parser/core/downloads/tree-sitter/target/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-tree-sitter-
+      
+      # --- Dune caching ---
+      
+      - name: Configure dune cache
+        run: dune cache enable
+
+      - name: Cache dune shared cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/dune
+          key: ${{ runner.os }}-dune-${{ hashFiles('**/*.opam', '**/dune-project') }}
+          restore-keys: |
+            ${{ runner.os }}-dune-
+
 
 
       - name: Preinstall ocamlfind
@@ -86,13 +100,16 @@ jobs:
       # FIX: Pin cmdliner to 1.0.4 to fix "Unbound value Term.info" error
       - name: Pin cmdliner version
         run: opam install cmdliner.1.0.4 --yes
-
+      
       # Install r-parser dependency from private repo
-      - name: Install r-parser
+      - name: Clone r-parser
         run: |
-          # Use the PAT to clone the private repository
           rm -rf r-parser
+          # Use the PAT to clone the private repository
           git clone https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/r-parser.git
+
+      - name: Build r-parser
+        run: |
           cd r-parser
 
           # 2. Configure git to rewrite all submodule SSH URLs to HTTPS.
