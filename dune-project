@@ -19,7 +19,7 @@
  (name r-c-typing)
  (synopsis "Analyze and type C code used in R packages")
  (description "A longer description")
- (depends (ocaml (>= 5.3.0)) dune mlsem sstt cmdliner)
+ (depends (ocaml (>= 5.3.0)) dune mlsem sstt cmdliner rstt rstt-repl ppx_inline_test)
  (tags
   ("R" "types" "C")))
 

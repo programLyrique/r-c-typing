@@ -72,7 +72,7 @@ jobs:
         run: opam install dune --yes
 
       # Pin  packages in dependency order
-      - name: Pin private dep packages SST, MLsem
+      - name: Pin private dep packages SST, MLsem, Rstt
         run: |
           eval $(opam env)
           opam pin add sstt git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/sstt.git#srp --yes
@@ -82,6 +82,9 @@ jobs:
           for pkg in mlsem-types mlsem-common mlsem-system mlsem-lang mlsem mlsem-app mlsem-bin; do
             opam pin add $pkg git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/MLsem.git --yes
           done
+
+          opam pin add rstt git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/rstt.git --yes
+          opam pin add rstt-repl git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/rstt.git --yes
 
       # FIX: Pin cmdliner to 1.0.4 to fix "Unbound value Term.info" error
       - name: Pin cmdliner version

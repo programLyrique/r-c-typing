@@ -2,5 +2,5 @@
  (name r_c_typing)
  (libraries r-c-typing.c mlsem rstt rstt-repl)
  (inline_tests)
- (preprocess (pps ppx_deriving.show ppx_inline_test ppx_assert))
+ (preprocess (pps ppx_deriving.show ppx_inline_test))
  (instrumentation (backend bisect_ppx)))

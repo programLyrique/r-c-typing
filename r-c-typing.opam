@@ -15,6 +15,9 @@ depends: [
   "mlsem"
   "sstt"
   "cmdliner"
+  "rstt"
+  "rstt-repl"
+  "ppx_inline_test"
   "odoc" {with-doc}
 ]
 build: [
