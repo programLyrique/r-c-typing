@@ -61,6 +61,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-tree-sitter-
       
+      
+      - name: Preinstall ocamlfind
+        run: |
+          eval $(opam env)
+          opam install ocamlfind dune --yes
+
+      # Set up dune
+      - name: Set up dune
+        run: opam install dune --yes
+
       # --- Dune caching ---
       
       - name: Configure dune cache
@@ -73,17 +83,6 @@ jobs:
           key: ${{ runner.os }}-dune-${{ hashFiles('**/*.opam', '**/dune-project') }}
           restore-keys: |
             ${{ runner.os }}-dune-
-
-
-
-      - name: Preinstall ocamlfind
-        run: |
-          eval $(opam env)
-          opam install ocamlfind dune --yes
-
-      # Set up dune
-      - name: Set up dune
-        run: opam install dune --yes
 
       # Pin  packages in dependency order
       - name: Pin private dep packages SST, MLsem
