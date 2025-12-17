@@ -157,11 +157,18 @@ let rec aux_e (eid, e) =
           if has_break || List.is_empty acc then 
             (A.PType case_ty, body) :: acc
           else 
-            let _last_case, last_body = List.hd acc in
-            (* if there are no break in the current case, then the current case will also execute the 
-              body of the next case(s) until reaching a break, so we merge those bodies. *)
-            let new_body = Eid.unique (), A.Seq (last_body, body) in
-            (A.PType case_ty, new_body) :: acc
+            let last_case, last_body = List.hd acc in
+            (* 2  when there are no breaks:
+              - current body is empty (i.e. a const NULL in the body) : we can merge ( = or) the patterns  
+              - current body is not empty: current case will also execute the 
+              body of the next case(s) until reaching a break, so we merge those bodies.
+              Note: the empty body optimization does not seem to bring much in terms of perf. 
+              A better optimization might be to encode it as a series of if, else if else. *)
+             match case_e with 
+            | _,Const CNull -> 
+              (A.POr (A.PType case_ty, last_case), last_body) :: (List.tl acc)
+            | _ -> let new_body = Eid.unique (), A.Seq (last_body, body) in 
+              (A.PType case_ty, new_body) :: acc
         in
         (* We start from the reverse list because we want to merge bodies of cases with the one 
         before when there is a break. So we start with the default case, then the one before

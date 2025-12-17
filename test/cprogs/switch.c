@@ -51,7 +51,7 @@ INLINE_FUN R_len_t length2(SEXP s)
     case INTSXP:
     case REALSXP:
     //case CPLXSXP:
-    // case STRSXP:
+    //case STRSXP:
     // case CHARSXP:
     // case VECSXP:
     // case EXPRSXP:
@@ -72,5 +72,20 @@ INLINE_FUN R_len_t length2(SEXP s)
 	// return Rf_envlength(s);
     default:
 	return 1;
+    }
+}
+
+
+
+// The switch above, but written with an if
+INLINE_FUN R_len_t length2(SEXP s)
+{
+    int type = TYPEOF(s);
+    if (type == NILSXP) {
+        return 0;
+    } else if (type == LGLSXP || type == INTSXP || type == REALSXP) {
+        return LENGTH(s);
+    } else {
+        return 1;
     }
 }
