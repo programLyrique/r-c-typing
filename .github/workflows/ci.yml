@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, ci-sandbox ; new-type-algebra]
+    branches: [main, ci-sandbox, new-type-algebra]
   pull_request:
     branches: [main]
 
