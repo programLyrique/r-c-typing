@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, ci-sandbox]
+    branches: [main, ci-sandbox ; new-type-algebra]
   pull_request:
-    branches: [main, ci-sandbox]
+    branches: [main]
 
 jobs:
   build-and-test:
