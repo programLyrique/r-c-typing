@@ -274,6 +274,8 @@ module BuiltinVar = struct
       ("VECSXP", Prim.vlist);
       ("EXPRSXP", Prim.expr);
       ("CLOSXP", Prim.closure);
+      ("BUILTINSXP", Prim.builtin);
+      ("SPECIALSXP", Prim.special);
       ("CHARSXP", Prim.chr); (* We should actually differentiate between STRSXP and CHARSXP: STRSXP is a vector of CHARSXP?*)
       ("SYMSXP", Prim.sym);
       ("LISTSXP", Prim.pairlist);

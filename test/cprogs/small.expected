@@ -18,3 +18,11 @@ check: () -> 0
 
 incr: (v[1](int)) -> v[1](int)
 
+isFunction: ((nil | list | expr | language | symbol | pairlist | env | (v[int](scalar))) -> false) & ((closure) | (builtin) | (special) -> true)
+
+isPrimitive: ((nil | list | expr | language | closure | symbol | pairlist | env | (v[int](scalar))) -> false) & ((builtin) | (special) -> true)
+
+isList: ((list | expr | language | closure | builtin | special | symbol | env | (v[int](scalar))) -> false) & ((nil) | (pairlist) -> true)
+
+isNewList: ((expr | language | closure | builtin | special | symbol | pairlist | env | (v[int](scalar))) -> false) & ((nil) | (list) -> true)
+

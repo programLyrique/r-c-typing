@@ -24,6 +24,10 @@ module Prim = struct (* TODO: extension (for printing) *)
 
   let closure = Enum.define "closure" |> Enum.typ
 
+  let builtin = Enum.define "builtin" |> Enum.typ
+
+  let special = Enum.define "special" |> Enum.typ
+
   let sym = Enum.define "symbol" |> Enum.typ
 
   let pairlist = Enum.define "pairlist" |> Enum.typ
@@ -33,7 +37,7 @@ module Prim = struct (* TODO: extension (for printing) *)
     PEnv.add_printer_param { Sstt.Printer.aliases = [t, "scalar"] ; Sstt.Printer.extensions = [] } ;
     t
   let any = 
-    let t = Ty.disj [int;lgl;dbl;clx;chr;raw;nil;vlist;expr;closure;sym;pairlist;env;lang] in
+    let t = Ty.disj [int;lgl;dbl;clx;chr;raw;nil;vlist;expr;closure;builtin;special;sym;pairlist;env;lang] in
     PEnv.add_printer_param { Sstt.Printer.aliases = [t, "prim"] ; Sstt.Printer.extensions = [] } ;
     t
   let na = Enum.define "na" |> Enum.typ

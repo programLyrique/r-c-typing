@@ -61,3 +61,26 @@ SEXP incr(SEXP a) {
     return result;
 }
 
+INLINE_FUN Rboolean isFunction(SEXP s)
+{
+    return (TYPEOF(s) == CLOSXP ||
+	    TYPEOF(s) == BUILTINSXP ||
+	    TYPEOF(s) == SPECIALSXP);
+}
+
+INLINE_FUN Rboolean isPrimitive(SEXP s)
+{
+    return (TYPEOF(s) == BUILTINSXP ||
+	    TYPEOF(s) == SPECIALSXP);
+}
+
+INLINE_FUN Rboolean isList(SEXP s)
+{
+    return (s == R_NilValue || TYPEOF(s) == LISTSXP);
+}
+
+
+INLINE_FUN Rboolean isNewList(SEXP s)
+{
+    return (s == R_NilValue || TYPEOF(s) == VECSXP);
+}
