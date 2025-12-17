@@ -37,16 +37,16 @@ jobs:
           path: ~/.opam/download-cache
           key: ${{ runner.os }}-opam-downloads
 
-      # Cache the entire OPAM switch (compiled packages + pins)
-      - name: Cache OPAM switch
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.opam
-            _opam
-          key: ${{ runner.os }}-opam-${{ hashFiles('**/opam.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-opam-
+      # # Cache the entire OPAM switch (compiled packages + pins)
+      # - name: Cache OPAM switch
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: |
+      #       ~/.opam
+      #       _opam
+      #     key: ${{ runner.os }}-opam-${{ hashFiles('**/opam.lock') }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-opam-
 
       # --- Rust caching ---
 
@@ -74,7 +74,7 @@ jobs:
       # --- Dune caching ---
       
       - name: Configure dune cache
-        run: dune cache enable
+        run: opam exec -- dune cache enable
 
       - name: Cache dune shared cache
         uses: actions/cache@v4
