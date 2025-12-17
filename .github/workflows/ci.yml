@@ -37,16 +37,16 @@ jobs:
           path: ~/.opam/download-cache
           key: ${{ runner.os }}-opam-downloads
 
-      # Cache the entire OPAM switch (compiled packages + pins)
-      - name: Cache OPAM switch
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.opam
-            _opam
-          key: ${{ runner.os }}-opam-${{ hashFiles('**/opam.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-opam-
+      # # Cache the entire OPAM switch (compiled packages + pins)
+      # - name: Cache OPAM switch
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: |
+      #       ~/.opam
+      #       _opam
+      #     key: ${{ runner.os }}-opam-${{ hashFiles('**/opam.lock') }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-opam-
 
       # --- Rust caching ---
 
@@ -60,8 +60,8 @@ jobs:
           key: ${{ runner.os }}-tree-sitter-${{ hashFiles('r-parser/core/downloads/tree-sitter/target/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-tree-sitter-
-
-
+      
+      
       - name: Preinstall ocamlfind
         run: |
           eval $(opam env)
@@ -86,12 +86,16 @@ jobs:
       # FIX: Pin cmdliner to 1.0.4 to fix "Unbound value Term.info" error
       - name: Pin cmdliner version
         run: opam install cmdliner.1.0.4 --yes
-
+      
       # Install r-parser dependency from private repo
-      - name: Install r-parser
+      - name: Clone r-parser
         run: |
+          rm -rf r-parser
           # Use the PAT to clone the private repository
           git clone https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/r-parser.git
+
+      - name: Build r-parser
+        run: |
           cd r-parser
 
           # 2. Configure git to rewrite all submodule SSH URLs to HTTPS.
