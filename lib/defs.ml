@@ -92,6 +92,7 @@ let neg =
 let allocVector =
   let v = MVariable.create Immut (Some "allocVector") in
   let alpha = TVar.mk KInfer None |> TVar.typ in 
+  
   let scalar = Arrow.mk (Tuple.mk [(Ty.cap alpha Prim.any_scalar); C.one]) (Vecs.mk_singl alpha) in
   let vec = Arrow.mk (Tuple.mk [(Ty.cap alpha Prim.any_scalar); C.not_one]) (Vecs.mk_unsized alpha)  in
   let ty = Ty.cap scalar vec in
@@ -211,8 +212,9 @@ let cdr =
 let typeof = 
   let v = MVariable.create Immut (Some "TYPEOF") in
   let alpha = TVar.mk KInfer None |> TVar.typ in 
+  let beta = TVar.mk KInfer None |> TVar.typ in 
   let vec_ty = Arrow.mk (Tuple.mk [Vecs.mk_unsized (Ty.cap alpha Prim.any_scalar)]) alpha in
-  let other_ty = Arrow.mk (Tuple.mk [Ty.diff (Ty.cap alpha Prim.any) (Ty.cup Vecs.any Prim.any_scalar)]) alpha in
+  let other_ty = Arrow.mk (Tuple.mk [Ty.diff (Ty.cap beta Prim.any) (Ty.cup Vecs.any Prim.any_scalar)]) beta in
   (* primitive scalar types (Prim.any) cannot be arguments of TYPEOF*)
   let ty = Ty.conj [vec_ty; other_ty] in 
   v, ty

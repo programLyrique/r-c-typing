@@ -50,26 +50,26 @@ INLINE_FUN R_len_t length2(SEXP s)
     case LGLSXP:
     case INTSXP:
     case REALSXP:
-    //case CPLXSXP:
-    //case STRSXP:
-    // case CHARSXP:
-    // case VECSXP:
-    // case EXPRSXP:
-    // case RAWSXP:
+    case CPLXSXP:
+    case STRSXP:
+    case CHARSXP:
+    case VECSXP:
+    case EXPRSXP:
+    case RAWSXP:
 	return LENGTH(s);
-    // case LISTSXP:
-    // case LANGSXP:
-    // case DOTSXP:
-    // {
-	// int i = 0;
-	// while (s != NULL && s != R_NilValue) {
-	//     i++;
-	//     s = CDR(s);
-	// }
-	// return i;
-    // }
-    // case ENVSXP:
-	// return Rf_envlength(s);
+    case LISTSXP:
+    case LANGSXP:
+    case DOTSXP:
+    {
+	int i = 0;
+	while (s != NULL && s != R_NilValue) {
+	    i++;
+	    s = CDR(s);
+	}
+	return i;
+    }
+    case ENVSXP:
+	return Rf_envlength(s);
     default:
 	return 1;
     }
@@ -78,7 +78,7 @@ INLINE_FUN R_len_t length2(SEXP s)
 
 
 // The switch above, but written with an if
-INLINE_FUN R_len_t length2(SEXP s)
+INLINE_FUN R_len_t length3(SEXP s)
 {
     int type = TYPEOF(s);
     if (type == NILSXP) {

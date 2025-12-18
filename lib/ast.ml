@@ -164,7 +164,7 @@ let rec aux_e (eid, e) =
               body of the next case(s) until reaching a break, so we merge those bodies.
               Note: the empty body optimization does not seem to bring much in terms of perf. 
               A better optimization might be to encode it as a series of if, else if else. *)
-             match case_e with 
+             match body_e with 
             | _,Const CNull -> 
               (A.POr (A.PType case_ty, last_case), last_body) :: (List.tl acc)
             | _ -> let new_body = Eid.unique (), A.Seq (last_body, body) in 
