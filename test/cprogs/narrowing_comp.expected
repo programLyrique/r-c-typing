@@ -6,7 +6,7 @@ Prep_incl (
     "\n"
   )
 )
-larger_than_3: ∀'a,'b. (x1) -> x1 where x1 = 'a & (v['b & 1](int))
+larger_than_3: ∀'a,'b. ('a & (v['b & 1](int))) -> 'a & (v['b & 1](int))
 
-size_bound: ∀'a,'b. (x1) -> x1 where x1 = 'a & (v['b & (..10)](scalar))
+size_bound: ∀'a,'b. ('a & (v['b & (..10)](scalar))) -> 'a & (v['b & (..10)](scalar))
 

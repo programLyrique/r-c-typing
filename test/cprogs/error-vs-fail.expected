@@ -10,5 +10,5 @@ assertPositive_error:
 untypeable: untypeable application
 function: arrow
 argument: C_str
-assertPositive_fail: ∀'a,'b. (x1) -> x1 where x1 = 'a & (v['b & 1](dbl))
+assertPositive_fail: ∀'a,'b. ('a & (v['b & 1](dbl))) -> 'a & (v['b & 1](dbl))
 

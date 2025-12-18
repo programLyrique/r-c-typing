@@ -6,7 +6,7 @@ Prep_incl (
     "\n"
   )
 )
-change_int: ∀'a. (x1) -> x1 where x1 = 'a & (v[int](int))
+change_int: ∀'a. ('a & (v[int](int))) -> 'a & (v[int](int))
 
 errorIntScalar: (v[1](int)) -> ()
 
