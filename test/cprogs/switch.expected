@@ -16,5 +16,5 @@ isVectorList: ((nil | language | closure | builtin | special | symbol | pairlist
 
 length2: ∀'a. ((v['a & int](scalar)) -> 'a) & ((nil) -> 0) & ((env) -> int)
 
-length3: ∀'a. ((v[x1](scalar) & ~v[int](clx | chr | raw)) -> 1 | 'a) & ((v[x1](lgl)) | (v[x1](int)) | (v[x1](dbl)) -> 'a) & ((list | expr | language | closure | builtin | special | symbol | pairlist | env | (v[int](clx | chr | raw))) -> 1) & ((nil) -> 0) where x1 = 'a & int
+length3: ∀'a. ((v['a & int](scalar) & ~v[int](clx | chr | raw)) -> 1 | 'a) & ((v['a & int](lgl)) | (v['a & int](int)) | (v['a & int](dbl)) -> 'a) & ((list | expr | language | closure | builtin | special | symbol | pairlist | env | (v[int](clx | chr | raw))) -> 1) & ((nil) -> 0)
 
