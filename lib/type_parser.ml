@@ -77,7 +77,7 @@ let open Builder in
   let ti_map = TIdMap.empty in
   let type_map, _ = build_types ti_map empty_env parsed_types in
   let open Rstt in
-  let int_vec = Prim.Int.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk in
-  let dbl_vec = Prim.Dbl.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk in
-  Ty.equiv (StrMap.find "x" type_map) (Attr.mk {content = int_vec; classes = Classes.any})  &&
-  Ty.equiv (StrMap.find "y" type_map) (Attr.mk {content = dbl_vec; classes = Classes.any})
+  let int_vec = Prim.Int.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk |> Attr.mk_anyclass in
+  let dbl_vec = Prim.Dbl.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk |> Attr.mk_anyclass in
+  Ty.equiv (StrMap.find "x" type_map) int_vec  &&
+  Ty.equiv (StrMap.find "y" type_map) dbl_vec
