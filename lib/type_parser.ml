@@ -76,11 +76,8 @@ let open Builder in
   let parsed_types = List.filter_map parse_type_line lines in
   let ti_map = TIdMap.empty in
   let type_map, _ = build_types ti_map empty_env parsed_types in
-  (* print types *)
-  (* Format.printf "Types:@.";
-  StrMap.iter (fun sym ty ->
-    Format.printf "  %s: %a@." sym Rstt.Pp.ty ty
-  ) type_map ; *)
   let open Rstt in
-  Ty.equiv (StrMap.find "x" type_map) (Prim.Int.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk)  &&
-  Ty.equiv (StrMap.find "y" type_map) (Prim.Dbl.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk)
+  let int_vec = Prim.Int.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk in
+  let dbl_vec = Prim.Dbl.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk in
+  Ty.equiv (StrMap.find "x" type_map) (Attr.mk {content = int_vec; classes = Classes.any})  &&
+  Ty.equiv (StrMap.find "y" type_map) (Attr.mk {content = dbl_vec; classes = Classes.any})

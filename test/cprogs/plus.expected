@@ -20,9 +20,9 @@ test_isInt2: ((~(v[int](int))) -> 0) & ((v[int](int)) -> 1)
 
 r_plus_scalar_strict: ((v[int](dbl), v[int](dbl)) -> v[1](dbl)) & ((v[int](int), v[int](int)) -> v[1](int))
 
-r_plus_scalar: ((v[int](int), v[int](int)) -> v[1](int)) & ((v[int](dbl), v[int](dbl)) | (v[int](dbl), v[int](int)) | (v[int](int), v[int](dbl)) -> v[1](dbl))
+r_plus_scalar: ((v[int](int), v[int](int)) -> v[1](int)) & ((v[int](int), v[int](dbl)) | (v[int](dbl), v[int](int)) | (v[int](dbl), v[int](dbl)) -> v[1](dbl))
 
-r_plus_all: ((~(v[int](int)), v[int](int)) -> empty) & ((v[int](int), v[int](int)) -> v[int](int)) & ((v[1](int), v[1](int)) -> v[1](int)) & ((v[1](int), v[1](dbl)) | (v[1](dbl), v[1](dbl)) -> v[1](dbl)) & ((v[int](int), v[int](dbl)) | (v[int](dbl), v[int](dbl)) -> v[int](dbl))
+r_plus_all: ((v[int](int), v[int](int)) -> empty) & ((v[1](int), v[1](dbl)) | (v[1](dbl), v[1](int)) | (v[1](dbl), v[1](dbl)) -> v[1](dbl)) & ((v[int](int), v[int](dbl)) | (v[int](dbl), v[int](int)) | (v[int](dbl), v[int](dbl)) -> v[int](dbl))
 
 R_integer_plus: ((int, 0, any) | (int, (1..), ~Null) | (int, (1..), Null) | (int, (..-1), ~Null) | (int, (..-1), Null) -> C_int?) & ((C_double | int, (1..), ~Null) | (C_double | int, (1..), Null) | (C_double | int, C_double | 0, any) | (C_double | int, (..-1), ~Null) | (C_double | int, (..-1), Null) -> C_double | na | int)
 

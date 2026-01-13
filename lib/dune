@@ -1,5 +1,6 @@
 (library
  (name r_c_typing)
+ (modules ast defs in_channel_ext parser PAst runner type_parser utils vectors)
  (libraries r-c-typing.c mlsem rstt rstt-repl)
  (inline_tests)
  (preprocess (pps ppx_deriving.show ppx_inline_test))
