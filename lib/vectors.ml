@@ -147,7 +147,7 @@ module Vecs = struct
     destruct ty |> List.map v |> Ty.disj
 
   let print_seq f sep =
-    Format.(pp_print_list  ~pp_sep:(fun fmt () -> pp_print_string fmt sep) f)
+    Format.(pp_print_list  ~pp_sep:(fun fmt () -> Format.fprintf fmt "%(%)" sep) f)
   let print prec assoc fmt t =
     let print_atom fmt (v,l) =
       Format.fprintf fmt "%a[%a](%a)" Tag.pp tag
@@ -155,12 +155,12 @@ module Vecs = struct
     in
     let print_atom_neg fmt (v,l) =
       let sym,_,_ = unop_info Neg in
-      Format.fprintf fmt "%s%a" sym print_atom (v,l)
+      Format.fprintf fmt "%(%)%a" sym print_atom (v,l)
     in
     let print_line prec assoc fmt (a, ns) =
       if ns <> [] then
         let sym,_,_ as opinfo = varop_info Cap in
-        fprintf prec assoc opinfo fmt "%a%s%a"
+        fprintf prec assoc opinfo fmt "%a%(%)%a"
           print_atom a sym (print_seq print_atom_neg sym) ns
       else
         Format.fprintf fmt "%a" print_atom a

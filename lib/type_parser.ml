@@ -43,14 +43,14 @@ let%test "parse simple types" =
   let line = "x: v(int)" in
   match parse_type_line line with
   | Some (sym, ty) ->
-      sym = "x" && Builder.(TVec PInt) = ty
+      sym = "x" && Builder.(TVec (AnyLength PInt) ) = ty
   | None -> false
 
 let%test "parse arrow types" =
   let line = "f: (a:v(int)) -> v(dbl)" in
   match parse_type_line line with
   | Some (sym, ty) ->
-      sym = "f" && Builder.(TArrow (mk_arg [("a", TVec PInt)], TVec PDbl)) = ty
+      sym = "f" && Builder.(TArrow (mk_arg [("a", TVec (AnyLength PInt))], TVec (AnyLength PDbl))) = ty
   | None -> false
 
 let%test "parse several types" =
@@ -62,9 +62,9 @@ let%test "parse several types" =
   let results = List.map parse_type_line lines in
   match results with
   | [Some (s1,t1); Some (s2,t2); Some (s3,t3)] ->
-      s1 = "x" && Builder.(TVec PInt) = t1 &&
-      s2 = "y" && Builder.(TVec PDbl) = t2 &&
-      s3 = "f" && Builder.(TArrow (mk_arg [("a", TVec PInt)], TVec PDbl)) = t3
+      s1 = "x" && Builder.(TVec (AnyLength PInt)) = t1 &&
+      s2 = "y" && Builder.(TVec (AnyLength PDbl)) = t2 &&
+      s3 = "f" && Builder.(TArrow (mk_arg [("a", TVec (AnyLength PInt))], TVec (AnyLength PDbl))) = t3
   | _ -> false
 
 let%test "build types" =
@@ -82,5 +82,5 @@ let open Builder in
     Format.printf "  %s: %a@." sym Rstt.Pp.ty ty
   ) type_map ; *)
   let open Rstt in
-  Ty.equiv (StrMap.find "x" type_map) (Prim.Int.any |> Prim.mk |> Vec.mk)  &&
-  Ty.equiv (StrMap.find "y" type_map) (Prim.Dbl.any |> Prim.mk |> Vec.mk)
+  Ty.equiv (StrMap.find "x" type_map) (Prim.Int.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk)  &&
+  Ty.equiv (StrMap.find "y" type_map) (Prim.Dbl.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk)
