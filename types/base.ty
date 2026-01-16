@@ -1,3 +1,72 @@
-error: (empty) -> any
-fail: (any) -> empty
-isInteger: (v(int) -> c(1)) & (~v(int) -> c(0))
+// Alias used by polymorphic builtins (scalar R vectors' element types)
+any_scalar: int | dbl | lgl | chr | clx | raw
+
+error: t(empty) -> any
+fail: t(any) -> empty
+
+isInteger: (t(v(int)) -> c_true) & (t(~v(int)) -> c_false)
+isReal: (t(v(dbl)) -> c_true) & (t(~v(dbl)) -> c_false)
+
+INTEGER: t(v(int)) -> *c_int
+REAL: t(v(dbl)) -> *c_double
+
+LENGTH: t(('a & (int | dbl | lgl | chr | clx | raw)), v('a)) -> 'a
+XLENGTH: t(('a & (int | dbl | lgl | chr | clx | raw)), v('a)) -> 'a
+
+allocVector: t(('a & (int | dbl | lgl | chr | clx | raw)), c_true) -> v[1]('a) & t(('a & (int | dbl | lgl | chr | clx | raw)), (c_int \ c_true)) -> v('a)
+
+[]<-: t(*'a, c_int, 'a) -> c_void
+[]: t(*'a, c_int) -> 'a
+
+PROTECT: t(any) -> any
+UNPROTECT: t(c_int) -> c_void
+
+!__1: t((c_int \ c_false) | c_true) -> c_false & t(c_false) -> c_true
+
++__2: t(c_int, c_int) -> c_int & t(c_double, c_double) -> c_double & t(any, any) -> any & t(c_int_na, c_int_na) -> c_int_na & t(c_int_na, c_int) -> c_int_na & t(c_int, c_int_na) -> c_int_na
+
+-__2: t(c_int, c_int) -> c_int & t(c_double, c_double) -> c_double & t(any, any) -> any & t(c_int_na, c_int_na) -> c_int_na & t(c_int_na, c_int) -> c_int_na & t(c_int, c_int_na) -> c_int_na
+
+%__2: t(c_int, c_int) -> c_int
+
+++__1: t(c_int) -> c_int & t(c_double) -> c_double & t(any) -> any
+
+*__1: t(*'a) -> 'a
+&__1: t('a) -> *'a
+
+R_INT_MIN: c_int
+R_INT_MAX: c_int
+
+
+Rf_envlength: t(any) -> c_int
+CDR: t(any) -> any
+
+==__2: t(any, any) -> c_bool
+<__2: t(c_int, c_int) -> c_bool & t(c_double, c_double) -> c_bool & t(any, any) -> c_bool
+>__2: t(c_int, c_int) -> c_bool & t(c_double, c_double) -> c_bool & t(any, any) -> c_bool
+
+NA_INTEGER: c_int_na
+
+TRUE: c_true
+FALSE: c_false
+R_NilValue: null
+
+INTSXP: int
+REALSXP: dbl
+RAWSXP: raw
+CPLXSXP: clx
+STRSXP: chr
+LGLSXP: lgl
+NILSXP: null
+VECSXP: vec
+EXPRSXP: any
+CLOSXP: any
+BUILTINSXP: any
+SPECIALSXP: any
+CHARSXP: chr
+SYMSXP: any
+LISTSXP: any
+LANGSXP: any
+ENVSXP: any
+ANYSXP: any | vec
+DOTSXP: any

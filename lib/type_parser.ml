@@ -8,15 +8,19 @@ The type itself is parsed using rstt
 *)
 open Rstt
 
-let parse_type_line line = 
-  match Utils.split_once ':' line with 
-  | (_, "") -> 
-      Printf.eprintf "Warning: could not parse line (missing type): %s@." line; None
-  | (sym, ty_str) -> 
-      let ty_str = String.trim ty_str in 
-      let ty = Rstt_repl.IO.parse_type ty_str in 
-      Some (String.trim sym, ty)
-
+let parse_type_line line =
+  let line = String.trim line in
+  if line = "" || String.starts_with ~prefix:"//" line then
+    None
+  else
+    match Utils.split_once ':' line with
+    | (_, "") ->
+        Printf.eprintf "Warning: could not parse line (missing type): %s@." line;
+        None
+    | (sym, ty_str) ->
+        let ty_str = String.trim ty_str in
+        let ty = Rstt_repl.IO.parse_type ty_str in
+        Some (String.trim sym, ty)
 
 let parse_type_file filename = 
   if not (Sys.file_exists filename) then
@@ -29,9 +33,14 @@ let build_types ti_map env type_list =
   List.fold_left (fun acc (sym, ty) ->
     let open Builder in 
     let (ty_env, env) = acc in 
-      let env,ty = Builder.resolve env ty in
-      let ty = build ti_map ty in
-      (StrMap.add sym ty ty_env, env)
+    let env, ty =
+      try Builder.resolve env ty
+      with Not_found ->
+        Printf.eprintf "Not_found while resolving symbol '%s' during type resolution.@." sym;
+        raise Not_found
+    in
+    let ty = build ti_map ty in
+    (StrMap.add sym ty ty_env, env)
     ) (Builder.StrMap.empty, env) type_list
 
 
@@ -125,11 +134,99 @@ let find_types_base_ty () =
 let%test "load file" = 
     let open Builder in
     let filename = find_types_base_ty () in
+    (* Read lines and try parsing each one individually to locate syntax errors. *)
+    let lines = In_channel.with_open_text filename In_channel.input_lines in
+    let rec check_lines idx = function
+      | [] -> true
+      | line :: rest ->
+          let line_trim = String.trim line in
+          if line_trim = "" || String.starts_with ~prefix:"//" line_trim then
+            check_lines (idx + 1) rest
+          else
+            let sym, ty_str =
+              match Utils.split_once ':' line_trim with
+              | s, "" -> (s, "")
+              | s, r -> (String.trim s, String.trim r)
+            in
+            (try
+               Format.printf "Parsing line %d: symbol='%s' rhs='%s'@." (idx + 1) sym ty_str;
+               let _ = Rstt_repl.IO.parse_type ty_str in
+               check_lines (idx + 1) rest
+             with
+             | Rstt_repl__IO.SyntaxError (_, msg) ->
+                 Printf.eprintf "Syntax error parsing file %s at line %d (symbol='%s'):@.%s@.%s@." filename (idx + 1) sym ty_str msg;
+                 false
+            )
+    in
+    if not (check_lines 0 lines) then false else
+    (* Now parse and build incrementally to pinpoint Not_found. *)
     let parsed_types = parse_type_file filename in
     let ti_map = TIdMap.empty in
-    let type_map, _ = build_types ti_map Builder.empty_env parsed_types in
-    (* print types in the type map *)
-    StrMap.iter (fun sym ty ->
-      Format.printf "%s: @[<h>%a@]@." sym Rstt.Pp.ty ty
-    ) type_map;
-    true
+    let rec build_one_by_one env ty_env = function
+      | [] -> (ty_env, env)
+      | (sym, ast_ty) :: rest ->
+          let env, ast_ty =
+            try Builder.resolve env ast_ty
+            with Not_found ->
+              Printf.eprintf "Not_found while resolving '%s' (line: %s)@." sym sym;
+              raise Not_found
+          in
+          let built_ty = Builder.build ti_map ast_ty in
+          let ty_env = StrMap.add sym built_ty ty_env in
+          build_one_by_one env ty_env rest
+    in
+    let type_map, _ =
+      try build_one_by_one Builder.empty_env Builder.StrMap.empty parsed_types
+      with Not_found ->
+        (* Fail the test with the printed context above. *)
+        (Builder.StrMap.empty, Builder.empty_env)
+    in
+    if StrMap.is_empty type_map then false else (
+      StrMap.iter (fun sym ty ->
+        Format.printf "%s: @[<h>%a@]@." sym Rstt.Pp.ty ty
+      ) type_map;
+      true
+    )
+
+let%test "parse c_bool" =
+  try let _ = Rstt_repl.IO.parse_type "c_bool" in true
+  with Rstt_repl__IO.SyntaxError _ -> false
+
+let%test "parse arrow with c_int to c_int" =
+  try let _ = Rstt_repl.IO.parse_type "t(c_int, c_int) -> c_int" in true
+  with Rstt_repl__IO.SyntaxError _ -> false
+
+let%test "debug parse examples" =
+  let cases = [
+    "c_bool";
+    "c_int";
+    "t(c_int) -> c_int";
+    "t(c_int, c_int) -> c_int";
+    "t(c_int, c_int) -> c_bool";
+    "t(c_double, c_double) -> c_bool";
+    "t(any, any) -> c_bool"
+  ] in
+  List.iter (fun s ->
+    try
+      let _ = Rstt_repl.IO.parse_type s in
+      ()
+    with Rstt_repl__IO.SyntaxError (_, m) ->
+      Printf.eprintf "FAILED PARSE: '%s' -> %s\n" s m
+  ) cases;
+  true
+
+let%test "parse arrow int int to int" =
+  try let _ = Rstt_repl.IO.parse_type "t(int, int) -> int" in true
+  with Rstt_repl__IO.SyntaxError _ -> false
+
+let%test "parse arrow int int to c_bool" =
+  try let _ = Rstt_repl.IO.parse_type "t(int, int) -> c_bool" in true
+  with Rstt_repl__IO.SyntaxError _ -> false
+
+let%test "parse arrow cint cint to cint" =
+  try let _ = Rstt_repl.IO.parse_type "t(cint, cint) -> cint" in true
+  with Rstt_repl__IO.SyntaxError _ -> false
+
+let%test "parse arrow C_int C_int to C_bool" =
+  try let _ = Rstt_repl.IO.parse_type "t(C_int, C_int) -> C_bool" in true
+  with Rstt_repl__IO.SyntaxError _ -> false
