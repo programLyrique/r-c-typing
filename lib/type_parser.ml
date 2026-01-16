@@ -35,6 +35,7 @@ let build_types ti_map env type_list =
     ) (Builder.StrMap.empty, env) type_list
 
 
+
 let mk_arg l =
   let open Builder in
   TArg { pos = []; pos_named =l; tl = TOption TEmpty; named = [] }
@@ -81,3 +82,21 @@ let open Builder in
   let dbl_vec = Prim.Dbl.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk |> Attr.mk_anyclass in
   Ty.equiv (StrMap.find "x" type_map) int_vec  &&
   Ty.equiv (StrMap.find "y" type_map) dbl_vec
+
+
+let%test "build from file" =
+  let open Builder in
+  let filename = "test_types.txt" in
+  let oc = open_out filename in
+  Printf.fprintf oc "x: v(int)\n";
+  Printf.fprintf oc "y: v(dbl)\n";
+  close_out oc;
+  let parsed_types = parse_type_file filename in
+  let ti_map = TIdMap.empty in
+  let type_map, _ = build_types ti_map Builder.empty_env parsed_types in
+  let open Rstt in
+  let int_vec = Prim.Int.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk |> Attr.mk_anyclass in
+  let dbl_vec = Prim.Dbl.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk |> Attr.mk_anyclass in
+  Sys.remove filename;
+  Ty.equiv (StrMap.find "x" type_map) int_vec  &&
+  Ty.equiv (StrMap.find "y" type_map) dbl_vec 
