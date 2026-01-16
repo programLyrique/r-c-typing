@@ -2,6 +2,7 @@
  (name r_c_typing)
  (modules ast defs in_channel_ext parser PAst runner type_parser utils vectors)
  (libraries r-c-typing.c mlsem rstt rstt-repl)
- (inline_tests)
+ (inline_tests
+  (deps ../types/base.ty))
  (preprocess (pps ppx_deriving.show ppx_inline_test))
  (instrumentation (backend bisect_ppx)))

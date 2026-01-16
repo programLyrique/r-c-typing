@@ -35,7 +35,6 @@ let build_types ti_map env type_list =
     ) (Builder.StrMap.empty, env) type_list
 
 
-
 let mk_arg l =
   let open Builder in
   TArg { pos = []; pos_named =l; tl = TOption TEmpty; named = [] }
@@ -100,3 +99,37 @@ let%test "build from file" =
   Sys.remove filename;
   Ty.equiv (StrMap.find "x" type_map) int_vec  &&
   Ty.equiv (StrMap.find "y" type_map) dbl_vec 
+
+let find_file_in_ancestors ~start ~target =
+  let rec aux dir =
+    let candidate = Filename.concat dir target in
+    if Sys.file_exists candidate then Some candidate
+    else
+      let parent = Filename.dirname dir in
+      if parent = dir then None else aux parent
+  in
+  aux start
+
+let find_types_base_ty () =
+  (* In dune inline-tests, the cwd is typically a sandbox (under _build/.sandbox/...).
+     Prefer a search from cwd (will work if the file is staged via (inline_tests (deps ...))).
+     Fall back to the source tree location while developing outside dune. *)
+  match find_file_in_ancestors ~start:(Sys.getcwd ()) ~target:"types/base.ty" with
+  | Some f -> f
+  | None -> (
+      match find_file_in_ancestors ~start:(Filename.dirname __FILE__) ~target:"../types/base.ty" with
+      | Some f -> f
+      | None -> "types/base.ty"
+    )
+
+let%test "load file" = 
+    let open Builder in
+    let filename = find_types_base_ty () in
+    let parsed_types = parse_type_file filename in
+    let ti_map = TIdMap.empty in
+    let type_map, _ = build_types ti_map Builder.empty_env parsed_types in
+    (* print types in the type map *)
+    StrMap.iter (fun sym ty ->
+      Format.printf "%s: @[<h>%a@]@." sym Rstt.Pp.ty ty
+    ) type_map;
+    true

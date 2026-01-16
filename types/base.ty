@@ -1,1 +1,2 @@
 error: (empty) -> any
+f: int -> int
