@@ -8,19 +8,24 @@ The type itself is parsed using rstt
 *)
 open Rstt
 
+type type_kind = Def | Alias
+
 let parse_type_line line =
   let line = String.trim line in
   if line = "" || String.starts_with ~prefix:"//" line then
     None
   else
-    match Utils.split_once ':' line with
-    | (_, "") ->
+    match Utils.split_once_any [':';'='] line with
+    | ('\000', _, "") ->
         Printf.eprintf "Warning: could not parse line (missing type): %s@." line;
         None
-    | (sym, ty_str) ->
-        let ty_str = String.trim ty_str in
+    | (sep, sym, ty_str) ->
+       let ty_str = String.trim ty_str in
         let ty = Rstt_repl.IO.parse_type ty_str in
-        Some (String.trim sym, ty)
+      match sep with
+      | ':' -> Some (String.trim sym, ty, Def)
+      | '=' -> Some (String.trim sym, ty, Alias)
+      | _ -> failwith "Unreachable case in parse_type_line."
 
 let parse_type_file filename = 
   if not (Sys.file_exists filename) then
@@ -30,13 +35,17 @@ let parse_type_file filename =
 
 
 let build_types ti_map env type_list = 
-  List.fold_left (fun acc (sym, ty) ->
+  List.fold_left (fun acc (sym, ty, kind) ->
     let open Builder in 
-    let id = TId.create () in
+   
     let (ty_env, ti_map, env) = acc in 
-    let env = {env with 
-      tids = StrMap.add sym id env.tids
-    } in
+    let id = TId.create () in (* useless when it is not a type alias *)
+    let env = if kind = Alias then 
+      {env with 
+        tids = StrMap.add sym id env.tids
+      } 
+    else env in
+
     let env, ty =
       try Builder.resolve env ty
       with Not_found ->
@@ -44,7 +53,7 @@ let build_types ti_map env type_list =
         raise Not_found
     in
     let ty = build ti_map ty in
-    let ti_map = TIdMap.add id ty ti_map in
+    let ti_map = if kind = Alias then TIdMap.add id ty ti_map else ti_map in
     (StrMap.add sym ty ty_env, ti_map, env)
     ) (Builder.StrMap.empty, ti_map, env) type_list
 
@@ -56,15 +65,22 @@ let mk_arg l =
 let%test "parse simple types" =
   let line = "x: v(int)" in
   match parse_type_line line with
-  | Some (sym, ty) ->
-      sym = "x" && Builder.(TVec (AnyLength PInt) ) = ty
+  | Some (sym, ty, kind) ->
+      sym = "x" && Builder.(TVec (AnyLength PInt) ) = ty && kind = Def
+  | None -> false
+
+let%test "parse type alias" =
+  let line = "my_int = v(int)" in
+  match parse_type_line line with
+  | Some (sym, ty, kind) ->
+      sym = "my_int" && Builder.(TVec (AnyLength PInt) ) = ty && kind = Alias
   | None -> false
 
 let%test "parse arrow types" =
   let line = "f: (a:v(int)) -> v(dbl)" in
   match parse_type_line line with
-  | Some (sym, ty) ->
-      sym = "f" && Builder.(TArrow (mk_arg [("a", TVec (AnyLength PInt))], TVec (AnyLength PDbl))) = ty
+  | Some (sym, ty, kind) ->
+      sym = "f" && Builder.(TArrow (mk_arg [("a", TVec (AnyLength PInt))], TVec (AnyLength PDbl))) = ty && kind = Def
   | None -> false
 
 let%test "parse several types" =
@@ -75,10 +91,10 @@ let%test "parse several types" =
   ] in
   let results = List.map parse_type_line lines in
   match results with
-  | [Some (s1,t1); Some (s2,t2); Some (s3,t3)] ->
-      s1 = "x" && Builder.(TVec (AnyLength PInt)) = t1 &&
-      s2 = "y" && Builder.(TVec (AnyLength PDbl)) = t2 &&
-      s3 = "f" && Builder.(TArrow (mk_arg [("a", TVec (AnyLength PInt))], TVec (AnyLength PDbl))) = t3
+  | [Some (s1,t1,kind1); Some (s2,t2,kind2); Some (s3,t3,kind3)] ->
+      s1 = "x" && Builder.(TVec (AnyLength PInt)) = t1 && kind1 = Def &&
+      s2 = "y" && Builder.(TVec (AnyLength PDbl)) = t2 && kind2 = Def &&
+      s3 = "f" && Builder.(TArrow (mk_arg [("a", TVec (AnyLength PInt))], TVec (AnyLength PDbl))) = t3 && kind3 = Def
   | _ -> false
 
 let%test "build types" =

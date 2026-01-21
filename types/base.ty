@@ -1,5 +1,5 @@
 // Alias used by polymorphic builtins (scalar R vectors' element types)
-any_scalar: int | dbl | lgl | chr | clx | raw
+any_scalar = int | dbl | lgl | chr | clx | raw
 
 error: t(empty) -> any
 fail: t(any) -> empty

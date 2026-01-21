@@ -51,7 +51,7 @@ let infer_ast visible opts (idenv, env) (ast : Ast.e) =
     if opts.typing then
         begin
         let _env = extend_env mlsem_ast env in (*TODO: bring it back when the inference deals with any in a more appropriate way*)
-        let renvs = System.Refinement.refinement_envs env mlsem_ast in
+        let renvs = System.Refinement.refinements env mlsem_ast in
         let reconstructed = System.Reconstruction.infer env renvs mlsem_ast in
         let typ = System.Checker.typeof_def env reconstructed mlsem_ast in
         let tys = TyScheme.norm_and_simpl typ in 

@@ -6,5 +6,5 @@ Prep_incl (
     "\n"
   )
 )
-mk_value: (v[int](int)) | (env) -> v[1](int)
+mk_value: (env) | (v[int](int)) -> v[1](int)
 
