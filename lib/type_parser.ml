@@ -57,6 +57,12 @@ let build_types ti_map env type_list =
     (StrMap.add sym ty ty_env, ti_map, env)
     ) (Builder.StrMap.empty, ti_map, env) type_list
 
+let load_file filename =
+  let parsed_types = parse_type_file filename in
+  let ti_map = Builder.TIdMap.empty in
+  let type_map, _,_ = build_types ti_map Builder.empty_env parsed_types in
+  type_map
+
 
 let mk_arg l =
   let open Builder in
@@ -155,16 +161,11 @@ let find_types_base_ty () =
 let%test "load file" = 
     let open Builder in
     let filename = find_types_base_ty () in
-    (* Now parse and build incrementally to pinpoint Not_found. *)
-    let parsed_types = parse_type_file filename in
-    let ti_map = TIdMap.empty in
-
-    let type_map, _,_ =
-      try build_types ti_map Builder.empty_env  parsed_types
-      with Not_found ->
-        (* Fail the test with the printed context above. *)
-        (Builder.StrMap.empty, Builder.TIdMap.empty, Builder.empty_env)
-    in
+    
+    let type_map = try 
+      load_file filename 
+    with Not_found ->
+      StrMap.empty in
     if StrMap.is_empty type_map then false else (
       StrMap.iter (fun sym ty ->
         Format.printf "%s: @[<h>%a@]@." sym Rstt.Pp.ty ty
