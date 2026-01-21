@@ -10,7 +10,7 @@ isReal: (t(v(dbl)) -> c_true) & (t(~v(dbl)) -> c_false)
 INTEGER: t(v(int)) -> *c_int
 REAL: t(v(dbl)) -> *c_double
 
-LENGTH: t(('a & (int | dbl | lgl | chr | clx | raw)), v('a)) -> 'a
+LENGTH: t('a & any_scalar) -> 'a
 XLENGTH: t(('a & (int | dbl | lgl | chr | clx | raw)), v('a)) -> 'a
 
 allocVector: t(('a & (int | dbl | lgl | chr | clx | raw)), c_true) -> v[1]('a) & t(('a & (int | dbl | lgl | chr | clx | raw)), (c_int \ c_true)) -> v('a)

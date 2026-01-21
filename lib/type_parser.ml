@@ -32,7 +32,11 @@ let parse_type_file filename =
 let build_types ti_map env type_list = 
   List.fold_left (fun acc (sym, ty) ->
     let open Builder in 
-    let (ty_env, env) = acc in 
+    let id = TId.create () in
+    let (ty_env, ti_map, env) = acc in 
+    let env = {env with 
+      tids = StrMap.add sym id env.tids
+    } in
     let env, ty =
       try Builder.resolve env ty
       with Not_found ->
@@ -40,8 +44,9 @@ let build_types ti_map env type_list =
         raise Not_found
     in
     let ty = build ti_map ty in
-    (StrMap.add sym ty ty_env, env)
-    ) (Builder.StrMap.empty, env) type_list
+    let ti_map = TIdMap.add id ty ti_map in
+    (StrMap.add sym ty ty_env, ti_map, env)
+    ) (Builder.StrMap.empty, ti_map, env) type_list
 
 
 let mk_arg l =
@@ -84,7 +89,7 @@ let open Builder in
   ] in
   let parsed_types = List.filter_map parse_type_line lines in
   let ti_map = TIdMap.empty in
-  let type_map, _ = build_types ti_map empty_env parsed_types in
+  let type_map, _,_ = build_types ti_map empty_env parsed_types in
   let open Rstt in
   let int_vec = Prim.Int.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk |> Attr.mk_anyclass in
   let dbl_vec = Prim.Dbl.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk |> Attr.mk_anyclass in
@@ -101,7 +106,7 @@ let%test "build from file" =
   close_out oc;
   let parsed_types = parse_type_file filename in
   let ti_map = TIdMap.empty in
-  let type_map, _ = build_types ti_map Builder.empty_env parsed_types in
+  let type_map, _,_ = build_types ti_map Builder.empty_env parsed_types in
   let open Rstt in
   let int_vec = Prim.Int.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk |> Attr.mk_anyclass in
   let dbl_vec = Prim.Dbl.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk |> Attr.mk_anyclass in
@@ -134,52 +139,15 @@ let find_types_base_ty () =
 let%test "load file" = 
     let open Builder in
     let filename = find_types_base_ty () in
-    (* Read lines and try parsing each one individually to locate syntax errors. *)
-    let lines = In_channel.with_open_text filename In_channel.input_lines in
-    let rec check_lines idx = function
-      | [] -> true
-      | line :: rest ->
-          let line_trim = String.trim line in
-          if line_trim = "" || String.starts_with ~prefix:"//" line_trim then
-            check_lines (idx + 1) rest
-          else
-            let sym, ty_str =
-              match Utils.split_once ':' line_trim with
-              | s, "" -> (s, "")
-              | s, r -> (String.trim s, String.trim r)
-            in
-            (try
-               Format.printf "Parsing line %d: symbol='%s' rhs='%s'@." (idx + 1) sym ty_str;
-               let _ = Rstt_repl.IO.parse_type ty_str in
-               check_lines (idx + 1) rest
-             with
-             | Rstt_repl__IO.SyntaxError (_, msg) ->
-                 Printf.eprintf "Syntax error parsing file %s at line %d (symbol='%s'):@.%s@.%s@." filename (idx + 1) sym ty_str msg;
-                 false
-            )
-    in
-    if not (check_lines 0 lines) then false else
     (* Now parse and build incrementally to pinpoint Not_found. *)
     let parsed_types = parse_type_file filename in
     let ti_map = TIdMap.empty in
-    let rec build_one_by_one env ty_env = function
-      | [] -> (ty_env, env)
-      | (sym, ast_ty) :: rest ->
-          let env, ast_ty =
-            try Builder.resolve env ast_ty
-            with Not_found ->
-              Printf.eprintf "Not_found while resolving '%s' (line: %s)@." sym sym;
-              raise Not_found
-          in
-          let built_ty = Builder.build ti_map ast_ty in
-          let ty_env = StrMap.add sym built_ty ty_env in
-          build_one_by_one env ty_env rest
-    in
-    let type_map, _ =
-      try build_one_by_one Builder.empty_env Builder.StrMap.empty parsed_types
+
+    let type_map, _,_ =
+      try build_types ti_map Builder.empty_env  parsed_types
       with Not_found ->
         (* Fail the test with the printed context above. *)
-        (Builder.StrMap.empty, Builder.empty_env)
+        (Builder.StrMap.empty, Builder.TIdMap.empty, Builder.empty_env)
     in
     if StrMap.is_empty type_map then false else (
       StrMap.iter (fun sym ty ->
