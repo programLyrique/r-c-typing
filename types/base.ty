@@ -60,19 +60,19 @@ TRUE: v(tt)
 FALSE: v(ff)
 R_NilValue: null
 
-INTSXP: int
-REALSXP: dbl
-RAWSXP: raw
-CPLXSXP: clx
-STRSXP: chr
-LGLSXP: lgl
+INTSXP: p(int)
+REALSXP: p(dbl)
+RAWSXP: p(raw)
+CPLXSXP: p(clx)
+STRSXP: p(chr)
+LGLSXP: p(lgl)
 NILSXP: null
-VECSXP: vec
+VECSXP: p(vec)
 EXPRSXP: any
 CLOSXP: any
 BUILTINSXP: any
 SPECIALSXP: any
-CHARSXP: chr
+CHARSXP: p(chr)
 SYMSXP: any
 LISTSXP: any
 LANGSXP: any
