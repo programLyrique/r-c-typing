@@ -6,14 +6,16 @@ fail: t(any) -> empty
 
 isInteger: (t(v(int)) -> c_true) & (t(~v(int)) -> c_false)
 isReal: (t(v(dbl)) -> c_true) & (t(~v(dbl)) -> c_false)
+IS_SCALAR: (t(v[1]('b)) -> c_true) & (t(v[int \ 1]('b)) -> c_false)
 
 INTEGER: t(v(int)) -> *c_int
 REAL: t(v(dbl)) -> *c_double
 
-LENGTH: t('a & any_scalar) -> 'a
-XLENGTH: t(('a & (int | dbl | lgl | chr | clx | raw)), v('a)) -> 'a
+LENGTH: t(v['a]('b)) -> 'a
+XLENGTH: t(v['a]('b)) -> 'a
+Rf_envlength: t(env) -> c_int
 
-allocVector: t(('a & (int | dbl | lgl | chr | clx | raw)), c_true) -> v[1]('a) & t(('a & (int | dbl | lgl | chr | clx | raw)), (c_int \ c_true)) -> v('a)
+allocVector: t(('a & any_scalar), c_true) -> v[1]('a) & t(('a & (int | dbl | lgl | chr | clx | raw)), (c_int \ c_true)) -> v('a)
 
 []<-: t(*'a, c_int, 'a) -> c_void
 []: t(*'a, c_int) -> 'a
@@ -21,7 +23,7 @@ allocVector: t(('a & (int | dbl | lgl | chr | clx | raw)), c_true) -> v[1]('a) &
 PROTECT: t(any) -> any
 UNPROTECT: t(c_int) -> c_void
 
-!__1: t((c_int \ c_false) | c_true) -> c_false & t(c_false) -> c_true
+// Arithmetic
 
 +__2: t(c_int, c_int) -> c_int & t(c_double, c_double) -> c_double & t(any, any) -> any & t(c_int_na, c_int_na) -> c_int_na & t(c_int_na, c_int) -> c_int_na & t(c_int, c_int_na) -> c_int_na
 
@@ -41,14 +43,21 @@ R_INT_MAX: c_int
 Rf_envlength: t(any) -> c_int
 CDR: t(any) -> any
 
+// Boolean operators and comparisons
+||__2: (t(c_true, c_true) | t(c_true, c_false) | t(c_false, c_true) -> c_true) & (t(c_false, c_false) -> c_false)
+&&__2: (t(c_false, c_false) | t(c_true, c_false) | t(c_false, c_true) -> c_false) & (t(c_true, c_true) -> c_true)
 ==__2: t(any, any) -> c_bool
+!=__1: (t(c_true) -> c_false) & (t(c_false) -> c_true)
 <__2: t(c_int, c_int) -> c_bool & t(c_double, c_double) -> c_bool & t(any, any) -> c_bool
 >__2: t(c_int, c_int) -> c_bool & t(c_double, c_double) -> c_bool & t(any, any) -> c_bool
 
+// TODO: add more non vector types for the 2nd overload
+TYPEOF: (t(v('a)) -> 'a) & (t(('b & vec & env)) -> 'b)
+
 NA_INTEGER: c_int_na
 
-TRUE: c_true
-FALSE: c_false
+TRUE: v(tt)
+FALSE: v(ff)
 R_NilValue: null
 
 INTSXP: int
@@ -67,6 +76,6 @@ CHARSXP: chr
 SYMSXP: any
 LISTSXP: any
 LANGSXP: any
-ENVSXP: any
+ENVSXP: env
 ANYSXP: any | vec
 DOTSXP: any
