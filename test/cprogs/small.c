@@ -18,11 +18,11 @@ SEXP change_int(SEXP result) {
     return result;
 }
 
-// SEXP errorIntScalar(SEXP a) {
-//     if (!isInteger(a) || LENGTH(a) != 1) {
-//         error("Input must be a single integer"); // Ty.empty -> Ty.any
-//     }
-// }
+SEXP errorIntScalar(SEXP a) {
+    if (!isInteger(a) || LENGTH(a) != 1) {
+        error("Input must be a single integer"); // Ty.empty -> Ty.any
+    }
+}
 
 
 // SEXP make_scalar() {

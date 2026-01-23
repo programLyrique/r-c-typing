@@ -16,8 +16,8 @@ let tobool, tobool_t =
   let v = MVariable.create Immut (Some "tobool") in
   let def = Arrow.mk Ty.any Ty.bool in
   (* We actually only care about this part for C*)
-  let tt = Arrow.mk (Ty.cup Ty.tt Cint.tt) Ty.tt in 
-  let ff = Arrow.mk (Ty.cup Ty.ff Cint.ff) Ty.ff in
+  let tt = Arrow.mk (Ty.cup Ty.tt Cint.tt) Cint.tt in 
+  let ff = Arrow.mk (Ty.cup Ty.ff Cint.ff) Cint.ff in
   let ty = Ty.conj [def;tt;ff] in
   v, ty
 
