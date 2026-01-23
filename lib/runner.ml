@@ -94,3 +94,7 @@ let run_on_file opts filename idenv env =
   if opts.past then
     Printf.printf "%s\n" (PAst.show_definitions past);
   List.fold_left (infer_fun_def opts) (idenv, env) past
+
+  let () =
+    Mlsem_types.PEnv.add_printer_param (Rstt.Pp.printer_params ()) ;
+    Mlsem_system.Config.normalization_fun := Rstt.Simplify.partition_vecs

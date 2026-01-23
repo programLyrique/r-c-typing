@@ -33,6 +33,14 @@ let parse_type_file filename =
   let contents = In_channel.with_open_text filename In_channel.input_lines in
   List.filter_map parse_type_line contents
 
+let add_struct_guards t =
+  let open Rstt.Builder in
+  let aux t =
+    match t with
+    | TArrow (l,r) -> TArrow (TStruct l,r)
+    | t -> t
+  in
+  map aux Fun.id Fun.id t
 
 let build_types ti_map env type_list = 
   List.fold_left (fun acc (sym, ty, kind) ->
@@ -52,7 +60,8 @@ let build_types ti_map env type_list =
         Printf.eprintf "Not_found while resolving symbol '%s' during type resolution.@." sym;
         raise Not_found
     in
-    let ty = build ti_map ty in
+    let ty = add_struct_guards ty in
+    let ty = build_struct ti_map ty in
     let ti_map = if kind = Alias then TIdMap.add id ty ti_map else ti_map in
     (StrMap.add sym ty ty_env, ti_map, env)
     ) (Builder.StrMap.empty, ti_map, env) type_list
@@ -166,12 +175,13 @@ let%test "load file" =
       load_file filename 
     with Not_found ->
       StrMap.empty in
-    if StrMap.is_empty type_map then false else (
+    StrMap.is_empty type_map |> not
+    (* if StrMap.is_empty type_map then false else (
       StrMap.iter (fun sym ty ->
         Format.printf "%s: @[<h>%a@]@." sym Rstt.Pp.ty ty
       ) type_map;
       true
-    )
+    ) *)
 
 let%test "parse c_bool" =
   try let _ = Rstt_repl.IO.parse_type "c_bool" in true

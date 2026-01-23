@@ -47,7 +47,7 @@ CDR: t(any) -> any
 ||__2: (t(c_true, c_true) | t(c_true, c_false) | t(c_false, c_true) -> c_true) & (t(c_false, c_false) -> c_false)
 &&__2: (t(c_false, c_false) | t(c_true, c_false) | t(c_false, c_true) -> c_false) & (t(c_true, c_true) -> c_true)
 ==__2: t(any, any) -> c_bool
-!=__1: (t(c_true) -> c_false) & (t(c_false) -> c_true)
+!__1: (t(c_true) -> c_false) & (t(c_false) -> c_true)
 <__2: t(c_int, c_int) -> c_bool & t(c_double, c_double) -> c_bool & t(any, any) -> c_bool
 >__2: t(c_int, c_int) -> c_bool & t(c_double, c_double) -> c_bool & t(any, any) -> c_bool
 
@@ -56,8 +56,8 @@ TYPEOF: (t(v('a)) -> 'a) & (t(('b & vec & env)) -> 'b)
 
 NA_INTEGER: c_int_na
 
-TRUE: v(tt)
-FALSE: v(ff)
+TRUE: c_true
+FALSE: c_false
 R_NilValue: null
 
 INTSXP: p(int)

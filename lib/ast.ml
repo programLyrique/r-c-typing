@@ -1,6 +1,5 @@
 open Mlsem.Common
 open Mlsem.Types
-open Vectors
 module MVariable = Mlsem.Lang.MVariable
 module A = Mlsem.Lang.Ast
 module SA = Mlsem.System.Ast
@@ -64,26 +63,30 @@ type funcs = e list (* list of function definitions *)
 
 
 let typeof_const c = 
-  match c with 
-  | CChar _ -> C.char
-  | CStr _ -> C.str
-  | CDbl _ -> C.double
-  | CInt v -> Ty.interval (Some (Z.of_int v)) (Some (Z.of_int v))
-  | CBool v -> if v then C.one else C.zero
-  | CNull -> Null.null
-  | CNa -> Prim.na
+  let open Rstt in 
+  (match c with 
+  | CChar _ ->  Cenums.char
+  | CStr _ -> Cenums.str
+  | CDbl _ -> Cenums.double
+  | CInt v -> Cint.singl v
+  | CBool v -> if v then Cint.tt else Cint.ff
+  | CNull -> Null.any
+  | CNa -> Cint.na)
+  |> Attr.mk_noclass
 
 let rec typeof_ctype ct = 
-  match ct with 
-  | Void -> C.void
-  | Int -> C.int
-  | Float -> C.double
-  | Char -> C.char
-  | Bool -> C.bool
-  | Ptr ty -> C.mk_ptr (typeof_ctype ty)
-  | SEXP -> Prim.any
-  | Any -> C.any
-  | _ -> failwith ("Type not supported yet in typeof_ctype: " ^ show_ctype ct)
+  let open Rstt in 
+  (match ct with 
+  | Void -> Cenums.void
+  | Int -> Cint.any
+  | Float -> Cenums.double
+  | Char -> Cenums.char
+  | Bool -> Cint.bool
+  | Ptr ty -> Cptr.mk (typeof_ctype ty)
+  | SEXP -> Defs.any_sexp
+  | Any -> Defs.any_c
+  | _ -> failwith ("Type not supported yet in typeof_ctype: " ^ show_ctype ct))
+  |> Attr.mk_anyclass
 
 (* Transformation to MLsem ast
   GTy is used for gradual types, Ty for "normal" types
@@ -177,7 +180,7 @@ let rec aux_e (eid, e) =
     | Break -> A.Break
     | Next -> A.Break
     (* Lambda *)
-    | _ -> A.Value (GTy.mk C.void)  (* Placeholder for other expressions *)
+    | _ -> A.Value (GTy.mk Rstt.Cenums.void)  (* Placeholder for other expressions *)
     
   in
   (eid, aux e)

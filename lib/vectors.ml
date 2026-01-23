@@ -1,5 +1,6 @@
 open Mlsem.Types
 
+
 module Prim = struct (* TODO: extension (for printing) *)
   let tt = Enum.define "tt" |> Enum.typ
   let ff = Enum.define "ff" |> Enum.typ
@@ -55,6 +56,7 @@ module Prim = struct (* TODO: extension (for printing) *)
     t
 end
 
+(*
 module C  = struct 
   let int = Ty.int
   let zero = Ty.interval (Some Z.zero) (Some Z.zero)
@@ -96,7 +98,7 @@ module C  = struct
 
   
 end
-
+*)
 
 module Null = struct
   let null = Enum.define "Null" |> Enum.typ
