@@ -42,6 +42,16 @@ let add_struct_guards t =
   in
   map aux Fun.id Fun.id t
 
+let has_arrow t = 
+  let open Rstt.Builder in
+  let rec aux t = 
+    match t with
+    | TArrow (_,_) -> true
+    | TCap (t1, t2) -> aux t1 || aux t2
+    | _ -> false
+  in
+  aux t
+
 let build_types ti_map env type_list = 
   List.fold_left (fun acc (sym, ty, kind) ->
     let open Builder in 
@@ -61,6 +71,10 @@ let build_types ti_map env type_list =
         raise Not_found
     in
     let ty = add_struct_guards ty in
+    (* let ty = if has_arrow ty then 
+       build_struct ti_map ty
+       else build ti_map ty in
+    *)
     let ty = build_struct ti_map ty in
     let ti_map = if kind = Alias then TIdMap.add id ty ti_map else ti_map in
     (StrMap.add sym ty ty_env, ti_map, env)

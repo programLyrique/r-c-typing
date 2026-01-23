@@ -25,11 +25,11 @@ SEXP errorIntScalar(SEXP a) {
 }
 
 
-// SEXP make_scalar() {
-//     SEXP result = PROTECT(allocVector(INTSXP, 1)); 
-//     UNPROTECT(1);
-//     return result;
-// }
+SEXP make_scalar() {
+    SEXP result = PROTECT(allocVector(INTSXP, 1)); 
+    UNPROTECT(1);
+    return result;
+}
 
 
 // int isIntScalar(SEXP a) {
