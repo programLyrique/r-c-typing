@@ -1,7 +1,6 @@
 open Rstt
 open Mlsem.Types 
 open Mlsem.Common
-open Vectors
 module MVariable = Mlsem.Lang.MVariable
 
 (* Add here any known type definitions, for instance, from the R C API *)
@@ -47,30 +46,30 @@ module BuiltinVar = struct
 
   let all = List.map 
     (fun (name, ty) -> mk_builtin name ty)
-    [ ("INTSXP", Prim.int); (* Primitive types*)
-      ("REALSXP", Prim.dbl);
-      ("RAWSXP", Prim.raw);
-      ("CPLXSXP", Prim.clx);
-      ("STRSXP", Prim.chr);
-      ("LGLSXP", Prim.lgl);
-      ("NILSXP", Prim.nil);
-      ("VECSXP", Prim.vlist);
-      ("EXPRSXP", Prim.expr);
-      ("CLOSXP", Prim.closure);
-      ("BUILTINSXP", Prim.builtin);
-      ("SPECIALSXP", Prim.special);
-      ("CHARSXP", Prim.chr); (* We should actually differentiate between STRSXP and CHARSXP: STRSXP is a vector of CHARSXP?*)
-      ("SYMSXP", Prim.sym);
-      ("LISTSXP", Prim.pairlist);
-      ("LANGSXP", Prim.lang);
-      ("ENVSXP", Prim.env);
-      ("ANYSXP", Ty.cup Vecs.any Prim.any);
+    [ ("INTSXP", Prim.Int.any); (* Primitive types*)
+      ("REALSXP", Prim.Dbl.any);
+      ("RAWSXP", Prim.Raw.any);
+      ("CPLXSXP", Prim.Clx.any);
+      ("STRSXP", Prim.Chr.any); (* Should not need to use it as str is a vector of charsxp*)
+      ("LGLSXP", Prim.Lgl.any);
+      ("NILSXP", Null.any);
+      ("VECSXP", Lst.any);
+      ("EXPRSXP", Prim.any);
+      ("CLOSXP", Arrow.mk Ty.any Ty.any);
+      ("BUILTINSXP", Arrow.mk Ty.any Ty.any);
+      ("SPECIALSXP", Arrow.mk Ty.any Ty.any);
+      ("CHARSXP", Prim.Chr.any); (* We should actually differentiate between STRSXP and CHARSXP: STRSXP is a vector of CHARSXP?*)
+      ("SYMSXP", Sym.any);
+      ("LISTSXP", Lang.any);
+      ("LANGSXP", Lang.any);
+      ("ENVSXP", Rstt.Env.any);
+      ("ANYSXP", Attr.any);
       ("DOTSXP", Ty.any); (* TODO: replace by the actual type: a list with an any tail*)
       (* Booleans*)
       ("TRUE", Cint.tt);
       ("FALSE", Cint.ff);
-      (* SPecial values *)
-      ("R_NilValue", Prim.nil);
+      (* SPpecial values *)
+      ("R_NilValue", Null.any);
     ]
 
 
