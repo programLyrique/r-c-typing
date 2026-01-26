@@ -2,8 +2,8 @@
 any_scalar = int | dbl | lgl | chr | clx | raw
 any_prim = p(int) | p(dbl) | p(lgl) | p(chr) | p(clx) | p(raw)
 
-error: t(empty) -> any
-fail: t(any) -> empty
+error: empty -> any
+fail: any -> empty
 
 isInteger: (t(v(int)) -> c_true) & (t(~v(int)) -> c_false)
 isReal: (t(v(dbl)) -> c_true) & (t(~v(dbl)) -> c_false)

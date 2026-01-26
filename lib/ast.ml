@@ -88,6 +88,12 @@ let rec typeof_ctype ct =
   | _ -> failwith ("Type not supported yet in typeof_ctype: " ^ show_ctype ct))
   |> Attr.mk_anyclass
 
+
+module AttrProj = struct
+  let pdom ty = Rstt.Attr.mk_anyclass ty
+  let proj ty = Rstt.Attr.proj_content ty
+end
+
 (* Transformation to MLsem ast
   GTy is used for gradual types, Ty for "normal" types
 *)
@@ -106,7 +112,10 @@ let rec aux_e (eid, e) =
         (* State how arguments of a function are encoded: here, they are in a tuple*)
         let args = (Eid.unique (), A.Constructor 
           (SA.Tuple (List.length es), es)) in
-        A.App (aux_e f, args)
+        (* Handle the attributes *)
+        let f = Eid.unique (), A.Projection
+        (PCustom { pname="pfun" ; pgen=true ; pdom=AttrProj.pdom ; proj=AttrProj.proj }, aux_e f) in
+        A.App (f, args)
     | If (cond, then_, else_) -> 
         let cond = aux_e cond in
         let cond = (Eid.unique (), (A.App ((Eid.unique (), A.Var Defs.tobool), cond))) in

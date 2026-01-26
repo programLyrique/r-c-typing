@@ -13,10 +13,10 @@
     return x;
 }*/
 
-SEXP change_int(SEXP result) {
-    INTEGER(result)[0] = 3;
-    return result;
-}
+// SEXP change_int(SEXP result) {
+//     INTEGER(result)[0] = 3;
+//     return result;
+// }
 
 SEXP errorIntScalar(SEXP a) {
     if (!isInteger(a) || LENGTH(a) != 1) {
@@ -25,11 +25,11 @@ SEXP errorIntScalar(SEXP a) {
 }
 
 
-SEXP make_scalar() {
-    SEXP result = PROTECT(allocVector(INTSXP, 1)); 
-    UNPROTECT(1);
-    return result;
-}
+// SEXP make_scalar() {
+//     SEXP result = PROTECT(allocVector(INTSXP, 1)); 
+//     UNPROTECT(1);
+//     return result;
+// }
 
 
 // int isIntScalar(SEXP a) {

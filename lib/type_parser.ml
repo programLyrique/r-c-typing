@@ -71,11 +71,7 @@ let build_types ti_map env type_list =
         raise Not_found
     in
     let ty = add_struct_guards ty in
-    (* let ty = if has_arrow ty then 
-       build_struct ti_map ty
-       else build ti_map ty in
-    *)
-    let ty = build_struct ti_map ty in
+    let ty = build ti_map ty in
     let ti_map = if kind = Alias then TIdMap.add id ty ti_map else ti_map in
     (StrMap.add sym ty ty_env, ti_map, env)
     ) (Builder.StrMap.empty, ti_map, env) type_list
