@@ -21,7 +21,7 @@ allocVector: (t('a & any_prim, c_true) -> v[1]('a)) & (t('a & any_prim, (c_int \
 []<-: t(*'a, c_int, 'a) -> c_void
 []: t(*'a, c_int) -> 'a
 
-PROTECT: t(any) -> any
+PROTECT: t('a) -> 'a
 UNPROTECT: t(c_int) -> c_void
 
 // Arithmetic

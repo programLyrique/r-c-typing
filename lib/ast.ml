@@ -64,19 +64,18 @@ type funcs = e list (* list of function definitions *)
 
 let typeof_const c = 
   let open Rstt in 
-  (match c with 
+  match c with 
   | CChar _ ->  Cenums.char
   | CStr _ -> Cenums.str
   | CDbl _ -> Cenums.double
   | CInt v -> Cint.singl v
   | CBool v -> if v then Cint.tt else Cint.ff
   | CNull -> Null.any
-  | CNa -> Cint.na)
-  |> Attr.mk_noclass
+  | CNa -> Cint.na
 
 let rec typeof_ctype ct = 
   let open Rstt in 
-  (match ct with 
+  match ct with 
   | Void -> Cenums.void
   | Int -> Cint.any
   | Float -> Cenums.double
@@ -85,8 +84,7 @@ let rec typeof_ctype ct =
   | Ptr ty -> Cptr.mk (typeof_ctype ty)
   | SEXP -> Defs.any_sexp
   | Any -> Defs.any_c
-  | _ -> failwith ("Type not supported yet in typeof_ctype: " ^ show_ctype ct))
-  |> Attr.mk_anyclass
+  | _ -> failwith ("Type not supported yet in typeof_ctype: " ^ show_ctype ct)
 
 
 module AttrProj = struct
@@ -134,8 +132,8 @@ let rec aux_e (eid, e) =
         | Some e -> aux_e e)
     | TyCheck (e, ty) -> 
         let e = aux_e e in 
-        let tt = Eid.unique (), A.Value (GTy.mk (Rstt.Attr.mk_noclass Rstt.Cint.tt)) in
-        let ff = Eid.unique (), A.Value (GTy.mk (Rstt.Attr.mk_noclass Rstt.Cint.ff)) in
+        let tt = Eid.unique (), A.Value (GTy.mk Rstt.Cint.tt) in
+        let ff = Eid.unique (), A.Value (GTy.mk Rstt.Cint.ff) in
         A.Ite (e, GTy.mk ty, tt, ff)
     | Cast (ty, e) -> let e = aux_e e in 
         A.TypeCoerce (e, typeof_ctype ty |> GTy.mk , SA.NoCheck)

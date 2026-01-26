@@ -70,7 +70,6 @@ let build_types ti_map env type_list =
         Printf.eprintf "Not_found while resolving symbol '%s' during type resolution.@." sym;
         raise Not_found
     in
-    let ty = add_struct_guards ty in
     let ty = build ti_map ty in
     let ti_map = if kind = Alias then TIdMap.add id ty ti_map else ti_map in
     (StrMap.add sym ty ty_env, ti_map, env)
