@@ -42,16 +42,6 @@ let add_struct_guards t =
   in
   map aux Fun.id Fun.id t
 
-let has_arrow t = 
-  let open Rstt.Builder in
-  let rec aux t = 
-    match t with
-    | TArrow (_,_) -> true
-    | TCap (t1, t2) -> aux t1 || aux t2
-    | _ -> false
-  in
-  aux t
-
 let build_types ti_map env type_list = 
   List.fold_left (fun acc (sym, ty, kind) ->
     let open Builder in 

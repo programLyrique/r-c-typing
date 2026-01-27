@@ -18,18 +18,22 @@
 //     return result;
 // }
 
-// SEXP errorIntScalar(SEXP a) {
-//     if (!isInteger(a) || LENGTH(a) != 1) {
-//         error("Input must be a single integer"); // Ty.empty -> Ty.any
-//     }
+SEXP errorIntScalar(SEXP a) {
+    if (!isInteger(a) || LENGTH(a) != 1) {
+        error("Input must be a single integer"); // Ty.empty -> Ty.any
+    }
+}
+
+// int test(SEXP a) {
+//     return !isInteger(a) || LENGTH(a) != 1;
 // }
 
 
-SEXP make_scalar() {
-    SEXP result = PROTECT(allocVector(INTSXP, 1)); 
-    UNPROTECT(1);
-    return result;
-}
+// SEXP make_scalar() {
+//     SEXP result = PROTECT(allocVector(INTSXP, 1)); 
+//     UNPROTECT(1);
+//     return result;
+// }
 
 
 // int isIntScalar(SEXP a) {

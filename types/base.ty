@@ -12,8 +12,8 @@ IS_SCALAR: (t(v[1]('b)) -> c_true) & (t(v[int \ 1]('b)) -> c_false)
 INTEGER: t(v(int)) -> *c_int
 REAL: t(v(dbl)) -> *c_double
 
-LENGTH: t(v['a]('b)) -> 'a
-XLENGTH: t(v['a]('b)) -> 'a
+LENGTH: t(v[int('a)](any)) -> c_int('a)
+XLENGTH: t(v[int('a)](any)) -> c_int('a)
 Rf_envlength: t(env) -> c_int
 
 allocVector: (t('a & any_prim, c_true) -> v[1]('a)) & (t('a & any_prim, (c_int \ c_true)) -> v('a))

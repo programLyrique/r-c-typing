@@ -5,7 +5,7 @@ module System = Mlsem.System
 
 
 let main opts filename =
-  System.Config.infer_overload := true ;
+  System.Config.infer_overload := true;
   Mlsem.Types.Recording.start_recording ();
   let idenv = Runner.StrMap.empty in
   let env = Defs.initial_env in
