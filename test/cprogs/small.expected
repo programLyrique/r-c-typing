@@ -6,23 +6,23 @@ Prep_incl (
     "\n"
   )
 )
-change_int: ∀'a. ('a & (v[int](int))) -> 'a & (v[int](int))
+change_int: ∀'a. ('a & int) -> 'a & int
 
-errorIntScalar: (v[1](int)) -> ()
+errorIntScalar: (int1) -> ()
 
-make_scalar: () -> v[1](int)
+make_scalar: () -> int1
 
-isIntScalar: ((v[1](int)) -> 1) & ((v[int](int)) -> C_bool) & ((v[int](scalar) & ~v[int](int)) | (v[int \ 1](int)) -> 0)
+isIntScalar: ((int1) -> c_true) & ((int) -> c_bool) & ((int[^((..0) | (2..))]) | (vec & ~int) -> c_false)
 
-check: () -> 0
+check: () -> c_false
 
-incr: (v[1](int)) -> v[1](int)
+incr: (int1) -> int1
 
-isFunction: ((nil | list | expr | language | symbol | pairlist | env | (v[int](scalar))) -> false) & ((closure) | (builtin) | (special) -> true)
+isFunction: ((any -> any) -> c_true) & ((vec | env | list | null | sym | lang) -> c_false)
 
-isPrimitive: ((nil | list | expr | language | closure | symbol | pairlist | env | (v[int](scalar))) -> false) & ((builtin) | (special) -> true)
+isPrimitive: ((any -> any) -> c_true) & ((sym | lang | null | env | vec | list) -> c_false)
 
-isList: ((list | expr | language | closure | builtin | special | symbol | env | (v[int](scalar))) -> false) & ((nil) | (pairlist) -> true)
+isList: ((sym | vec | env | (any -> any) | list) -> c_false) & ((null) | (lang) -> c_true)
 
-isNewList: ((expr | language | closure | builtin | special | symbol | pairlist | env | (v[int](scalar))) -> false) & ((nil) | (list) -> true)
+isNewList: ((env | sym | (any -> any) | lang | vec) -> c_false) & ((null) | (list) -> c_true)
 

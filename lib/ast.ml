@@ -92,6 +92,24 @@ module AttrProj = struct
   let proj ty = Rstt.Attr.proj_content ty
 end
 
+module AttrConstr = struct
+  open Rstt
+  let cons classes tys =
+    match tys with
+    | [ty] -> Attr.mk { content=ty ; classes }
+    | _ -> assert false
+  let cdom classes ty =
+    try
+      Attr.destruct ty
+      |> List.filter_map (fun (ps,_) ->
+        let content = ps |> List.map (fun a -> a.Attr.content) |> Ty.conj in
+        let ty' = Attr.mk { content ; classes } in
+        if Ty.leq ty' ty then Some [content] else None
+      )
+    with Invalid_argument _ -> []
+end
+
+
 (* Transformation to MLsem ast
   GTy is used for gradual types, Ty for "normal" types
 *)
@@ -150,8 +168,13 @@ let rec aux_e (eid, e) =
       in
       let body = List.fold_left add_let (aux_e body) (List.combine (List.map snd params) arg_types) in
       (* Suggested type decomposition, domain, type variable, body*)
-      A.Lambda ([], GTy.mk @@ Tuple.mk arg_types, 
-      MVariable.create Immut None, body) 
+      let lambda = A.Lambda ([], GTy.mk @@ Tuple.mk arg_types, 
+        MVariable.create Immut None, body) in
+        (* we could give a more precise type for the attributes: noclass But then it displays <> after the closures, which is
+          too much noise! *)
+        A.Constructor
+          (CCustom { cname="cattr" ; cgen=true ; cdom=AttrConstr.cdom Rstt.Classes.any ; cons=AttrConstr.cons Rstt.Classes.any },
+           [Eid.unique(), lambda])
     | Switch (e, cases) ->
         let e = aux_e e in
         let make_pattern_case acc (case_e, body_e, has_break) =

@@ -1,6 +1,7 @@
 // Alias used by polymorphic builtins (scalar R vectors' element types)
 any_scalar = int | dbl | lgl | chr | clx | raw
 any_prim = p(int) | p(dbl) | p(lgl) | p(chr) | p(clx) | p(raw)
+any_r_not_vec = env | null | sym | list | lang | (any -> any)
 
 error: empty -> any
 fail: any -> empty
@@ -53,7 +54,7 @@ CDR: t(any) -> any
 >__2: t(c_int, c_int) -> c_bool & t(c_double, c_double) -> c_bool & t(any, any) -> c_bool
 
 // TODO: add more non vector types for the 2nd overload
-TYPEOF: (t(v('a)) -> 'a) & (t(('b & vec & env)) -> 'b)
+TYPEOF: (t(v('a)) -> 'a) & (t('b & ~vec & any_r_not_vec) -> 'b)
 
 NA_INTEGER: c_int_na
 
@@ -68,15 +69,15 @@ CPLXSXP: p(clx)
 STRSXP: p(chr)
 LGLSXP: p(lgl)
 NILSXP: null
-VECSXP: p(vec)
-EXPRSXP: any
-CLOSXP: any
-BUILTINSXP: any
-SPECIALSXP: any
+VECSXP: list
+EXPRSXP: {;lang|sym}
+CLOSXP: any -> any
+BUILTINSXP: any -> any
+SPECIALSXP: any -> any
 CHARSXP: p(chr)
-SYMSXP: any
-LISTSXP: any
-LANGSXP: any
+SYMSXP: sym
+LISTSXP: lang
+LANGSXP: lang
 ENVSXP: env
-ANYSXP: any | vec
+ANYSXP: any_r_not_vec | vec
 DOTSXP: any
