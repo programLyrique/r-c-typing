@@ -6,7 +6,7 @@ Prep_incl (
     "\n"
   )
 )
-test_while: ∀'a. ('a & (v[int](int))) -> 'a & (v[int](int))
+test_while: ∀'a. ('a & int) -> 'a & int
 
-sum_while: (v[int](dbl)) -> v[1](dbl)
+sum_while: (dbl) -> dbl1
 

@@ -6,5 +6,5 @@ Prep_incl (
     "\n"
   )
 )
-sum_all: (v[int](dbl)) -> v[1](dbl)
+sum_all: (dbl) -> dbl1
 
