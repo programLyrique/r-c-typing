@@ -9,6 +9,7 @@ SEXP r_plus_scalar_real(SEXP a, SEXP b) {
     return result;
 }
 
+// TODO: for this test, we should add a type constraint on the argument!
 SEXP make_int_or_float(int test) {
     SEXP result;
     if (test) {
@@ -137,6 +138,7 @@ SEXP r_plus_all(SEXP a, SEXP b) {
     }
 }
 
+// also check the type of this
 static R_INLINE int R_integer_plus(int x, int y, bool *pnaflag)
 {
     if (x == NA_INTEGER || y == NA_INTEGER)

@@ -50,8 +50,8 @@ CDR: t(any) -> any
 &&__2: (t(c_false, c_false) | t(c_true, c_false) | t(c_false, c_true) -> c_false) & (t(c_true, c_true) -> c_true)
 ==__2: t(any, any) -> c_bool
 !__1: (t(c_true) -> c_false) & (t(c_false) -> c_true)
-<__2: t(c_int, c_int) -> c_bool & t(c_double, c_double) -> c_bool & t(any, any) -> c_bool
->__2: t(c_int, c_int) -> c_bool & t(c_double, c_double) -> c_bool & t(any, any) -> c_bool
+<__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
+>__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
 
 // TODO: add more non vector types for the 2nd overload
 TYPEOF: (t(v('a)) -> 'a) & (t('b & ~vec & any_r_not_vec) -> 'b)

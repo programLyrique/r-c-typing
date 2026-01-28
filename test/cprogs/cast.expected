@@ -1,8 +1,8 @@
-test_simple_cast: () -> int
+test_simple_cast: () -> c_int
 
-test_multiple_casts: () -> int
+test_multiple_casts: () -> c_int
 
-test_nested_cast: () -> int
+test_nested_cast: () -> c_int
 
-test_ptr_cast: () -> int
+test_ptr_cast: () -> c_int
 

@@ -6,23 +6,23 @@ Prep_incl (
     "\n"
   )
 )
-r_plus_scalar_real: (v[int](dbl), v[int](dbl)) -> v[1](dbl)
+r_plus_scalar_real: (dbl, dbl) -> dbl1
 
-make_int_or_float: ((int \ 0 | true) -> v[1](int)) & ((~(int | bool)) | (0 | false) -> v[int](int))
+make_int_or_float: ((c_true) -> int1) & ((~c_bool) | (c_false) -> int)
 
-incr_real: (v[1](dbl)) -> v[1](dbl)
+incr_real: (dbl1) -> dbl1
 
-test_int_or_real: ((~(v[int](dbl) | v[int](int))) -> ()) & ((v[int](dbl)) -> 0) & ((v[int](int)) -> 1)
+test_int_or_real: ((dbl) -> c_false) & ((~(dbl | int)) -> ()) & ((int) -> c_true)
 
-test_isInt: ((~(v[int](int))) -> 0) & ((v[int](int)) -> 1)
+test_isInt: ((int) -> c_true) & ((~int) -> c_false)
 
-test_isInt2: ((~(v[int](int))) -> 0) & ((v[int](int)) -> 1)
+test_isInt2: ((int) -> c_true) & ((~int) -> c_false)
 
-r_plus_scalar_strict: ((v[int](dbl), v[int](dbl)) -> v[1](dbl)) & ((v[int](int), v[int](int)) -> v[1](int))
+r_plus_scalar_strict: ((int, int) -> int1) & ((dbl, dbl) -> dbl1)
 
-r_plus_scalar: ((v[int](int), v[int](int)) -> v[1](int)) & ((v[int](dbl), v[int](dbl)) | (v[int](dbl), v[int](int)) | (v[int](int), v[int](dbl)) -> v[1](dbl))
+r_plus_scalar: ((int, int) -> int1) & ((int, dbl) | (dbl, int) | (dbl, dbl) -> dbl1)
 
-r_plus_all: ((v[int](int), v[int](int)) -> v[int](int)) & ((v[1](int), v[1](int)) -> v[1](int)) & ((v[1](int), v[1](dbl)) | (v[1](dbl), v[1](int)) | (v[1](dbl), v[1](dbl)) -> v[1](dbl)) & ((v[int](int), v[int](dbl)) | (v[int](dbl), v[int](int)) | (v[int](dbl), v[int](dbl)) -> v[int](dbl))
+r_plus_all: ((int1, int1) -> int1) & ((int, int) -> int) & ((int1, dbl1) | (dbl1, int1) | (dbl1, dbl1) -> dbl1) & ((int, dbl) | (dbl, int) | (dbl, dbl) -> dbl)
 
-R_integer_plus: ((int, 0, any) | (int, (1..), ~Null) | (int, (1..), Null) | (int, (..-1), ~Null) | (int, (..-1), Null) -> C_int?) & ((C_double | int, (1..), ~Null) | (C_double | int, (1..), Null) | (C_double | int, C_double | 0, any) | (C_double | int, (..-1), ~Null) | (C_double | int, (..-1), Null) -> C_double | na | int)
+R_integer_plus: ((c_double, c_double, any) -> c_double | c_int_na) & ((c_int_na, c_int_na, any) -> c_int_na) & (tuple3 -> any)
 
