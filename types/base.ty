@@ -27,13 +27,13 @@ UNPROTECT: t(c_int) -> c_void
 
 // Arithmetic
 
-+__2: t(c_int, c_int) -> c_int & t(c_double, c_double) -> c_double & t(any, any) -> any & t(c_int_na, c_int_na) -> c_int_na & t(c_int_na, c_int) -> c_int_na & t(c_int, c_int_na) -> c_int_na
++__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na)
 
--__2: t(c_int, c_int) -> c_int & t(c_double, c_double) -> c_double & t(any, any) -> any & t(c_int_na, c_int_na) -> c_int_na & t(c_int_na, c_int) -> c_int_na & t(c_int, c_int_na) -> c_int_na
+-__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na)
 
 %__2: t(c_int, c_int) -> c_int
 
-++__1: t(c_int) -> c_int & t(c_double) -> c_double & t(any) -> any
+++__1: (t(c_int) -> c_int) & (t(c_double) -> c_double) & (t(any) -> any)
 
 *__1: t(*'a) -> 'a
 &__1: t('a) -> *'a
