@@ -8,11 +8,11 @@ Prep_incl (
 )
 r_plus_scalar_real: (dbl, dbl) -> dbl1
 
-make_int_or_float: ((c_true) -> int1) & ((~c_bool) | (c_false) -> int)
+make_int_or_float: ((c_true) -> int1) & ((c(..-1) | c(2..) | c_na) | (c_false) -> int)
 
 incr_real: (dbl1) -> dbl1
 
-test_int_or_real: ((dbl) -> c_false) & ((~(int | dbl)) -> ()) & ((int) -> c_true)
+test_int_or_real: ((dbl) -> c_false) & ((~(dbl | int)) -> ()) & ((int) -> c_true)
 
 test_isInt: ((int) -> c_true) & ((~int) -> c_false)
 
@@ -24,5 +24,5 @@ r_plus_scalar: ((int, int) -> int1) & ((int, dbl) | (dbl, int) | (dbl, dbl) -> d
 
 r_plus_all: ((int1, int1) -> int1) & ((int, int) -> int) & ((int1, dbl1) | (dbl1, int1) | (dbl1, dbl1) -> dbl1) & ((int, dbl) | (dbl, int) | (dbl, dbl) -> dbl)
 
-R_integer_plus: ((c_double, c_double, any) -> c_double | c_int_na) & (tuple3 -> any) & ((c_int_na, c(1..), ~null) | (c_int_na, c(1..), null) | (c_int_na, c_false | c_na, any) | (c_int_na, c(..-1), ~null) | (c_int_na, c(..-1), null) -> c_int_na)
+R_integer_plus: (c_int_na, c(1..), *c_bool) | (c_int_na, c_false | c_na, *c_bool) | (c_int_na, c(..-1), *c_bool) -> c_int_na
 

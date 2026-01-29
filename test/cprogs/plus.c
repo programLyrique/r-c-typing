@@ -137,7 +137,7 @@ SEXP r_plus_all(SEXP a, SEXP b) {
     }
 }
 
-// also check the type of this
+// The type could be simplified by merging the 3 branches
 static R_INLINE int R_integer_plus(int x, int y, bool *pnaflag)
 {
     if (x == NA_INTEGER || y == NA_INTEGER)

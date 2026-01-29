@@ -34,6 +34,11 @@ type ctype =
  | Any (* Do we actually need that?*)
  [@@deriving show]
 
+  (*level is the number of pointer indirections*)
+  let rec build_ptr level ty =
+    if level <= 0 then ty
+    else build_ptr (level - 1) (Ptr ty)
+
 type e' =
 | Const of const
 | Id of Variable.t
@@ -77,7 +82,7 @@ let rec typeof_ctype ct =
   let open Rstt in 
   match ct with 
   | Void -> Cenums.void
-  | Int -> Cint.any
+  | Int -> Cint.any_na
   | Float -> Cenums.double
   | Char -> Cenums.char
   | Bool -> Cint.bool
@@ -159,9 +164,13 @@ let rec aux_e (eid, e) =
       (* Create lets in the body for each argument: match parameter names with
        type variable in the domain *)
       let arg_types = List.map 
-        (function _ -> 
-          TVar.typ (TVar.mk KInfer None)) 
-          params
+        (function (cty, _) -> 
+          (* Special case of SEXPs. we coul restrict it to actual SEXP but
+           typeof_ctype currently does not return all possible sexp types for SEXP. *)
+          match cty with 
+          | SEXP -> Ty.cap Rstt.Attr.any (TVar.typ (TVar.mk KInfer None))
+          | _ -> Ty.cap (typeof_ctype cty) (TVar.typ (TVar.mk KInfer None))
+        )  params
       in  
       let add_let body (p, ty) = 
         Eid.unique(), A.Let ([], p, (Eid.unique (), A.Value (GTy.mk ty)), body)

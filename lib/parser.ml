@@ -108,19 +108,19 @@ let aux_type_descriptor (type_desc: type_descriptor) : Ast.ctype =
      TODO: Handle const, volatile, pointers, arrays, etc. *)
   aux_abstract_declarator base_type abstract_decl
 
-let rec aux_decl_name (decl : declarator) : string =
+let rec aux_decl_name (decl : declarator) : int * string =
   match decl with
-  | `Id tok -> token_to_string tok
-  | `Func_decl (decl, _, _, _) -> aux_decl_name decl
-  | `Poin_decl (_,_,_,_,decl) -> aux_decl_name decl (* Should make it clear this is a pointer when it will be useful. *)
+  | `Id tok -> (0, token_to_string tok)
+  | `Func_decl (decl, _, _, _) ->  aux_decl_name decl
+  | `Poin_decl (_,_,_,_,decl) -> let (level, name) = aux_decl_name decl in (level + 1, name)
   | _ -> failwith "Not supported yet: function name"
 
 let aux_param (p: anon_choice_param_decl_4ac2852) = 
   match p with 
   | `Param_decl (decl_spec, Some (`Decl decl), _) -> 
     let ty = aux_decl_spec decl_spec in
-    let name = aux_decl_name decl in
-    (ty, name)
+    let level, name = aux_decl_name decl in
+    (Ast.build_ptr level ty, name)
   | `Vari_param _ -> failwith "Not supported yet: variable number of parameters (...) in declaration"
   | _ -> failwith "Not supported yet: parameter declaration"
 
@@ -432,7 +432,9 @@ and aux_statement (stmt: statement) =
 and aux_declaration typ (decl: anon_choice_opt_ms_call_modi_decl_decl_opt_gnu_asm_exp_2fa2f9e) =
   match decl with 
   |`Init_decl (declr, _, `Exp exp) -> 
-      let name = A.Id (aux_decl_name declr) in
+      let level,name = aux_decl_name declr in
+      let name = A.Id name in
+      let typ = Ast.build_ptr level typ in
       let e = aux_expression exp in
       let var_decl = (Mlsem.Common.Position.dummy, A.VarDeclare (typ, (Mlsem.Common.Position.dummy, name))) in
       let var_assign = (Mlsem.Common.Position.dummy, A.VarAssign ((Mlsem.Common.Position.dummy, name), e)) in
@@ -530,7 +532,7 @@ let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
   match item with
   | `Func_defi (_, decl_spec, _, decl, body) -> (
      let return_type = aux_decl_spec decl_spec in 
-     let name = aux_decl_name decl in 
+     let _,name = aux_decl_name decl in 
      let params = aux_params decl in
      let body = aux_body body in 
      Some (Mlsem.Common.Position.dummy, Fundef (return_type, name, params, body))
