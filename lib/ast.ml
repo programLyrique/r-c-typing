@@ -250,23 +250,6 @@ let rec aux_e (eid, e) =
 
   let recognize_const_comparison e =
     let f expr = match expr with 
-    (* Should not be needed actually... *)
-    (* Special case: TYPEOF(arg) == builtin_constant *)
-    (* | id, (Binop (op, (_, Call ((_, Id typeof_fn), [arg])), (_, Id v)) | 
-            Binop (op, (_, Id v), (_, Call ((_, Id typeof_fn), [arg]))))
-    when (match Variable.get_name typeof_fn with Some "TYPEOF" -> true | _ -> false) &&
-         Variable.equal op Defs.BuiltinOp.eq ->
-      (match Defs.BuiltinVar.find_builtin v with 
-      | Some built -> id, TyCheck (arg, built)
-      | None -> expr)
-    (* Special case: TYPEOF(arg) != builtin_constant *)
-    | id, (Binop (op, (_, Call ((_, Id typeof_fn), [arg])), (_, Id v)) | 
-            Binop (op, (_, Id v), (_, Call ((_, Id typeof_fn), [arg]))))
-    when (match Variable.get_name typeof_fn with Some "TYPEOF" -> true | _ -> false) &&
-         Variable.equal op Defs.BuiltinOp.neq ->
-      (match Defs.BuiltinVar.find_builtin v with 
-      | Some built -> id, TyCheck (arg, Ty.neg built)
-      | None -> expr) *)
     | id, (Binop (op, e, (_, Const c)) | Binop (op, (_, Const c), e))
     when Variable.equal op Defs.BuiltinOp.eq -> id, TyCheck (e, typeof_const c)
     | id, (Binop (op, e, (_, Id v)) | Binop (op, (_, Id v), e))
@@ -283,10 +266,10 @@ let rec aux_e (eid, e) =
       | None -> expr)
     | id, (Binop (op, e, (_, Const (CInt c))) | Binop (op, (_, Const (CInt c)), e))
     when Variable.equal op Defs.BuiltinOp.inf_strict -> 
-      id, TyCheck (e, Ty.interval None (Some (Z.of_int (c - 1)))) (* Ty.interval is closed by < is open on the right*)
+      id, TyCheck (e, Rstt.Cint.interval (None, Some (c-1))) (* interval is closed by < is open on the right*)
     | id, (Binop (op, e, (_, Const (CInt c))) | Binop (op, (_, Const (CInt c)), e))
     when Variable.equal op Defs.BuiltinOp.sup_strict -> 
-      id, TyCheck (e, Ty.interval (Some (Z.of_int (c + 1))) None) (* Ty.interval is closed by > is open on the left*)
+      id, TyCheck (e, Rstt.Cint.interval (Some (c+1), None)) (* interval is closed by > is open on the left*)
     | e -> e
     in
     map f e
