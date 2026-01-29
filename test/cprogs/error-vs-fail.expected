@@ -9,6 +9,6 @@ Prep_incl (
 assertPositive_error:
 untypeable: untypeable application
 function: arrow
-argument: C_str
-assertPositive_fail: ∀'a,'b. ('a & (v['b & 1](dbl))) -> 'a & (v['b & 1](dbl))
+argument: c_string
+assertPositive_fail: ∀'a,'b. ('a & dbl1) -> 'a & dbl1
 
