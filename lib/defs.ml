@@ -11,6 +11,10 @@ let any_sexp = let open Rstt.Prim in
 
 let any_c = Ty.disj [Cint.any; Cenums.char; Cenums.double; Cptr.any]
 
+let exprsxp = Rstt.Builder.(
+  build TIdMap.empty (TList ([], [], TCup (TLang, TSym)))
+)
+
 let tobool, tobool_t =
   let v = MVariable.create Immut (Some "tobool") in
   let def = Arrow.mk Ty.any Cint.bool in
@@ -55,7 +59,7 @@ module BuiltinVar = struct
       ("LGLSXP", Prim.Lgl.any |> Prim.mk);
       ("NILSXP", Null.any |> Attr.mk_anyclass);
       ("VECSXP", Rstt.Lst.any |> Attr.mk_anyclass);
-      ("EXPRSXP", Prim.any);
+      ("EXPRSXP", exprsxp);
       ("CLOSXP", Arrow.mk Ty.any Ty.any |> Attr.mk_anyclass);
       ("BUILTINSXP", Arrow.mk Ty.any Ty.any |> Attr.mk_anyclass);
       ("SPECIALSXP", Arrow.mk Ty.any Ty.any |> Attr.mk_anyclass);

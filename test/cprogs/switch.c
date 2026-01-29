@@ -34,7 +34,7 @@ INLINE_FUN Rboolean isVectorList(SEXP s)
 {
     switch (TYPEOF(s)) {
     case VECSXP:
-    case EXPRSXP:
+    case EXPRSXP:// currently encoded as {;lang|sym}
 	return TRUE;
     default:
 	return FALSE;
@@ -83,7 +83,7 @@ INLINE_FUN R_len_t length3(SEXP s)
     int type = TYPEOF(s);
     if (type == NILSXP) {
         return 0;
-    } else if (type == LGLSXP || type == INTSXP || type == REALSXP) {
+    } else if (type == LGLSXP || type == INTSXP || type == REALSXP || type == CPLXSXP || type == STRSXP || type == RAWSXP) {
         return LENGTH(s);
     } else {
         return 1;

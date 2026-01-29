@@ -1,7 +1,8 @@
 // Alias used by polymorphic builtins (scalar R vectors' element types)
 any_scalar = int | dbl | lgl | chr | clx | raw
 any_prim = p(int) | p(dbl) | p(lgl) | p(chr) | p(clx) | p(raw)
-any_r_not_vec = env | null | sym | list | lang | (any -> any)
+expr = {;lang|sym}
+any_r_not_vec = env | null | sym | list | lang | (any -> any) | expr
 
 error: empty -> any
 fail: any -> empty

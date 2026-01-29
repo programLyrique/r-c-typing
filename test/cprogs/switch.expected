@@ -6,15 +6,15 @@ Prep_incl (
     "\n"
   )
 )
-isInteger2: ((nil | list | expr | language | closure | builtin | special | symbol | pairlist | env | (v[int](tt | ff | dbl | clx | chr | raw))) -> 0) & ((v[int](scalar) & ~v[int](int)) -> C_bool) & ((v[int](int)) -> 1)
+isInteger2: (((any -> any) | sym | env | list | v(chr | clx | dbl | lgl | raw) | lang | null) -> c_false) & ((int) -> c_true)
 
-isInteger3: ((nil | list | expr | language | closure | builtin | special | symbol | pairlist | env | (v[int](tt | ff | dbl | clx | chr | raw))) -> 0) & ((v[int](int)) -> 1) & ((v[int](scalar)) -> C_bool)
+isInteger3: ((lang | null | (any -> any) | list | sym | v(chr | clx | dbl | lgl | raw) | env) -> c_false) & ((int) -> c_true)
 
-checkList: ((list) -> 1) & ((nil | expr | language | closure | builtin | special | symbol | pairlist | env | (v[int](scalar))) -> 0)
+checkList: ((list) -> c_true) & (((any -> any) | lang | vec | env | null | sym) -> c_false)
 
-isVectorList: ((nil | language | closure | builtin | special | symbol | pairlist | env | (v[int](scalar))) -> 0) & ((list | expr) -> 1)
+isVectorList: ((list) -> c_true) & ((vec | env | null | lang | sym | (any -> any)) -> c_false)
 
-length2: ∀'a. ((v['a & int](scalar)) -> 'a) & ((env) -> int) & ((nil) -> 0)
+length2: ∀'a. ((vec[int(i('a & int))]) -> cint('a & int)) & ((null) -> c_false) & ((env) | ((any -> any) | sym | lang) -> c_int)
 
-length3: ∀'a. ((v['a & int](scalar) & ~v[int](clx | chr | raw)) -> 1 | 'a) & ((v['a & int](lgl)) | (v['a & int](int)) | (v['a & int](dbl)) -> 'a) & ((list | expr | language | closure | builtin | special | symbol | pairlist | env | (v[int](clx | chr | raw))) -> 1) & ((nil) -> 0)
+length3: ∀'a. ((lgl[int(i('a & int))]) | (int[int(i('a & int))]) | (dbl[int(i('a & int))]) | (clx[int(i('a & int))]) | (chr[int(i('a & int))]) | (raw[int(i('a & int))]) -> cint('a & int)) & ((lang | sym | env | (any -> any) | list) -> c_true) & ((null) -> c_false)
 
