@@ -47,19 +47,19 @@ module BuiltinVar = struct
   let all = List.map 
     (* Types that are not for vectors should get attributes. *)
     (fun (name, ty) -> mk_builtin name ty)
-    [ ("INTSXP", Prim.Int.any); (* Primitive types*)
-      ("REALSXP", Prim.Dbl.any);
-      ("RAWSXP", Prim.Raw.any);
-      ("CPLXSXP", Prim.Clx.any);
-      ("STRSXP", Prim.Chr.any); (* Should not need to use it as str is a vector of charsxp*)
-      ("LGLSXP", Prim.Lgl.any);
-      ("NILSXP", Null.any |> Attr.mk_anyclass); 
-      ("VECSXP", Rstt.Lst.any |> Attr.mk_anyclass); (* Lists of any, with any attributes *)
+    [ ("INTSXP", Prim.Int.any |> Prim.mk);
+      ("REALSXP", Prim.Dbl.any |> Prim.mk);
+      ("RAWSXP", Prim.Raw.any |> Prim.mk);
+      ("CPLXSXP", Prim.Clx.any |> Prim.mk);
+      ("STRSXP", Prim.Chr.any |> Prim.mk);
+      ("LGLSXP", Prim.Lgl.any |> Prim.mk);
+      ("NILSXP", Null.any |> Attr.mk_anyclass);
+      ("VECSXP", Rstt.Lst.any |> Attr.mk_anyclass);
       ("EXPRSXP", Prim.any);
-      ("CLOSXP", Arrow.mk Ty.any Ty.any |> Attr.mk_anyclass); (* Functions are arrows from any to any, with any attributes *)
+      ("CLOSXP", Arrow.mk Ty.any Ty.any |> Attr.mk_anyclass);
       ("BUILTINSXP", Arrow.mk Ty.any Ty.any |> Attr.mk_anyclass);
       ("SPECIALSXP", Arrow.mk Ty.any Ty.any |> Attr.mk_anyclass);
-      ("CHARSXP", Prim.Chr.any); (* We should actually differentiate between STRSXP and CHARSXP: STRSXP is a vector of CHARSXP?*)
+      ("CHARSXP", Prim.Chr.any |> Prim.mk);
       ("SYMSXP", Sym.any |> Attr.mk_anyclass);
       ("LISTSXP", Lang.any |> Attr.mk_anyclass);
       ("LANGSXP", Lang.any |> Attr.mk_anyclass);
