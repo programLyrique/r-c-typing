@@ -37,7 +37,6 @@ SEXP incr_real(SEXP a) {
     return result;
 }
 
-
 int test_int_or_real(SEXP a) {
     if (isInteger(a)) {
         return 1;
