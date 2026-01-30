@@ -10,7 +10,7 @@ let main opts filename =
   let idenv = Runner.StrMap.empty in
   let env = Defs.initial_env in
   Runner.run_on_file opts filename idenv env |> ignore;
-  Mlsem.Types.Recording.save_to_file "mlsen_recording.json" (Mlsem.Types.Recording.tally_calls ());
+  Mlsem.Types.Recording.save_to_file "mlsem_recording.json" (Mlsem.Types.Recording.tally_calls ());
   ()
 
 let cst_opt =

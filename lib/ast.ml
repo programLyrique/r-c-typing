@@ -15,6 +15,7 @@ type const =
 | CBool of bool
 | CNull
 | CNa
+| CArray of const list
 [@@deriving show]
 
 type ctype = 
@@ -34,10 +35,10 @@ type ctype =
  | Any (* Do we actually need that?*)
  [@@deriving show]
 
-  (*level is the number of pointer indirections*)
-  let rec build_ptr level ty =
-    if level <= 0 then ty
-    else build_ptr (level - 1) (Ptr ty)
+(*level is the number of pointer indirections*)
+let rec build_ptr level ty =
+  if level <= 0 then ty
+  else build_ptr (level - 1) (Ptr ty)
 
 type e' =
 | Const of const
@@ -67,7 +68,7 @@ type funcs = e list (* list of function definitions *)
 
 
 
-let typeof_const c = 
+let rec typeof_const c = 
   let open Rstt in 
   match c with 
   | CChar _ ->  Cenums.char
@@ -77,6 +78,8 @@ let typeof_const c =
   | CBool v -> if v then Cint.tt else Cint.ff
   | CNull -> Null.any
   | CNa -> Cint.na
+  | CArray [] -> Cptr.mk Defs.any_c
+  | CArray (elem::_) -> Cptr.mk (typeof_const elem)
 
 let rec typeof_ctype ct = 
   let open Rstt in 
@@ -115,6 +118,7 @@ module AttrConstr = struct
 end
 
 
+
 (* Transformation to MLsem ast
   GTy is used for gradual types, Ty for "normal" types
 *)
@@ -128,6 +132,13 @@ let rec aux_e (eid, e) =
     | VarAssign (v,e2) -> A.VarAssign (v, aux_e e2)
     | Unop (op,e) -> aux (Call ((Eid.unique (), Id op), [e]))
     | Binop (op,e1,e2) -> aux (Call ((Eid.unique (), Id op), [e1; e2]))
+    (* Some special cases for some calls*)
+    | Call ((_, Id v), [(_,Id vty); ( _ , Const (CInt n)) ]) 
+      when (Variable.get_name v = Some "allocVector") && 
+           (Variable.get_name vty = Some "VECSXP") ->
+        let ty = Defs.allocVector_vecsxp_ty n in
+        A.Value (GTy.mk ty)
+    (* General case for calls *)
     | Call (f,args) -> 
         let es = List.map aux_e args in 
         (* State how arguments of a function are encoded: here, they are in a tuple*)
@@ -282,7 +293,6 @@ let rec aux_e (eid, e) =
     | e -> e
     in
     map f e
-
 
   let to_mlsem e = 
     e |> recognize_const_comparison |> aux_e |> Mlsem.Lang.Transform.transform

@@ -19,6 +19,7 @@ type const =
  | CBool of bool
  | CNull
  | CNa
+ | CArray of const list
  [@@deriving show]
 
 
@@ -144,7 +145,7 @@ let add_def pid eid e str =
   | None -> Eid.unique (), Ast.Declare (v, e)
   | _ -> e
 
-let aux_const c = 
+let rec aux_const c = 
   match c with 
   | CChar c -> Ast.CChar c
   | CStr s -> Ast.CStr s 
@@ -153,6 +154,7 @@ let aux_const c =
   | CNull -> Ast.CNull
   | CNa -> Ast.CNa
   | CBool b -> Ast.CBool b
+  | CArray lst -> Ast.CArray (List.map aux_const lst)
 
 
 let rec aux_e env (pos,e) = 

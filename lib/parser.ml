@@ -113,7 +113,10 @@ let rec aux_decl_name (decl : declarator) : int * string =
   | `Id tok -> (0, token_to_string tok)
   | `Func_decl (decl, _, _, _) ->  aux_decl_name decl
   | `Poin_decl (_,_,_,_,decl) -> let (level, name) = aux_decl_name decl in (level + 1, name)
-  | _ -> failwith "Not supported yet: function name"
+  (* Array just adds a pointer indirection currently. We could also create an array type for the C side*)
+  | `Array_decl (decl,_,_,_,_) -> let (level, name) = aux_decl_name decl in (level + 1, name)
+  | _ -> Boilerplate.map_declarator () decl |> Tree_sitter_run.Raw_tree.to_channel stderr ;
+    failwith "Not supported yet: function name"
 
 let aux_param (p: anon_choice_param_decl_4ac2852) = 
   match p with 
@@ -167,11 +170,17 @@ and aux_string (s: string_) =
     | `Esc_seq (loc, s) -> (loc,s)
   in
   match s with 
-  | `Str_lit (_prefix,escaped, _) -> 
+  | `Str_lit (prefix,escaped,(end_loc,_)) -> 
     let pos_str = List.map unescape escaped in
     let str = String.concat "" (List.map snd pos_str) in
-    let start_loc = fst (List.hd pos_str) in
-    let end_loc = fst (List.nth pos_str (List.length pos_str - 1) ) in
+    let start_loc =
+      match prefix with
+      | `LDQUOT (loc, _) -> loc
+      | `UDQUOT_c163aae (loc, _) -> loc
+      | `UDQUOT_df3447d (loc, _) -> loc
+      | `U8DQUOT (loc, _) -> loc
+      | `DQUOT (loc, _) -> loc
+    in
     (locs_to_pos start_loc end_loc, A.Const (A.CStr str))
   | _ -> failwith "Not supported yet: strings with escaped characters or concatenated strings"
 and aux_num_lit  s = 
@@ -429,20 +438,39 @@ and aux_statement (stmt: statement) =
  match stmt with 
  | `Case_stmt st -> aux_case_statement st
  | `Choice_attr_stmt st -> aux_non_case_statement st
+and aux_initializer_list (init_list: initializer_list) =
+ let (l1,_), initializers, _, (l2,_) = init_list in 
+ let pos = locs_to_pos l1 l2 in
+ let process_init (init : anon_choice_init_pair_1a6981e) =
+   match init with
+   | `Exp e -> (let res = aux_expression e in
+       match snd res with 
+      | A.Const c -> c 
+      | _ -> failwith "Not supported yet: initializer lists with non-constant expressions")
+   | _ -> failwith "Not supported yet: initializer lists with nested initializer lists or pairs"
+ in
+ let vals = match initializers with 
+  | None -> []
+  | Some (init1,inits) ->
+    (process_init init1) :: List.map (fun (_, init) -> process_init init) inits
+  in
+ (pos, A.Const (A.CArray vals)) 
 and aux_declaration typ (decl: anon_choice_opt_ms_call_modi_decl_decl_opt_gnu_asm_exp_2fa2f9e) =
   match decl with 
-  |`Init_decl (declr, _, `Exp exp) -> 
+  |`Init_decl (declr, _, init) -> 
       let level,name = aux_decl_name declr in
       let name = A.Id name in
       let typ = Ast.build_ptr level typ in
-      let e = aux_expression exp in
+      let e = match init with 
+        | `Exp expr -> aux_expression expr
+        | `Init_list init_list -> aux_initializer_list init_list
+      in
       let var_decl = (Mlsem.Common.Position.dummy, A.VarDeclare (typ, (Mlsem.Common.Position.dummy, name))) in
       let var_assign = (Mlsem.Common.Position.dummy, A.VarAssign ((Mlsem.Common.Position.dummy, name), e)) in
       (Mlsem.Common.Position.dummy, A.Seq [var_decl; var_assign])
   | `Opt_ms_call_modi_decl_decl_opt_gnu_asm_exp (_, declr, _) -> 
       let name = aux_decl2_name declr in
       (Mlsem.Common.Position.dummy, A.VarDeclare (typ, (Mlsem.Common.Position.dummy, A.Id name)))
-  | _ -> failwith "Not supported yet: other declaration types or initializer list"
 and aux_declarations ((decl_type, decl1, decls, _loc2): declaration) =
   let typ = aux_decl_spec decl_type in
   (Mlsem.Common.Position.dummy, A.Seq ((aux_declaration typ decl1) :: (List.map (fun (_, d) -> aux_declaration typ d) decls)))

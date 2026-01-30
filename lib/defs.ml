@@ -12,8 +12,14 @@ let any_sexp = let open Rstt.Prim in
 let any_c = Ty.disj [Cint.any; Cenums.char; Cenums.double; Cptr.any]
 
 let exprsxp = Rstt.Builder.(
-  build TIdMap.empty (TList ([], [], TCup (TLang, TSym)))
+  build TIdMap.empty (TList ([], [], TOption (TCup (TLang, TSym))))
 )
+
+(* Special type constructors for lists*)
+let allocVector_vecsxp_ty n =
+  let open Rstt.Builder in 
+  let builder = TList (List.init n (fun _ -> TAny), [], TOption TEmpty) in
+  build TIdMap.empty builder
 
 let tobool, tobool_t =
   let v = MVariable.create Immut (Some "tobool") in
