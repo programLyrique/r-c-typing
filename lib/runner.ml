@@ -54,7 +54,7 @@ let infer_ast visible opts (idenv, env) (ast : Ast.e) =
         let renvs = System.Refinement.refinements env mlsem_ast in
         let reconstructed = System.Reconstruction.infer env renvs mlsem_ast in
         let typ = System.Checker.typeof_def env reconstructed mlsem_ast in
-        let tys = TyScheme.norm_and_simpl typ in 
+        let tys = TyScheme.norm_and_simpl typ in
         if visible then Format.printf "%a: @[<h>%a@]@.@." Variable.pp v TyScheme.pp_short tys ;
         let (vars, typ) = TyScheme.get tys in 
         let typ = GTy.ub typ in 
