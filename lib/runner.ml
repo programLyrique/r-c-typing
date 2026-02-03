@@ -39,7 +39,7 @@ let extend_env mlast env =
 let infer_ast visible opts (idenv, env) (ast : Ast.e) =
   let name,v = 
     match ast with 
-    | _,Ast.Function (name, _, _, _) -> name,MVariable.create Immut (Some name)
+    | _,_,Ast.Function (name, _, _, _) -> name,MVariable.create Immut (Some name)
     | _ -> failwith "Expected a function definition at the top level."
   in
   let mlsem_ast = Ast.to_mlsem ast in 

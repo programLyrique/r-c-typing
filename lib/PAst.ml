@@ -142,7 +142,7 @@ let add_var env str =
 let add_def pid eid e str =
   let v = StrMap.find str eid in
   match StrMap.find_opt str pid with
-  | None -> Eid.unique (), Ast.Declare (v, e)
+  | None -> Eid.unique (), Ast.VarMap.empty, Ast.Declare (v, e)
   | _ -> e
 
 let rec aux_const c = 
@@ -171,7 +171,7 @@ let rec aux_e env (pos,e) =
         (List.map (aux_e env) args) @ [aux_e env e2]
       )
   | VarAssign ((loc1, Unop (_op, e1)) ,e2) -> (* Currently, remove the * or & operator *)
-     aux_e env (loc1, VarAssign(e1, e2)) |> snd
+     let _,_,e = aux_e env (loc1, VarAssign(e1, e2)) in e
   | VarAssign (_,_) -> failwith ("Unexpected left-hand side in assignment. Got: " ^ show_e (pos,e))
   | Call (f, args) -> Ast.Call (aux_e env f, List.map (aux_e env) args)
   | If (cond, then_, else_) -> 
@@ -183,19 +183,19 @@ let rec aux_e env (pos,e) =
       (* Transform For into While *)
       let init_e = aux_e env init in
       let cond_e = match cond with 
-        | None -> (Eid.unique (), Ast.Const (Ast.CBool true))
+        | None -> (Eid.unique (), Ast.VarMap.empty, Ast.Const (Ast.CBool true))
         | Some e -> aux_e env e
       in
       let incr_e = match incr with 
-        | None -> (Eid.unique (), Ast.Const (Ast.CNull))
+        | None -> (Eid.unique (), Ast.VarMap.empty, Ast.Const (Ast.CNull))
         | Some e -> aux_e env e
       in
       let while_body = 
         let body_e = aux_e env body in
-        let seq_e = Eid.unique (), Ast.Seq (body_e, incr_e) in
+        let seq_e = Eid.unique (), Ast.VarMap.empty, Ast.Seq (body_e, incr_e) in
         seq_e
       in
-      let while_e = Eid.unique (), Ast.While (cond_e, while_body) in
+      let while_e = Eid.unique (), Ast.VarMap.empty, Ast.While (cond_e, while_body) in
       Ast.Seq (init_e, while_e)
   | Return None -> Ast.Return None
   | Return (Some e) -> Ast.Return (Some (aux_e env e))
@@ -227,20 +227,21 @@ let rec aux_e env (pos,e) =
         | _,Default body_e -> 
           let pos,b = body_e in 
           let has_break,b = remove_break b in
-          ((Eid.unique (), Ast.Noop), aux_e env (pos, b), has_break) 
+          ((Eid.unique (), Ast.VarMap.empty, Ast.Noop), aux_e env (pos, b), has_break) 
         | _ -> failwith "Invalid case in switch"
       in
       Ast.Switch (aux_e env e, List.map aux_cases cases)
   | Case _ | Default _ -> failwith "Case and Default should be inside a switch"
   | Seq [] -> Ast.Const Ast.CNull
-  | Seq (e::es) -> List.fold_left (fun acc e ->
-      Eid.unique (), Ast.Seq (acc, aux_e env e)) (aux_e env e) es |> snd
+  | Seq (e::es) -> let _,_,e = List.fold_left (fun acc e ->
+      Eid.unique (), Ast.VarMap.empty, Ast.Seq (acc, aux_e env e)) (aux_e env e) es in
+      e
   | Comma _ -> failwith "Comma operator not supported yet"
   | Cast (ty, e) -> Ast.Cast (ty, aux_e env e)
   | VarDeclare (_typ, (_,Id _s)) -> Ast.Noop (* Rather generate a AST. Declare somewhere from them*)
   | VarDeclare (_, _) -> failwith "Declaration must have an identifier" (*Should be unreachable*)
   in
-  (eid, e)
+  (eid, Ast.VarMap.empty, e)
 and transform env (pos, topl_unit) = 
   let eid = Eid.unique_with_pos pos in
   let e = match topl_unit with 
@@ -255,7 +256,7 @@ and transform env (pos, topl_unit) =
     let params = List.map (fun (ty,name) -> ty,var env name) params in 
     Ast.Function (name, ret_ty, params, e) 
   in
-  (eid, e)
+  (eid, Ast.VarMap.empty, e)
 
 let map f e = 
   let rec aux (pos, e) = 

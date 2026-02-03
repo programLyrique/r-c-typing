@@ -21,6 +21,16 @@ let allocVector_vecsxp_ty n =
   let builder = TList (List.init n (fun _ -> TAny), [], TOption TEmpty) in
   build TIdMap.empty builder
 
+let mkNamed_vecsxp_ty names = 
+  let open Rstt.Builder in 
+  let builder =
+    TList
+      ( [],
+        List.map (fun name -> (name, TAny)) names,
+        TOption TEmpty )
+  in 
+  build TIdMap.empty builder
+
 let tobool, tobool_t =
   let v = MVariable.create Immut (Some "tobool") in
   let def = Arrow.mk Ty.any Cint.bool in

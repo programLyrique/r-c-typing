@@ -6,5 +6,11 @@ Prep_incl (
     "\n"
   )
 )
-create_named_list: () -> list
+create_pos_list: () -> { any, any, any }
+
+create_list: () -> list
+
+create_named_list: () -> { a: any, b: any }
+
+create_list_const_prop: () -> { any, any, any, any, any, any, any }
 
