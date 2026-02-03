@@ -31,6 +31,8 @@ let mkNamed_vecsxp_ty names =
   in 
   build TIdMap.empty builder
 
+let set_vector_elt_ty _name = failwith "to implement"
+
 let tobool, tobool_t =
   let v = MVariable.create Immut (Some "tobool") in
   let def = Arrow.mk Ty.any Cint.bool in
