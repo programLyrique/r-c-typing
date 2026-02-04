@@ -65,8 +65,14 @@ module VarMap = struct
   end
 
 
+type kind = 
+  | C of const 
+  | L of string list (* list of possible labels *)
+[@@deriving show]
+
+
 let add_const m v c = 
-  VarMap.add v c m
+  VarMap.add v (C c) m
 
 type e' =
 | Const of const
@@ -88,7 +94,7 @@ type e' =
 | Noop (* Hack for the declarations. We should rather use the declarations directly rather than doing the imprecise analysis of used variables in bv_e*)
 | Return of e option | Break | Next
 [@@deriving show]
-and e = Eid.t * (const VarMap.t) * e'
+and e = Eid.t * (kind VarMap.t) * e'
 [@@deriving show]
 
 type funcs = e list (* list of function definitions *)
@@ -169,16 +175,17 @@ let rec aux_e (eid, vars, e) =
     | Call ((_,_,Id v1), [(_, _,Id vty); ( _ ,_, Id v2) ]) 
       when (Variable.get_name v1 = Some "mkNamed") && 
            (Variable.get_name vty = Some "VECSXP") ->
-        Format.eprintf "%a@." (VarMap.pp pp_const) vars;
-        let const = VarMap.find_opt v2 vars in 
+        Format.eprintf "%a@." (VarMap.pp pp_kind) vars;
+        let kind = VarMap.find_opt v2 vars in 
         (* print the content of vars *)
-        let names = match const with 
+        let names = match kind with 
             | None -> failwith (Format.asprintf "No variable %a for names for mkNamed" Variable.pp v2)
-            | Some (CArray names) -> extract_names names
+            | Some (C (CArray names)) -> extract_names names
             | Some _ -> failwith "Expected an array of strings."
            in
         let ty = Defs.mkNamed_vecsxp_ty names in
         A.Value (GTy.mk ty)
+    
     (* General case for calls *)
     | Call (f,args) -> 
         let es = List.map aux_e args in 
@@ -357,14 +364,16 @@ let rec aux_e (eid, vars, e) =
       | _ -> None
     in
 
-    let const_of_e (env : const VarMap.t) ((_, _, expr) : e) : const option =
+    let const_of_e (env : kind VarMap.t) ((_, _, expr) : e) : const option =
       match expr with
       | Const c -> Some c
-      | Id v -> VarMap.find_opt v env
+      | Id v -> (match VarMap.find_opt v env with
+                | Some (C c) -> Some c
+                | _ -> None)
       | _ -> None
     in
 
-    let rec aux ((id, _vars, expr) : e) (env : const VarMap.t) : e * const VarMap.t =
+    let rec aux ((id, _vars, expr) : e) (env : kind VarMap.t) : e * kind VarMap.t =
       match expr with
       | Const _ | Id _ | Noop | Break | Next -> ((id, env, expr), env)
 

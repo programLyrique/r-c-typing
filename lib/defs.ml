@@ -31,7 +31,17 @@ let mkNamed_vecsxp_ty names =
   in 
   build TIdMap.empty builder
 
-let set_vector_elt_ty _name = failwith "to implement"
+let set_vector_elt_ty name = 
+  let open Rstt.Builder in 
+  let _, r' = rvar empty_env "r" in
+  let _, a = tvar empty_env "a" in
+  (* t({;`r}, 'a) -> {name: 'a; `r} ; actually, maybe 'a & any_sexp for the 1st argument... *)
+  let builder =
+    TArrow
+      ( TTuple [TList ([], [], TRowVar r'); TVar a],
+        TList ([], [ (name, TVar a) ], TRowVar r') )
+  in
+  build TIdMap.empty builder
 
 let tobool, tobool_t =
   let v = MVariable.create Immut (Some "tobool") in

@@ -157,6 +157,7 @@ let rec aux_const c =
   | CArray lst -> Ast.CArray (List.map aux_const lst)
 
 
+
 let rec aux_e env (pos,e) = 
   let eid = Eid.unique_with_pos pos in
   let e = match e with 
@@ -173,7 +174,7 @@ let rec aux_e env (pos,e) =
   | VarAssign ((loc1, Unop (_op, e1)) ,e2) -> (* Currently, remove the * or & operator *)
      let _,_,e = aux_e env (loc1, VarAssign(e1, e2)) in e
   | VarAssign (_,_) -> failwith ("Unexpected left-hand side in assignment. Got: " ^ show_e (pos,e))
-  | Call (f, args) -> Ast.Call (aux_e env f, List.map (aux_e env) args)
+  | Call (f, args) -> process_call env f args
   | If (cond, then_, else_) -> 
       Ast.If (aux_e env cond, aux_e env then_, Option.map (aux_e env) else_)
   | Ite (cond, then_, else_) -> 
@@ -242,6 +243,19 @@ let rec aux_e env (pos,e) =
   | VarDeclare (_, _) -> failwith "Declaration must have an identifier" (*Should be unreachable*)
   in
   (eid, Ast.VarMap.empty, e)
+and process_call env f args = 
+  (* Set calls modify in place in the R C API, but for typing reason, 
+  we make it create a new value and then assign to the original variable. *)
+  let e = match (f, args) with 
+  | (loc1,Id "SET_VECTOR_ELT"),(_, Id v)::_ ->
+   Ast.VarAssign (var env v,
+      (Eid.unique_with_pos loc1, Ast.VarMap.empty, Ast.Call (
+         aux_e env f,
+        List.map (aux_e env) args
+      ))
+    )
+  | _ -> Ast.Call (aux_e env f, List.map (aux_e env) args) in
+  e
 and transform env (pos, topl_unit) = 
   let eid = Eid.unique_with_pos pos in
   let e = match topl_unit with 
