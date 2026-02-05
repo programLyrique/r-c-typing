@@ -151,7 +151,14 @@ module AttrConstr = struct
     with Invalid_argument _ -> []
 end
 
-
+let build_call f args =
+  (* State how arguments of a function are encoded: here, they are in a tuple*)
+   let args = (Eid.unique (), A.Constructor 
+      (SA.Tuple (List.length args), args)) in
+      (* Handle the attributes *)
+      let f = Eid.unique (), A.Projection
+      (PCustom { pname="pfun" ; pgen=true ; pdom=AttrProj.pdom ; proj=AttrProj.proj }, f) in
+      A.App (f, args)
 
 (* Transformation to MLsem ast
   GTy is used for gradual types, Ty for "normal" types
@@ -185,17 +192,28 @@ let rec aux_e (eid, vars, e) =
            in
         let ty = Defs.mkNamed_vecsxp_ty names in
         A.Value (GTy.mk ty)
-    
+    | Call ((eid,_,Id v1), [(_, _,Id v2) as id2; ( _ ,_, idx); value]) 
+      when (Variable.get_name v1 = Some "SET_VECTOR_ELT") ->
+        let kind = VarMap.find_opt v2 vars in 
+        let idx = match idx with 
+          | Const (CInt n) -> n
+          | Id v -> (match VarMap.find_opt v vars with 
+              | Some (C (CInt n)) -> n
+              | _ -> failwith "Expected an integer constant for the index in SET_VECTOR_ELT") 
+          | _ -> failwith "Expected an integer constant for the index in SET_VECTOR_ELT"
+        in
+        let name = match kind with 
+            | Some (L names) -> List.nth names idx
+            | Some _ -> failwith (Format.asprintf "%a should be a list" Variable.pp v2)
+            | None -> failwith (Format.asprintf "No variable %a for the 1st parameter of SET_VECTOR_ELT" Variable.pp v2)
+           in
+        let f = Defs.set_vector_elt_ty name in
+       build_call (eid, A.Value (GTy.mk f)) [aux_e id2; aux_e value]
     (* General case for calls *)
     | Call (f,args) -> 
         let es = List.map aux_e args in 
-        (* State how arguments of a function are encoded: here, they are in a tuple*)
-        let args = (Eid.unique (), A.Constructor 
-          (SA.Tuple (List.length es), es)) in
-        (* Handle the attributes *)
-        let f = Eid.unique (), A.Projection
-        (PCustom { pname="pfun" ; pgen=true ; pdom=AttrProj.pdom ; proj=AttrProj.proj }, aux_e f) in
-        A.App (f, args)
+        let f = aux_e f in 
+        build_call f es
     | If (cond, then_, else_) -> 
         let cond = aux_e cond in
         let cond = (Eid.unique (), (A.App ((Eid.unique (), A.Var Defs.tobool), cond))) in
@@ -347,6 +365,31 @@ let rec aux_e (eid, vars, e) =
     (* Traverse the AST while carrying an environment of known constants.
        Each node gets its `vars` field updated to the current constant env. *)
 
+    (* Extract mkNamed names from the environment if possible. *)
+    let names_of_var (env : kind VarMap.t) (v : Variable.t) : string list option =
+      match VarMap.find_opt v env with
+      | Some (C (CArray names)) -> Some (extract_names names)
+      | _ -> None
+    in
+
+    (* Detect `mkNamed(VECSXP, names)` possibly wrapped in `PROTECT(...)`.
+       Returns the variable holding the names array when matched. *)
+    let mkNamed_names_arg (e : e) : Variable.t option =
+      let unwrap ((_, _, expr) : e) : e' =
+        match expr with
+        | Call ((_, _, Id f), [arg]) when Variable.get_name f = Some "PROTECT" ->
+            let (_, _, inner) = arg in
+            inner
+        | _ -> expr
+      in
+      match unwrap e with
+      | Call ((_, _, Id f), [(_, _, Id vty); (_, _, Id vnames)])
+        when Variable.get_name f = Some "mkNamed"
+             && Variable.get_name vty = Some "VECSXP" ->
+          Some vnames
+      | _ -> None
+    in
+
     let unop_const (op : Variable.t) (c : const) : const option =
       match Variable.get_name op, c with
       | Some "-__1", CInt n -> Some (CInt (-n))
@@ -367,9 +410,10 @@ let rec aux_e (eid, vars, e) =
     let const_of_e (env : kind VarMap.t) ((_, _, expr) : e) : const option =
       match expr with
       | Const c -> Some c
-      | Id v -> (match VarMap.find_opt v env with
-                | Some (C c) -> Some c
-                | _ -> None)
+      | Id v ->
+          (match VarMap.find_opt v env with
+          | Some (C c) -> Some c
+          | _ -> None)
       | _ -> None
     in
 
@@ -393,10 +437,18 @@ let rec aux_e (eid, vars, e) =
 
       | VarAssign (v, e1) ->
           let e1', env1 = aux e1 env in
+          (* Special case: v = mkNamed(VECSXP, names) (possibly wrapped in PROTECT)
+             => v is a vector with label names *)
           let env' =
-            match const_of_e env1 e1' with
-            | Some c -> add_const env1 v c
-            | None -> env1
+            match mkNamed_names_arg e1' with
+            | Some vnames ->
+                (match names_of_var env1 vnames with
+                | Some names -> VarMap.add v (L names) env1
+                | None -> env1)
+            | None ->
+                (match const_of_e env1 e1' with
+                | Some c -> add_const env1 v c
+                | None -> env1)
           in
           ((id, env, VarAssign (v, e1')), env')
 
@@ -435,6 +487,7 @@ let rec aux_e (eid, vars, e) =
               ([], env1)
               args
           in
+          (* No binding target here, but keep env updated by traversing args. *)
           ((id, env, Call (f', args')), env2)
 
       | If (cond, then_, else_) ->
