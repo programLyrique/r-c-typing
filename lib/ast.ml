@@ -365,31 +365,6 @@ let rec aux_e (eid, vars, e) =
     (* Traverse the AST while carrying an environment of known constants.
        Each node gets its `vars` field updated to the current constant env. *)
 
-    (* Extract mkNamed names from the environment if possible. *)
-    let names_of_var (env : kind VarMap.t) (v : Variable.t) : string list option =
-      match VarMap.find_opt v env with
-      | Some (C (CArray names)) -> Some (extract_names names)
-      | _ -> None
-    in
-
-    (* Detect `mkNamed(VECSXP, names)` possibly wrapped in `PROTECT(...)`.
-       Returns the variable holding the names array when matched. *)
-    let mkNamed_names_arg (e : e) : Variable.t option =
-      let unwrap ((_, _, expr) : e) : e' =
-        match expr with
-        | Call ((_, _, Id f), [arg]) when Variable.get_name f = Some "PROTECT" ->
-            let (_, _, inner) = arg in
-            inner
-        | _ -> expr
-      in
-      match unwrap e with
-      | Call ((_, _, Id f), [(_, _, Id vty); (_, _, Id vnames)])
-        when Variable.get_name f = Some "mkNamed"
-             && Variable.get_name vty = Some "VECSXP" ->
-          Some vnames
-      | _ -> None
-    in
-
     let unop_const (op : Variable.t) (c : const) : const option =
       match Variable.get_name op, c with
       | Some "-__1", CInt n -> Some (CInt (-n))
@@ -407,154 +382,154 @@ let rec aux_e (eid, vars, e) =
       | _ -> None
     in
 
-    let const_of_e (env : kind VarMap.t) ((_, _, expr) : e) : const option =
+    (* Returns (transformed_expr, updated_env, value_of_expr) where value_of_expr
+       is the known kind (constant or label list) of the expression, if any. *)
+    let rec aux ((id, _vars, expr) : e) (env : kind VarMap.t) : e * kind VarMap.t * kind option =
       match expr with
-      | Const c -> Some c
-      | Id v ->
-          (match VarMap.find_opt v env with
-          | Some (C c) -> Some c
-          | _ -> None)
-      | _ -> None
-    in
-
-    let rec aux ((id, _vars, expr) : e) (env : kind VarMap.t) : e * kind VarMap.t =
-      match expr with
-      | Const _ | Id _ | Noop | Break | Next -> ((id, env, expr), env)
+      | Const c -> ((id, env, expr), env, Some (C c))
+      | Id v -> ((id, env, expr), env, VarMap.find_opt v env)
+      | Noop | Break | Next -> ((id, env, expr), env, None)
 
       | Declare (v, e1) ->
-          let e1', env' = aux e1 env in
-          ((id, env, Declare (v, e1')), env')
+          let e1', env', _ = aux e1 env in
+          ((id, env, Declare (v, e1')), env', None)
 
       | Let (v, e1, e2) ->
-          let e1', env1 = aux e1 env in
+          let e1', env1, k1 = aux e1 env in
           let env_for_body =
-            match const_of_e env1 e1' with
-            | Some c -> add_const env1 v c
+            match k1 with
+            | Some k -> VarMap.add v k env1
             | None -> env1
           in
-          let e2', env2 = aux e2 env_for_body in
-          ((id, env, Let (v, e1', e2')), env2)
+          let e2', env2, k2 = aux e2 env_for_body in
+          ((id, env, Let (v, e1', e2')), env2, k2)
 
       | VarAssign (v, e1) ->
-          let e1', env1 = aux e1 env in
-          (* Special case: v = mkNamed(VECSXP, names) (possibly wrapped in PROTECT)
-             => v is a vector with label names *)
+          let e1', env1, k1 = aux e1 env in
           let env' =
-            match mkNamed_names_arg e1' with
-            | Some vnames ->
-                (match names_of_var env1 vnames with
-                | Some names -> VarMap.add v (L names) env1
-                | None -> env1)
-            | None ->
-                (match const_of_e env1 e1' with
-                | Some c -> add_const env1 v c
-                | None -> env1)
+            match k1 with
+            | Some k -> VarMap.add v k env1
+            | None -> env1
           in
-          ((id, env, VarAssign (v, e1')), env')
+          ((id, env, VarAssign (v, e1')), env', None)
 
       | Unop (op, e1) ->
-          let e1', env1 = aux e1 env in
-          let expr' =
-            match const_of_e env1 e1' with
-            | Some c ->
+          let e1', env1, k1 = aux e1 env in
+          let expr', kres =
+            match k1 with
+            | Some (C c) ->
                 (match unop_const op c with
-                | Some c' -> Const c'
-                | None -> Unop (op, e1'))
-            | None -> Unop (op, e1')
+                | Some c' -> (Const c', Some (C c'))
+                | None -> (Unop (op, e1'), None))
+            | _ -> (Unop (op, e1'), None)
           in
-          ((id, env, expr'), env1)
+          ((id, env, expr'), env1, kres)
 
       | Binop (op, e1, e2) ->
-          let e1', env1 = aux e1 env in
-          let e2', env2 = aux e2 env1 in
-          let expr' =
-            match (const_of_e env2 e1', const_of_e env2 e2') with
-            | Some c1, Some c2 ->
+          let e1', env1, k1 = aux e1 env in
+          let e2', env2, k2 = aux e2 env1 in
+          let expr', kres =
+            match (k1, k2) with
+            | Some (C c1), Some (C c2) ->
                 (match binop_const op c1 c2 with
-                | Some c' -> Const c'
-                | None -> Binop (op, e1', e2'))
-            | _ -> Binop (op, e1', e2')
+                | Some c' -> (Const c', Some (C c'))
+                | None -> (Binop (op, e1', e2'), None))
+            | _ -> (Binop (op, e1', e2'), None)
           in
-          ((id, env, expr'), env2)
+          ((id, env, expr'), env2, kres)
 
       | Call (f, args) ->
-          let f', env1 = aux f env in
-          let args', env2 =
+          let f', env1, _ = aux f env in
+          let args_rev, env2 =
             List.fold_left
-              (fun (acc_args, acc_env) a ->
-                let a', acc_env' = aux a acc_env in
-                (acc_args @ [ a' ], acc_env'))
+              (fun (acc, acc_env) a ->
+                let a', acc_env', k = aux a acc_env in
+                ((a', k) :: acc, acc_env'))
               ([], env1)
               args
           in
-          (* No binding target here, but keep env updated by traversing args. *)
-          ((id, env, Call (f', args')), env2)
+          let args_with_kinds = List.rev args_rev in
+          let args' = List.map fst args_with_kinds in
+          let kres =
+            match f', args_with_kinds with
+            (* PROTECT(arg): propagate the kind of the argument *)
+            | (_, _, Id fv), [(_, k)]
+              when Variable.get_name fv = Some "PROTECT" -> k
+            (* mkNamed(VECSXP, names_var): resolve names from the kind *)
+            | (_, _, Id fv), [((_, _, Id vty), _); (_, Some (C (CArray names)))]
+              when Variable.get_name fv = Some "mkNamed"
+                   && Variable.get_name vty = Some "VECSXP" ->
+                Some (L (extract_names names))
+            | _ -> None
+          in
+          ((id, env, Call (f', args')), env2, kres)
 
       | If (cond, then_, else_) ->
-          let cond', env1 = aux cond env in
-          let then_', env2 = aux then_ env1 in
+          let cond', env1, _ = aux cond env in
+          let then_', env2, _ = aux then_ env1 in
           let else_', env3 =
             match else_ with
             | None -> (None, env2)
             | Some e3 ->
-                let e3', env3 = aux e3 env2 in
+                let e3', env3, _ = aux e3 env2 in
                 (Some e3', env3)
           in
-          ((id, env, If (cond', then_', else_')), env3)
+          ((id, env, If (cond', then_', else_')), env3, None)
 
       | Ite (cond, then_, else_) ->
-          let cond', env1 = aux cond env in
-          let then_', env2 = aux then_ env1 in
-          let else_', env3 = aux else_ env2 in
-          ((id, env, Ite (cond', then_', else_')), env3)
+          let cond', env1, _ = aux cond env in
+          let then_', env2, _ = aux then_ env1 in
+          let else_', env3, _ = aux else_ env2 in
+          ((id, env, Ite (cond', then_', else_')), env3, None)
 
       | While (cond, body) ->
-          let cond', env1 = aux cond env in
-          let body', env2 = aux body env1 in
-          ((id, env, While (cond', body')), env2)
+          let cond', env1, _ = aux cond env in
+          let body', env2, _ = aux body env1 in
+          ((id, env, While (cond', body')), env2, None)
 
       | Seq (e1, e2) ->
-          let e1', env1 = aux e1 env in
-          let e2', env2 = aux e2 env1 in
-          ((id, env, Seq (e1', e2')), env2)
+          let e1', env1, _ = aux e1 env in
+          let e2', env2, k2 = aux e2 env1 in
+          ((id, env, Seq (e1', e2')), env2, k2)
 
       | Return eo ->
           let eo', env' =
             match eo with
             | None -> (None, env)
             | Some e1 ->
-                let e1', env' = aux e1 env in
+                let e1', env', _ = aux e1 env in
                 (Some e1', env')
           in
-          ((id, env, Return eo'), env')
+          ((id, env, Return eo'), env', None)
 
       | TyCheck (e1, ty) ->
-          let e1', env1 = aux e1 env in
-          ((id, env, TyCheck (e1', ty)), env1)
+          let e1', env1, k1 = aux e1 env in
+          ((id, env, TyCheck (e1', ty)), env1, k1)
 
       | Cast (ty, e1) ->
-          let e1', env1 = aux e1 env in
-          ((id, env, Cast (ty, e1')), env1)
+          let e1', env1, _ = aux e1 env in
+          ((id, env, Cast (ty, e1')), env1, None)
 
       | Function (name, ret_type, params, body) ->
           (* Do not propagate outer constants into function bodies. *)
-          let body', _ = aux body VarMap.empty in
-          ((id, env, Function (name, ret_type, params, body')), env)
+          let body', _, _ = aux body VarMap.empty in
+          ((id, env, Function (name, ret_type, params, body')), env, None)
 
       | Switch (e1, cases) ->
-          let e1', env1 = aux e1 env in
+          let e1', env1, _ = aux e1 env in
           let cases', env' =
             List.fold_left
               (fun (acc_cases, acc_env) (case_e, body_e, has_break) ->
-                let case_e', envc = aux case_e acc_env in
-                let body_e', envb = aux body_e envc in
+                let case_e', envc, _ = aux case_e acc_env in
+                let body_e', envb, _ = aux body_e envc in
                 (acc_cases @ [ (case_e', body_e', has_break) ], envb))
               ([], env1)
               cases
           in
-          ((id, env, Switch (e1', cases')), env')
+          ((id, env, Switch (e1', cases')), env', None)
     in
-    fst (aux e VarMap.empty)
+    let e', _, _ = aux e VarMap.empty in
+    e'
 
   let to_mlsem e = 
     e |> recognize_const_comparison |> propagate_const |> aux_e |> Mlsem.Lang.Transform.transform

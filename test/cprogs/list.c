@@ -20,6 +20,10 @@ SEXP create_list_const_prop() {
     return allocVector(VECSXP, n + m);
 }
 
+SEXP create_list_const_prop2() {
+    return allocVector(VECSXP, 3 + 4);
+}
+
 SEXP create_named_list_with_elems() {
     const char *names[] = {"a", "b", ""};
     SEXP l = PROTECT(mkNamed(VECSXP, names));
