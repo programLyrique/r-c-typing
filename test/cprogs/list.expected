@@ -18,5 +18,7 @@ create_list_const_prop2: () -> { any, any, any, any, any, any, any }
 
 create_named_list_with_elems: () -> { a: dbl1, b: dbl1 }
 
-create_named_list_with_int: () -> { a: v1(^3), b: any }
+create_named_list_with_int: () -> { a: v1(^3), b: v1(^6) }
+
+create_named_list_set_only_one: () -> { a: v1(^3), b: any }
 

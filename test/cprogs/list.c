@@ -37,7 +37,15 @@ SEXP create_named_list_with_int() {
     const char *names[] = {"a", "b", ""};
     SEXP l = PROTECT(mkNamed(VECSXP, names));
     SET_VECTOR_ELT(l, 0, ScalarInteger(3));
-    //SET_VECTOR_ELT(l, 1, ScalarInteger(6));
+    SET_VECTOR_ELT(l, 1, ScalarInteger(6));
+    UNPROTECT(1);
+    return l;
+}
+
+SEXP create_named_list_set_only_one() {
+    const char *names[] = {"a", "b", ""};
+    SEXP l = PROTECT(mkNamed(VECSXP, names));
+    SET_VECTOR_ELT(l, 0, ScalarInteger(3));
     UNPROTECT(1);
     return l;
 }
