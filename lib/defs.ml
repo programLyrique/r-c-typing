@@ -6,8 +6,8 @@ module MVariable = Mlsem.Lang.MVariable
 (* Add here any known type definitions, for instance, from the R C API *)
 
 
-let any_sexp = let open Rstt.Prim in
-   Ty.disj [Chr.any; Clx.any; Dbl.any; Int.any; Lgl.any; Raw.any ; Rstt.Env.any; Rstt.Vec.any]
+let any_sexp =
+   Ty.disj [Rstt.Prim.any ; Rstt.Env.any; Rstt.Vec.any ]
 
 let any_c = Ty.disj [Cint.any; Cenums.char; Cenums.double; Cptr.any]
 

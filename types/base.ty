@@ -30,6 +30,18 @@ SET_VECTOR_ELT: t(list, c_int, any) -> list
 ScalarReal: t(c_double | c_int) -> dbl1
 ScalarInteger: t(c_int('a)) -> v[1](int('a))
 
+// Strings 
+mkString: t(c_string) -> chr1
+ScalarString: t(p(chr)) -> chr1
+mkChar: t(c_string) -> p(chr)
+mkCharLen: t(c_string, c_int) -> p(chr)
+mkCharCE: t(c_string, any) -> p(chr) // the 2nd argument is the encoding
+mkCharLenCE: t(c_string, c_int, any) -> p(chr)
+R_CHAR: t(p(chr)) -> c_string
+CHAR: t(p(chr)) -> c_string
+STRING_ELT: t(v(chr), c_int) -> p(chr)
+StringBlank: (t(p("")) -> c_true) & (t(p(chr \ "")) -> c_false) & (t(null) -> c_true) 
+
 []<-: t(*'a, c_int, 'a) -> c_void
 []: t(*'a, c_int) -> 'a
 

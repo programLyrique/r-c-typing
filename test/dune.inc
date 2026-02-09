@@ -160,3 +160,14 @@
  (deps    cprogs/list.c cprogs/list.expected)
  (action  (diff cprogs/list.expected list.output)))
 
+(rule
+ (alias   runtest)
+ (deps    cprogs/string.c)
+ (action  (with-stdout-to string.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/string.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/string.c cprogs/string.expected)
+ (action  (diff cprogs/string.expected string.output)))
+
