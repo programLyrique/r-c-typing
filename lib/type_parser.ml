@@ -11,6 +11,15 @@ open Rstt
 type type_kind = Def | Alias
 
 let parse_type_line line =
+  (* Remove inline comments: everything after // is ignored.
+     This allows writing things like: mkCharCE: t(c_string, any) -> p(chr) // encoding *)
+  let line =
+    let before_slash, after_slash = Utils.split_once '/' line in
+    if after_slash <> "" && String.length after_slash > 0 && after_slash.[0] = '/' then
+      before_slash
+    else
+      line
+  in
   let line = String.trim line in
   if line = "" || String.starts_with ~prefix:"//" line then
     None
@@ -20,12 +29,12 @@ let parse_type_line line =
         Printf.eprintf "Warning: could not parse line (missing type): %s@." line;
         None
     | (sep, sym, ty_str) ->
-       let ty_str = String.trim ty_str in
+        let ty_str = String.trim ty_str in
         let ty = Rstt_repl.IO.parse_type ty_str in
-      match sep with
-      | ':' -> Some (String.trim sym, ty, Def)
-      | '=' -> Some (String.trim sym, ty, Alias)
-      | _ -> failwith "Unreachable case in parse_type_line."
+        match sep with
+        | ':' -> Some (String.trim sym, ty, Def)
+        | '=' -> Some (String.trim sym, ty, Alias)
+        | _ -> failwith "Unreachable case in parse_type_line."
 
 let parse_type_file filename = 
   if not (Sys.file_exists filename) then

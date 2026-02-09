@@ -15,13 +15,15 @@ type cmd_options = {
   filter: string option;
 }
 
-(* TODO: better to build the regex only once *)
-let contains_substring s sub =
-  let open Str in
-  try
-    ignore (search_forward (regexp_string sub) s 0);
-    true
-  with Not_found -> false
+let make_substring_pred = function
+  | None -> (fun _ -> true)
+  | Some sub ->
+      let re = Str.regexp_string sub in
+      fun s ->
+        try
+          ignore (Str.search_forward re s 0);
+          true
+        with Not_found -> false
 
 (* idenv: str -> Variable.t 
    env: typing environment: Variable.t -> TyScheme.ty 
@@ -73,12 +75,12 @@ let infer_ast visible opts (idenv, env) (ast : Ast.e) =
     idenv, env
 
 (** past: the parsed AST *)
-let infer_fun_def opts (idenv, env) past = 
+let infer_fun_def visible_name opts (idenv, env) past = 
   let name = 
     match past with 
     | _,PAst.Fundef (_,name, _, _) -> name
   in
-  let visible = Option.map (fun s -> contains_substring name s ) opts.filter |> Option.value  ~default:true in 
+  let visible = visible_name name in 
 
   let e = PAst.transform  {PAst.id = idenv} past in
   if opts.ast && visible then
@@ -91,10 +93,29 @@ let run_on_file opts filename idenv env =
   let cst = Parser.parse_file filename in
   if opts.cst then Parser.print_res cst;
   let past = Parser.to_ast cst in
-  if opts.past then
-    Printf.printf "%s\n" (PAst.show_definitions past);
-  List.fold_left (infer_fun_def opts) (idenv, env) past
+  let visible_name = make_substring_pred opts.filter in
+  if opts.past then begin
+    let visible_past =
+      match opts.filter with
+      | None -> past
+      | Some _ ->
+          List.filter
+            (function
+              | _, PAst.Fundef (_, name, _, _) -> visible_name name)
+            past
+    in
+    Printf.printf "%s\n" (PAst.show_definitions visible_past)
+  end;
+  List.fold_left (infer_fun_def visible_name opts) (idenv, env) past
 
-  let () =
-    Mlsem_types.PEnv.add_printer_param (Rstt.Pp.printer_params ()) ;
-    Mlsem_system.Config.normalization_fun := Rstt.Simplify.partition_vecs
+let () =
+  Mlsem_types.PEnv.add_printer_param (Rstt.Pp.printer_params ()) ;
+  Mlsem_system.Config.normalization_fun := Rstt.Simplify.partition_vecs
+
+let%test "filter predicate with Some substring" =
+  let pred = make_substring_pred (Some "from") in
+  pred "from_str" && pred "substring_from" && not (pred "to_str")
+
+let%test "filter predicate with None accepts all" =
+  let pred = make_substring_pred None in
+  pred "anything" && pred "everything"
