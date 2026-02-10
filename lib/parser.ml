@@ -127,11 +127,12 @@ let aux_param (p: anon_choice_param_decl_4ac2852) =
   | `Vari_param _ -> failwith "Not supported yet: variable number of parameters (...) in declaration"
   | _ -> failwith "Not supported yet: parameter declaration"
 
-let aux_params (decl: declarator) : A.param list =
+let rec aux_params (decl: declarator) : int * A.param list =
   match decl with 
   | `Func_decl (_, (_loc1, `Opt_choice_param_decl_rep_COMMA_choice_param_decl (Some (p1, params)), _loc2), _,_) -> 
-     (aux_param p1) :: (List.map (fun (_, p) -> aux_param p) params)
-  | _ -> []
+     0,(aux_param p1) :: (List.map (fun (_, p) -> aux_param p) params)
+  | `Poin_decl (_,_,_,_,decl) -> let level, params = aux_params decl in (level + 1, params)
+  | _ -> (0, [])
 
 
 let rec aux_expression (expr: expression) : A.e =
@@ -559,9 +560,11 @@ and aux_prep_func_def (func_def: preproc_function_def) =
 let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
   match item with
   | `Func_defi (_, decl_spec, _, decl, body) -> (
-     let return_type = aux_decl_spec decl_spec in 
      let _,name = aux_decl_name decl in 
-     let params = aux_params decl in
+     (* the part with the parameters can also carry the information about pointers for the return type! *)
+     let level, params = aux_params decl in
+     let return_type = Ast.build_ptr level (aux_decl_spec decl_spec) in 
+
      let body = aux_body body in 
      Some (Mlsem.Common.Position.dummy, Fundef (return_type, name, params, body))
      ) 

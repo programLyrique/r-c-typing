@@ -260,6 +260,7 @@ and transform env (pos, topl_unit) =
   let eid = Eid.unique_with_pos pos in
   let e = match topl_unit with 
   | Fundef (ret_ty, name, params, body) -> 
+
     let param_vars = bv_params params in
     let pid = List.fold_left add_var env.id (StrSet.elements param_vars) in
     let env = {id=pid} in 
@@ -267,7 +268,7 @@ and transform env (pos, topl_unit) =
     let eid = List.fold_left add_var env.id (StrSet.elements body_vars) in
     let env = {id=eid} in
     let e = List.fold_left (add_def pid eid) (aux_e env body) (StrSet.elements body_vars) in
-    let params = List.map (fun (ty,name) -> ty,var env name) params in 
+    let params = List.map (fun (ty,name) -> ty,var env name) params in       
     Ast.Function (name, ret_ty, params, e) 
   in
   (eid, Ast.VarMap.empty, e)
