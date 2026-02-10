@@ -31,16 +31,19 @@ ScalarReal: t(c_double | c_int) -> dbl1
 ScalarInteger: t(c_int('a)) -> v[1](int('a))
 
 // Strings 
+na_string = p(chr \ ^chr)
 mkString: t(c_string('a)) -> v[1](chr('a))
 ScalarString: t(p(chr('a))) -> v[1](chr('a))
 mkChar: t(c_string('a)) -> p(chr('a))
 mkCharLen: t(c_string('a), c_int) -> p(chr('a))
 mkCharCE: t(c_string('a), any) -> p(chr('a)) // the 2nd argument is the encoding
 mkCharLenCE: t(c_string('a), c_int, any) -> p(chr('a))
-R_CHAR: t(p(chr('a))) -> c_string('a)
-CHAR: t(p(chr('a))) -> c_string('a)
+R_CHAR: (t(p(chr('a))) -> c_string('a)) & (t(p(chr \ ^chr)) -> c("NA"))
+CHAR: (t(p(chr('a))) -> c_string('a)) & (t(p(chr \ ^chr)) -> c("NA"))
 STRING_ELT: t(v(chr), c_int) -> p(chr)
 StringBlank: (t(p("")) -> c_true) & (t(p(chr \ "")) -> c_false) & (t(null) -> c_true) 
+NA_STRING: na_string
+asChar: (t(v[(1..)]('a)) -> chr1) & (t(p(chr) & 'a) -> 'a) & (t(sym) -> chr1) & (t(any_r_not_vec \ sym | v0('a)) -> na_string)
 
 []<-: t(*'a, c_int, 'a) -> c_void
 []: t(*'a, c_int) -> 'a
