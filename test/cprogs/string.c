@@ -18,3 +18,8 @@ const char* get_c_string_from_str(SEXP s) {
 bool is_blank_string(SEXP s) {
    return StringBlank(s);
 }
+
+
+SEXP to_char(SEXP s) {
+    return asChar(s);
+}
