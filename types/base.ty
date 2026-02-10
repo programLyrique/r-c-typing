@@ -42,6 +42,14 @@ CHAR: t(p(chr('a))) -> c_string('a)
 STRING_ELT: t(v(chr), c_int) -> p(chr)
 StringBlank: (t(p("")) -> c_true) & (t(p(chr \ "")) -> c_false) & (t(null) -> c_true) 
 
+// Environments 
+R_GlobalEnv: env
+R_EmptyEnv: env
+R_BaseEnv: env
+R_BaseNamespace: env
+R_NewEnv: t(env, c_int, c_int) -> env
+R_GetCurrentEnv: () -> env
+
 []<-: t(*'a, c_int, 'a) -> c_void
 []: t(*'a, c_int) -> 'a
 

@@ -6,11 +6,11 @@ Prep_incl (
     "\n"
   )
 )
-create_str_from_c_string: () -> chr1
+create_str_from_c_string: () -> v1(^"hello")
 
-create_str_from_chr: () -> chr1
+create_str_from_chr: () -> v1(^"world")
 
-get_c_string_from_str: ((chr[^((..-1) | (1..))]) -> c_string) & ((v0(clx | dbl | int | lgl | raw)) | (v[^((..-1) | (1..))](clx | dbl | int | lgl | raw)) | (chr0) -> null)
+get_c_string_from_str: (v0(clx | dbl | int | lgl | raw)) | (v[^(int \ 0)](clx | dbl | int | lgl | raw)) | (chr0) -> null
 
 is_blank_string: (("" | null) -> c_true) & ((^(chr \ "")) -> c_false)
 

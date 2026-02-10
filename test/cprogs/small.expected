@@ -12,17 +12,17 @@ errorIntScalar: (int1) -> ()
 
 make_scalar: () -> int1
 
-isIntScalar: ((int1) -> c_true) & ((int[^((..0) | (2..))]) | (vec[^((..0) | (2..))] & ~int) | (vec1 & ~int) -> c_false)
+isIntScalar: ((int1) -> c_true) & ((int[^(int \ 1)]) | (vec[^(int \ 1)] & ~int) | (vec1 & ~int) -> c_false)
 
 check: () -> c_false
 
 incr: (int1) -> int1
 
-isFunction: ((any -> any) -> c_true) & ((lang | env | list | null | vec | sym) -> c_false)
+isFunction: ((any -> any) -> c_true) & ((lang | vec | env | list | sym | null) -> c_false)
 
-isPrimitive: ((any -> any) -> c_true) & ((lang | vec | env | list | sym | null) -> c_false)
+isPrimitive: ((any -> any) -> c_true) & ((env | null | sym | lang | list | vec) -> c_false)
 
-isList: ((env | (any -> any) | sym | list | vec) -> c_false) & ((null) | (lang) -> c_true)
+isList: ((env | vec | sym | (any -> any) | list) -> c_false) & ((null) | (lang) -> c_true)
 
-isNewList: (((any -> any) | vec | sym | env | lang) -> c_false) & ((null) | (list) -> c_true)
+isNewList: ((vec | env | (any -> any) | lang | sym) -> c_false) & ((null) | (list) -> c_true)
 

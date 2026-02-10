@@ -9,6 +9,6 @@ Prep_incl (
 assertPositive_error:
 untypeable: untypeable application
 function: arrow
-argument: c_string
+argument: c("Input must be a single real number")
 assertPositive_fail: ∀'a,'b. ('a & dbl1) -> 'a & dbl1
 

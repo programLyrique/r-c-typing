@@ -171,3 +171,14 @@
  (deps    cprogs/string.c cprogs/string.expected)
  (action  (diff cprogs/string.expected string.output)))
 
+(rule
+ (alias   runtest)
+ (deps    cprogs/env.c)
+ (action  (with-stdout-to env.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/env.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/env.c cprogs/env.expected)
+ (action  (diff cprogs/env.expected env.output)))
+
