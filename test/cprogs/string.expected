@@ -1,0 +1,16 @@
+Not supported yet: top level item
+Prep_incl (
+  (
+    "#include"
+    System_lib_str "<Rinternals.h>"
+    "\n"
+  )
+)
+create_str_from_c_string: () -> chr1
+
+create_str_from_chr: () -> chr1
+
+get_c_string_from_str: ((chr[^((..-1) | (1..))]) -> c_string) & ((v0(clx | dbl | int | lgl | raw)) | (v[^((..-1) | (1..))](clx | dbl | int | lgl | raw)) | (chr0) -> null)
+
+is_blank_string: (("" | null) -> c_true) & ((^(chr \ "")) -> c_false)
+
