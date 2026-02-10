@@ -105,7 +105,7 @@ let rec typeof_const c =
   let open Rstt in 
   match c with 
   | CChar _ ->  Cenums.char
-  | CStr _ -> Cenums.str
+  | CStr v -> Cstring.singl v
   | CDbl _ -> Cenums.double
   | CInt v -> Cint.singl v
   | CBool v -> if v then Cint.tt else Cint.ff
