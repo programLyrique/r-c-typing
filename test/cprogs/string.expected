@@ -10,7 +10,9 @@ create_str_from_c_string: () -> v1(^"hello")
 
 create_str_from_chr: () -> v1(^"world")
 
-get_c_string_from_str: (v0(clx | dbl | int | lgl | raw)) | (v[^(int \ 0)](clx | dbl | int | lgl | raw)) | (chr0) -> null
+get_c_string_from_str: ((chr[^(int \ 0)]) -> c_string) & ((v0(clx | dbl | int | lgl | raw)) | (v[^(int \ 0)](clx | dbl | int | lgl | raw)) | (chr0) -> null)
 
 is_blank_string: (("" | null) -> c_true) & ((^(chr \ "")) -> c_false)
+
+to_char: ∀'a,'b. (('a & (vec[^(1..)] | sym)) -> chr1) & (('a & (list | (any -> any) | null | lang | vec0 | env)) -> chr \ ^chr) & (('a & (v[^(1..)]('b) | sym) | 'b & 'a & (chr | (v[^(1..)]('b) | sym))) -> chr1 | 'b) & (('a & chr) -> 'a) & (('a & (v0('b) | list | (any -> any) | null | lang | env) | 'b & 'a & (chr | (v0('b) | list | (any -> any) | null | lang | env))) -> chr \ ^chr | 'b)
 

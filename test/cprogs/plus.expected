@@ -12,7 +12,7 @@ make_int_or_float: ((c_true) -> int1) & ((c_int_na \ c_bool) | (c_false) -> int)
 
 incr_real: (dbl1) -> dbl1
 
-test_int_or_real: ((dbl) -> c_false) & ((chr | ~(dbl | int)) -> ()) & ((int) -> c_true)
+test_int_or_real: ((dbl) -> c_false) & ((chr | ~(int | dbl)) -> ()) & ((int) -> c_true)
 
 test_isInt: ((int) -> c_true) & ((chr | ~int) -> c_false)
 
