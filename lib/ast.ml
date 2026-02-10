@@ -15,7 +15,17 @@ type const =
 | CBool of bool
 | CNull
 | CNa
+| CArray of const list
 [@@deriving show]
+
+
+(* Names to build names for a list with mkNamed look like {"a", "b", ""}*)
+let rec extract_names l = 
+  match l with 
+  | [CStr ""] -> []
+  | (CStr s)::s2::l -> s :: (extract_names (s2::l))
+  | [CStr _ ] -> failwith "expected \"\" at the end "
+  | _ -> failwith "expected string constant"
 
 type ctype = 
  | Void
@@ -34,10 +44,35 @@ type ctype =
  | Any (* Do we actually need that?*)
  [@@deriving show]
 
-  (*level is the number of pointer indirections*)
-  let rec build_ptr level ty =
-    if level <= 0 then ty
-    else build_ptr (level - 1) (Ptr ty)
+(*level is the number of pointer indirections*)
+let rec build_ptr level ty =
+  if level <= 0 then ty
+  else build_ptr (level - 1) (Ptr ty)
+
+module VarMap = struct
+  include Map.Make(Variable)
+  let pp(pp_v : Format.formatter -> 'v -> unit)
+      (fmt : Format.formatter)
+      (m : 'v t) : unit =
+    let pp_binding fmt (k, v) =
+      Format.fprintf fmt "%a -> %a" Variable.pp k pp_v v
+    in
+    Format.fprintf fmt "{@[<hov 1>%a@]}"
+      (Format.pp_print_list
+        ~pp_sep:(fun fmt () -> Format.fprintf fmt ";@ ")
+        pp_binding)
+      (bindings m)
+  end
+
+
+type kind = 
+  | C of const 
+  | L of string list (* list of possible labels *)
+[@@deriving show]
+
+
+let add_const m v c = 
+  VarMap.add v (C c) m
 
 type e' =
 | Const of const
@@ -59,24 +94,26 @@ type e' =
 | Noop (* Hack for the declarations. We should rather use the declarations directly rather than doing the imprecise analysis of used variables in bv_e*)
 | Return of e option | Break | Next
 [@@deriving show]
-and e = Eid.t * e'
+and e = Eid.t * (kind VarMap.t) * e'
 [@@deriving show]
 
 type funcs = e list (* list of function definitions *)
 [@@deriving show]
 
 
-
-let typeof_const c = 
+let rec typeof_const c = 
   let open Rstt in 
   match c with 
   | CChar _ ->  Cenums.char
-  | CStr _ -> Cenums.str
+  | CStr v -> Cstring.singl v
   | CDbl _ -> Cenums.double
   | CInt v -> Cint.singl v
   | CBool v -> if v then Cint.tt else Cint.ff
   | CNull -> Null.any
   | CNa -> Cint.na
+  | CArray [] -> Cptr.mk Defs.any_c
+  | CArray (elem::_) -> Cptr.mk (typeof_const elem)
+
 
 let rec typeof_ctype ct = 
   let open Rstt in 
@@ -114,11 +151,19 @@ module AttrConstr = struct
     with Invalid_argument _ -> []
 end
 
+let build_call f args =
+  (* State how arguments of a function are encoded: here, they are in a tuple*)
+   let args = (Eid.unique (), A.Constructor 
+      (SA.Tuple (List.length args), args)) in
+      (* Handle the attributes *)
+      let f = Eid.unique (), A.Projection
+      (PCustom { pname="pfun" ; pgen=true ; pdom=AttrProj.pdom ; proj=AttrProj.proj }, f) in
+      A.App (f, args)
 
 (* Transformation to MLsem ast
   GTy is used for gradual types, Ty for "normal" types
 *)
-let rec aux_e (eid, e) =
+let rec aux_e (eid, vars, e) =
   let rec aux e = 
     match e with 
     | Const c -> A.Value (typeof_const c |> GTy.mk )
@@ -126,17 +171,49 @@ let rec aux_e (eid, e) =
     | Declare (v,e) -> A.Declare (v, aux_e e)
     | Let (v,e1,e2) -> A.Let ([], v, aux_e e1, aux_e e2)
     | VarAssign (v,e2) -> A.VarAssign (v, aux_e e2)
-    | Unop (op,e) -> aux (Call ((Eid.unique (), Id op), [e]))
-    | Binop (op,e1,e2) -> aux (Call ((Eid.unique (), Id op), [e1; e2]))
+    | Unop (op,e) -> aux (Call ((Eid.unique (), vars, Id op), [e]))
+    | Binop (op,e1,e2) -> aux (Call ((Eid.unique (), vars, Id op), [e1; e2]))
+    (* Some special cases for some calls*)
+    | Call ((_,_, Id v), [(_, _,Id vty); ( _ ,_, Const (CInt n)) ]) 
+      when (Variable.get_name v = Some "allocVector") && 
+           (Variable.get_name vty = Some "VECSXP") ->
+        let ty = Defs.allocVector_vecsxp_ty n in
+        A.Value (GTy.mk ty)
+    | Call ((_,_,Id v1), [(_, _,Id vty); ( _ ,_, Id v2) ]) 
+      when (Variable.get_name v1 = Some "mkNamed") && 
+           (Variable.get_name vty = Some "VECSXP") ->
+        Format.eprintf "%a@." (VarMap.pp pp_kind) vars;
+        let kind = VarMap.find_opt v2 vars in 
+        (* print the content of vars *)
+        let names = match kind with 
+            | None -> failwith (Format.asprintf "No variable %a for names for mkNamed" Variable.pp v2)
+            | Some (C (CArray names)) -> extract_names names
+            | Some _ -> failwith "Expected an array of strings."
+           in
+        let ty = Defs.mkNamed_vecsxp_ty names in
+        A.Value (GTy.mk ty)
+    | Call ((eid,_,Id v1), [(_, _,Id v2) as id2; ( _ ,_, idx); value]) 
+      when (Variable.get_name v1 = Some "SET_VECTOR_ELT") ->
+        let kind = VarMap.find_opt v2 vars in 
+        let idx = match idx with 
+          | Const (CInt n) -> n
+          | Id v -> (match VarMap.find_opt v vars with 
+              | Some (C (CInt n)) -> n
+              | _ -> failwith "Expected an integer constant for the index in SET_VECTOR_ELT") 
+          | _ -> failwith "Expected an integer constant for the index in SET_VECTOR_ELT"
+        in
+        let name = match kind with 
+            | Some (L names) -> List.nth names idx
+            | Some _ -> failwith (Format.asprintf "%a should be a list" Variable.pp v2)
+            | None -> failwith (Format.asprintf "No variable %a for the 1st parameter of SET_VECTOR_ELT" Variable.pp v2)
+           in
+        let f = Defs.set_vector_elt_ty name in
+       build_call (eid, A.Value (GTy.mk f)) [aux_e id2; aux_e value]
+    (* General case for calls *)
     | Call (f,args) -> 
         let es = List.map aux_e args in 
-        (* State how arguments of a function are encoded: here, they are in a tuple*)
-        let args = (Eid.unique (), A.Constructor 
-          (SA.Tuple (List.length es), es)) in
-        (* Handle the attributes *)
-        let f = Eid.unique (), A.Projection
-        (PCustom { pname="pfun" ; pgen=true ; pdom=AttrProj.pdom ; proj=AttrProj.proj }, aux_e f) in
-        A.App (f, args)
+        let f = aux_e f in 
+        build_call f es
     | If (cond, then_, else_) -> 
         let cond = aux_e cond in
         let cond = (Eid.unique (), (A.App ((Eid.unique (), A.Var Defs.tobool), cond))) in
@@ -168,7 +245,7 @@ let rec aux_e (eid, e) =
           (* Special case of SEXPs. we coul restrict it to actual SEXP but
            typeof_ctype currently does not return all possible sexp types for SEXP. *)
           match cty with 
-          | SEXP -> Ty.cap Rstt.Attr.any (TVar.typ (TVar.mk KInfer None))
+          | SEXP -> Ty.cap (Ty.cup (Rstt.Prim.(Chr.any |> mk)) Rstt.Attr.any) (TVar.typ (TVar.mk KInfer None))
           | _ -> Ty.cap (typeof_ctype cty) (TVar.typ (TVar.mk KInfer None))
         )  params
       in  
@@ -188,11 +265,11 @@ let rec aux_e (eid, e) =
         let e = aux_e e in
         let make_pattern_case acc (case_e, body_e, has_break) =
           let case_ty = match case_e with 
-            | _,Const c -> typeof_const c 
-            | _,Id v -> (match Defs.BuiltinVar.find_builtin v with 
+            | _,_,Const c -> typeof_const c 
+            | _,_,Id v -> (match Defs.BuiltinVar.find_builtin v with 
                 | Some ty -> ty
                 | None -> failwith ("Invalid switch case expression: unknown define " ^ (Variable.get_unique_name v)))
-            | _,Noop -> Ty.any (* Default case *)
+            | _,_,Noop -> Ty.any (* Default case *)
             | _ -> failwith "Invalid switch case expression"
           in
           let body = aux_e body_e in
@@ -207,7 +284,7 @@ let rec aux_e (eid, e) =
               Note: the empty body optimization does not seem to bring much in terms of perf. 
               A better optimization might be to encode it as a series of if, else if else. *)
              match body_e with 
-            | _,Const CNull -> 
+            | _,_,Const CNull -> 
               (A.POr (A.PType case_ty, last_case), last_body) :: (List.tl acc)
             | _ -> let new_body = Eid.unique (), A.Seq (last_body, body) in 
               (A.PType case_ty, new_body) :: acc
@@ -227,7 +304,7 @@ let rec aux_e (eid, e) =
 
 
   let map f e = 
-    let rec aux (eid, e) = 
+    let rec aux (eid, vars, e) = 
       let e = match e with 
       | Const _ | Id _ -> e
       | Declare (v,e) -> Declare (v, aux e)
@@ -254,35 +331,205 @@ let rec aux_e (eid, e) =
       | Next -> Next
       | Noop -> Noop
     in
-    f (eid, e)
+    f (eid, vars, e)
   in aux e
+
 
   let recognize_const_comparison e =
     let f expr = match expr with 
-    | id, (Binop (op, e, (_, Const c)) | Binop (op, (_, Const c), e))
-    when Variable.equal op Defs.BuiltinOp.eq -> id, TyCheck (e, typeof_const c)
-    | id, (Binop (op, e, (_, Id v)) | Binop (op, (_, Id v), e))
+    | id, vars, (Binop (op, e, (_,_,Const c)) | Binop (op, (_,_,Const c), e))
+    when Variable.equal op Defs.BuiltinOp.eq -> id, vars, TyCheck (e, typeof_const c)
+    | id, vars, (Binop (op, e, (_,_,Id v)) | Binop (op, (_,_,Id v), e))
     when Variable.equal op Defs.BuiltinOp.eq -> 
       (match Defs.BuiltinVar.find_builtin v with 
-      | Some built -> id, TyCheck (e, built)
+      | Some built -> id, vars, TyCheck (e, built)
       | None -> expr)
-    | id, (Binop (op, e, (_, Const c)) | Binop (op, (_, Const c), e))
-    when Variable.equal op Defs.BuiltinOp.neq -> id, TyCheck (e, Ty.neg (typeof_const c))
-    | id, (Binop (op, e, (_, Id v)) | Binop (op, (_, Id v), e))
+    | id, vars, (Binop (op, e, (_,_,Const c)) | Binop (op, (_,_,Const c), e))
+    when Variable.equal op Defs.BuiltinOp.neq -> id, vars, TyCheck (e, Ty.neg (typeof_const c))
+    | id, vars, (Binop (op, e, (_,_,Id v)) | Binop (op, (_,_,Id v), e))
     when Variable.equal op Defs.BuiltinOp.neq -> 
       (match Defs.BuiltinVar.find_builtin v with 
-      | Some built -> id, TyCheck (e, Ty.neg built)
+      | Some built -> id, vars, TyCheck (e, Ty.neg built)
       | None -> expr)
-    | id, (Binop (op, e, (_, Const (CInt c))) | Binop (op, (_, Const (CInt c)), e))
+    | id, vars, (Binop (op, e, (_, _,Const (CInt c))) | Binop (op, (_, _,Const (CInt c)), e))
     when Variable.equal op Defs.BuiltinOp.inf_strict -> 
-      id, TyCheck (e, Rstt.Cint.interval (None, Some (c-1))) (* interval is closed by < is open on the right*)
-    | id, (Binop (op, e, (_, Const (CInt c))) | Binop (op, (_, Const (CInt c)), e))
+      id, vars, TyCheck (e, Rstt.Cint.interval (None, Some (c-1))) (* interval is closed by < is open on the right*)
+    | id, vars, (Binop (op, e, (_, _,Const (CInt c))) | Binop (op, (_, _,Const (CInt c)), e))
     when Variable.equal op Defs.BuiltinOp.sup_strict -> 
-      id, TyCheck (e, Rstt.Cint.interval (Some (c+1), None)) (* interval is closed by > is open on the left*)
+      id, vars, TyCheck (e, Rstt.Cint.interval (Some (c+1), None)) (* interval is closed by > is open on the left*)
     | e -> e
     in
     map f e
 
+  let propagate_const e =
+    (* Traverse the AST while carrying an environment of known constants.
+       Each node gets its `vars` field updated to the current constant env. *)
+
+    let unop_const (op : Variable.t) (c : const) : const option =
+      match Variable.get_name op, c with
+      | Some "-__1", CInt n -> Some (CInt (-n))
+      | _ -> None
+    in
+
+    let binop_const (op : Variable.t) (c1 : const) (c2 : const) : const option =
+      match Variable.get_name op, c1, c2 with
+      (* Int arithmetic *)
+      | Some "+__2", CInt a, CInt b -> Some (CInt (a + b))
+      | Some "-__2", CInt a, CInt b -> Some (CInt (a - b))
+      | Some "*__2", CInt a, CInt b -> Some (CInt (a * b))
+      | Some "/__2", CInt a, CInt b -> if b = 0 then None else Some (CInt (a / b))
+      | Some "%__2", CInt a, CInt b -> if b = 0 then None else Some (CInt (a mod b))
+      | _ -> None
+    in
+
+    (* Returns (transformed_expr, updated_env, value_of_expr) where value_of_expr
+       is the known kind (constant or label list) of the expression, if any. *)
+    let rec aux ((id, _vars, expr) : e) (env : kind VarMap.t) : e * kind VarMap.t * kind option =
+      match expr with
+      | Const c -> ((id, env, expr), env, Some (C c))
+      | Id v -> ((id, env, expr), env, VarMap.find_opt v env)
+      | Noop | Break | Next -> ((id, env, expr), env, None)
+
+      | Declare (v, e1) ->
+          let e1', env', _ = aux e1 env in
+          ((id, env, Declare (v, e1')), env', None)
+
+      | Let (v, e1, e2) ->
+          let e1', env1, k1 = aux e1 env in
+          let env_for_body =
+            match k1 with
+            | Some k -> VarMap.add v k env1
+            | None -> env1
+          in
+          let e2', env2, k2 = aux e2 env_for_body in
+          ((id, env, Let (v, e1', e2')), env2, k2)
+
+      | VarAssign (v, e1) ->
+          let e1', env1, k1 = aux e1 env in
+          let env' =
+            match k1 with
+            | Some k -> VarMap.add v k env1
+            | None -> env1
+          in
+          ((id, env, VarAssign (v, e1')), env', None)
+
+      | Unop (op, e1) ->
+          let e1', env1, k1 = aux e1 env in
+          let expr', kres =
+            match k1 with
+            | Some (C c) ->
+                (match unop_const op c with
+                | Some c' -> (Const c', Some (C c'))
+                | None -> (Unop (op, e1'), None))
+            | _ -> (Unop (op, e1'), None)
+          in
+          ((id, env, expr'), env1, kres)
+
+      | Binop (op, e1, e2) ->
+          let e1', env1, k1 = aux e1 env in
+          let e2', env2, k2 = aux e2 env1 in
+          let expr', kres =
+            match (k1, k2) with
+            | Some (C c1), Some (C c2) ->
+                (match binop_const op c1 c2 with
+                | Some c' -> (Const c', Some (C c'))
+                | None -> (Binop (op, e1', e2'), None))
+            | _ -> (Binop (op, e1', e2'), None)
+          in
+          ((id, env, expr'), env2, kres)
+
+      | Call (f, args) ->
+          let f', env1, _ = aux f env in
+          let args_rev, env2 =
+            List.fold_left
+              (fun (acc, acc_env) a ->
+                let a', acc_env', k = aux a acc_env in
+                ((a', k) :: acc, acc_env'))
+              ([], env1)
+              args
+          in
+          let args_with_kinds = List.rev args_rev in
+          let args' = List.map fst args_with_kinds in
+          let kres =
+            match f', args_with_kinds with
+            (* PROTECT(arg): propagate the kind of the argument *)
+            | (_, _, Id fv), [(_, k)]
+              when Variable.get_name fv = Some "PROTECT" -> k
+            (* mkNamed(VECSXP, names_var): resolve names from the kind *)
+            | (_, _, Id fv), [((_, _, Id vty), _); (_, Some (C (CArray names)))]
+              when Variable.get_name fv = Some "mkNamed"
+                   && Variable.get_name vty = Some "VECSXP" ->
+                Some (L (extract_names names))
+            | _ -> None
+          in
+          ((id, env, Call (f', args')), env2, kres)
+
+      | If (cond, then_, else_) ->
+          let cond', env1, _ = aux cond env in
+          let then_', env2, _ = aux then_ env1 in
+          let else_', env3 =
+            match else_ with
+            | None -> (None, env2)
+            | Some e3 ->
+                let e3', env3, _ = aux e3 env2 in
+                (Some e3', env3)
+          in
+          ((id, env, If (cond', then_', else_')), env3, None)
+
+      | Ite (cond, then_, else_) ->
+          let cond', env1, _ = aux cond env in
+          let then_', env2, _ = aux then_ env1 in
+          let else_', env3, _ = aux else_ env2 in
+          ((id, env, Ite (cond', then_', else_')), env3, None)
+
+      | While (cond, body) ->
+          let cond', env1, _ = aux cond env in
+          let body', env2, _ = aux body env1 in
+          ((id, env, While (cond', body')), env2, None)
+
+      | Seq (e1, e2) ->
+          let e1', env1, _ = aux e1 env in
+          let e2', env2, k2 = aux e2 env1 in
+          ((id, env, Seq (e1', e2')), env2, k2)
+
+      | Return eo ->
+          let eo', env' =
+            match eo with
+            | None -> (None, env)
+            | Some e1 ->
+                let e1', env', _ = aux e1 env in
+                (Some e1', env')
+          in
+          ((id, env, Return eo'), env', None)
+
+      | TyCheck (e1, ty) ->
+          let e1', env1, k1 = aux e1 env in
+          ((id, env, TyCheck (e1', ty)), env1, k1)
+
+      | Cast (ty, e1) ->
+          let e1', env1, _ = aux e1 env in
+          ((id, env, Cast (ty, e1')), env1, None)
+
+      | Function (name, ret_type, params, body) ->
+          (* Do not propagate outer constants into function bodies. *)
+          let body', _, _ = aux body VarMap.empty in
+          ((id, env, Function (name, ret_type, params, body')), env, None)
+
+      | Switch (e1, cases) ->
+          let e1', env1, _ = aux e1 env in
+          let cases', env' =
+            List.fold_left
+              (fun (acc_cases, acc_env) (case_e, body_e, has_break) ->
+                let case_e', envc, _ = aux case_e acc_env in
+                let body_e', envb, _ = aux body_e envc in
+                (acc_cases @ [ (case_e', body_e', has_break) ], envb))
+              ([], env1)
+              cases
+          in
+          ((id, env, Switch (e1', cases')), env', None)
+    in
+    let e', _, _ = aux e VarMap.empty in
+    e'
 
   let to_mlsem e = 
-    e |> recognize_const_comparison |> aux_e |> Mlsem.Lang.Transform.transform
+    e |> recognize_const_comparison |> propagate_const |> aux_e |> Mlsem.Lang.Transform.transform

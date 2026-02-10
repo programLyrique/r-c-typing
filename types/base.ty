@@ -18,7 +18,40 @@ LENGTH: t(v[int('a)](any)) -> c_int('a)
 XLENGTH: t(v[int('a)](any)) -> c_int('a)
 Rf_envlength: t(env) -> c_int
 
-allocVector: (t('a & any_prim, c_true) -> v[1]('a)) & (t('a & any_prim, (c_int \ c_true)) -> v('a))
+// there is also a special case for VECSXP (list) that is coded in OCaml
+allocVector: (t('a & any_prim, c_true) -> v[1]('a)) & (t('a & any_prim, (c_int \ c_true)) -> v('a)) & (t(list, 'b) -> list)
+
+// when the names are statically known, we can return a more precise type (handled on the OCaml side)
+mkNamed: (t('a & any_prim, *c_string) -> v('a)) & (t(list, *c_string) -> list)
+
+SET_VECTOR_ELT: t(list, c_int, any) -> list
+
+
+ScalarReal: t(c_double | c_int) -> dbl1
+ScalarInteger: t(c_int('a)) -> v[1](int('a))
+
+// Strings 
+na_string = p(chr \ ^chr)
+mkString: t(c_string('a)) -> v[1](chr('a))
+ScalarString: t(p(chr('a))) -> v[1](chr('a))
+mkChar: t(c_string('a)) -> p(chr('a))
+mkCharLen: t(c_string('a), c_int) -> p(chr('a))
+mkCharCE: t(c_string('a), any) -> p(chr('a)) // the 2nd argument is the encoding
+mkCharLenCE: t(c_string('a), c_int, any) -> p(chr('a))
+R_CHAR: (t(p(chr('a))) -> c_string('a)) & (t(p(chr \ ^chr)) -> c("NA"))
+CHAR: (t(p(chr('a))) -> c_string('a)) & (t(p(chr \ ^chr)) -> c("NA"))
+STRING_ELT: t(v(chr), c_int) -> p(chr)
+StringBlank: (t(p("")) -> c_true) & (t(p(chr \ "")) -> c_false) & (t(null) -> c_true) 
+NA_STRING: na_string
+asChar: (t(v[(1..)]('a)) -> chr1) & (t(p(chr) & 'a) -> 'a) & (t(sym) -> chr1) & (t(any_r_not_vec \ sym | v0('a)) -> na_string)
+
+// Environments 
+R_GlobalEnv: env
+R_EmptyEnv: env
+R_BaseEnv: env
+R_BaseNamespace: env
+R_NewEnv: t(env, c_int, c_int) -> env
+R_GetCurrentEnv: () -> env
 
 []<-: t(*'a, c_int, 'a) -> c_void
 []: t(*'a, c_int) -> 'a

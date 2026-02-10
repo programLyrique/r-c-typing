@@ -19,6 +19,7 @@ type const =
  | CBool of bool
  | CNull
  | CNa
+ | CArray of const list
  [@@deriving show]
 
 
@@ -141,10 +142,10 @@ let add_var env str =
 let add_def pid eid e str =
   let v = StrMap.find str eid in
   match StrMap.find_opt str pid with
-  | None -> Eid.unique (), Ast.Declare (v, e)
+  | None -> Eid.unique (), Ast.VarMap.empty, Ast.Declare (v, e)
   | _ -> e
 
-let aux_const c = 
+let rec aux_const c = 
   match c with 
   | CChar c -> Ast.CChar c
   | CStr s -> Ast.CStr s 
@@ -153,6 +154,8 @@ let aux_const c =
   | CNull -> Ast.CNull
   | CNa -> Ast.CNa
   | CBool b -> Ast.CBool b
+  | CArray lst -> Ast.CArray (List.map aux_const lst)
+
 
 
 let rec aux_e env (pos,e) = 
@@ -169,9 +172,9 @@ let rec aux_e env (pos,e) =
         (List.map (aux_e env) args) @ [aux_e env e2]
       )
   | VarAssign ((loc1, Unop (_op, e1)) ,e2) -> (* Currently, remove the * or & operator *)
-     aux_e env (loc1, VarAssign(e1, e2)) |> snd
+     let _,_,e = aux_e env (loc1, VarAssign(e1, e2)) in e
   | VarAssign (_,_) -> failwith ("Unexpected left-hand side in assignment. Got: " ^ show_e (pos,e))
-  | Call (f, args) -> Ast.Call (aux_e env f, List.map (aux_e env) args)
+  | Call (f, args) -> process_call env f args
   | If (cond, then_, else_) -> 
       Ast.If (aux_e env cond, aux_e env then_, Option.map (aux_e env) else_)
   | Ite (cond, then_, else_) -> 
@@ -181,19 +184,19 @@ let rec aux_e env (pos,e) =
       (* Transform For into While *)
       let init_e = aux_e env init in
       let cond_e = match cond with 
-        | None -> (Eid.unique (), Ast.Const (Ast.CBool true))
+        | None -> (Eid.unique (), Ast.VarMap.empty, Ast.Const (Ast.CBool true))
         | Some e -> aux_e env e
       in
       let incr_e = match incr with 
-        | None -> (Eid.unique (), Ast.Const (Ast.CNull))
+        | None -> (Eid.unique (), Ast.VarMap.empty, Ast.Const (Ast.CNull))
         | Some e -> aux_e env e
       in
       let while_body = 
         let body_e = aux_e env body in
-        let seq_e = Eid.unique (), Ast.Seq (body_e, incr_e) in
+        let seq_e = Eid.unique (), Ast.VarMap.empty, Ast.Seq (body_e, incr_e) in
         seq_e
       in
-      let while_e = Eid.unique (), Ast.While (cond_e, while_body) in
+      let while_e = Eid.unique (), Ast.VarMap.empty, Ast.While (cond_e, while_body) in
       Ast.Seq (init_e, while_e)
   | Return None -> Ast.Return None
   | Return (Some e) -> Ast.Return (Some (aux_e env e))
@@ -225,24 +228,39 @@ let rec aux_e env (pos,e) =
         | _,Default body_e -> 
           let pos,b = body_e in 
           let has_break,b = remove_break b in
-          ((Eid.unique (), Ast.Noop), aux_e env (pos, b), has_break) 
+          ((Eid.unique (), Ast.VarMap.empty, Ast.Noop), aux_e env (pos, b), has_break) 
         | _ -> failwith "Invalid case in switch"
       in
       Ast.Switch (aux_e env e, List.map aux_cases cases)
   | Case _ | Default _ -> failwith "Case and Default should be inside a switch"
   | Seq [] -> Ast.Const Ast.CNull
-  | Seq (e::es) -> List.fold_left (fun acc e ->
-      Eid.unique (), Ast.Seq (acc, aux_e env e)) (aux_e env e) es |> snd
+  | Seq (e::es) -> let _,_,e = List.fold_left (fun acc e ->
+      Eid.unique (), Ast.VarMap.empty, Ast.Seq (acc, aux_e env e)) (aux_e env e) es in
+      e
   | Comma _ -> failwith "Comma operator not supported yet"
   | Cast (ty, e) -> Ast.Cast (ty, aux_e env e)
   | VarDeclare (_typ, (_,Id _s)) -> Ast.Noop (* Rather generate a AST. Declare somewhere from them*)
   | VarDeclare (_, _) -> failwith "Declaration must have an identifier" (*Should be unreachable*)
   in
-  (eid, e)
+  (eid, Ast.VarMap.empty, e)
+and process_call env f args = 
+  (* Set calls modify in place in the R C API, but for typing reason, 
+  we make it create a new value and then assign to the original variable. *)
+  let e = match (f, args) with 
+  | (loc1,Id "SET_VECTOR_ELT"),(_, Id v)::_ ->
+   Ast.VarAssign (var env v,
+      (Eid.unique_with_pos loc1, Ast.VarMap.empty, Ast.Call (
+         aux_e env f,
+        List.map (aux_e env) args
+      ))
+    )
+  | _ -> Ast.Call (aux_e env f, List.map (aux_e env) args) in
+  e
 and transform env (pos, topl_unit) = 
   let eid = Eid.unique_with_pos pos in
   let e = match topl_unit with 
   | Fundef (ret_ty, name, params, body) -> 
+
     let param_vars = bv_params params in
     let pid = List.fold_left add_var env.id (StrSet.elements param_vars) in
     let env = {id=pid} in 
@@ -250,10 +268,10 @@ and transform env (pos, topl_unit) =
     let eid = List.fold_left add_var env.id (StrSet.elements body_vars) in
     let env = {id=eid} in
     let e = List.fold_left (add_def pid eid) (aux_e env body) (StrSet.elements body_vars) in
-    let params = List.map (fun (ty,name) -> ty,var env name) params in 
+    let params = List.map (fun (ty,name) -> ty,var env name) params in       
     Ast.Function (name, ret_ty, params, e) 
   in
-  (eid, e)
+  (eid, Ast.VarMap.empty, e)
 
 let map f e = 
   let rec aux (pos, e) = 

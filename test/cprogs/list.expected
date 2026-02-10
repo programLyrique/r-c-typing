@@ -1,0 +1,24 @@
+Not supported yet: top level item
+Prep_incl (
+  (
+    "#include"
+    System_lib_str "<Rinternals.h>"
+    "\n"
+  )
+)
+create_pos_list: () -> { any, any, any }
+
+create_list: () -> list
+
+create_named_list: () -> { a: any, b: any }
+
+create_list_const_prop: () -> { any, any, any, any, any, any, any }
+
+create_list_const_prop2: () -> { any, any, any, any, any, any, any }
+
+create_named_list_with_elems: () -> { a: dbl1, b: dbl1 }
+
+create_named_list_with_int: () -> { a: v1(^3), b: v1(^6) }
+
+create_named_list_set_only_one: () -> { a: v1(^3), b: any }
+

@@ -28,3 +28,33 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/.../r-parser/core/tree-sitter/lib/
 export TREESITTER_INCDIR=/.../r-parser/core/tree-sitter/include/
 export TREESITTER_LIBDIR=/.../r-parser/core/tree-sitter/lib/
 ```
+
+## Adding type inference tests
+
+Use the provided helper script so the test list stays in sync.
+
+```bash
+./add_test.sh myfunction
+```
+
+This creates `test/cprogs/myfunction.c`, generates `test/cprogs/myfunction.expected` using the current inference output, and updates `test/dune.inc` with the corresponding rules. Then run the tests with:
+
+```bash
+dune runtest
+```
+
+Avoid editing `test/dune.inc` manually. Re-run `add_test.sh` if you need to refresh the expected output.
+
+## CLI examples
+
+Show the parsed AST for functions whose name contains "from":
+
+```bash
+dune exec r-c-typing -- --past -f from test/cprogs/string.c
+```
+
+Run inference for a single file:
+
+```bash
+dune exec r-c-typing -- test/cprogs/string.c
+```

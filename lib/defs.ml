@@ -6,14 +6,42 @@ module MVariable = Mlsem.Lang.MVariable
 (* Add here any known type definitions, for instance, from the R C API *)
 
 
-let any_sexp = let open Rstt.Prim in
-   Ty.disj [Chr.any; Clx.any; Dbl.any; Int.any; Lgl.any; Raw.any ; Rstt.Env.any; Rstt.Vec.any]
+let any_sexp =
+   Ty.disj [Rstt.Prim.any ; Rstt.Env.any; Rstt.Vec.any ]
 
 let any_c = Ty.disj [Cint.any; Cenums.char; Cenums.double; Cptr.any]
 
 let exprsxp = Rstt.Builder.(
-  build TIdMap.empty (TList ([], [], TCup (TLang, TSym)))
+  build TIdMap.empty (TList ([], [], TOption (TCup (TLang, TSym))))
 )
+
+(* Special type constructors for lists*)
+let allocVector_vecsxp_ty n =
+  let open Rstt.Builder in 
+  let builder = TList (List.init n (fun _ -> TAny), [], TOption TEmpty) in
+  build TIdMap.empty builder
+
+let mkNamed_vecsxp_ty names = 
+  let open Rstt.Builder in 
+  let builder =
+    TList
+      ( [],
+        List.map (fun name -> (name, TAny)) names,
+        TOption TEmpty )
+  in 
+  build TIdMap.empty builder
+
+let set_vector_elt_ty name = 
+  let open Rstt.Builder in 
+  let _, r' = rvar empty_env "r" in
+  let _, a = tvar empty_env "a" in
+  (* t({;`r}, 'a) -> {name: 'a; `r} ; actually, maybe 'a & any_sexp for the 1st argument... *)
+  let builder =
+    TArrow
+      ( TTuple [TList ([], [], TRowVar r'); TVar a],
+        TList ([], [ (name, TVar a) ], TRowVar r') )
+  in
+  build TIdMap.empty builder
 
 let tobool, tobool_t =
   let v = MVariable.create Immut (Some "tobool") in
