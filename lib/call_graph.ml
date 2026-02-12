@@ -150,5 +150,29 @@ module Callgraph = struct
           components := comp :: !components)
       !order;
     List.rev !components
-end
 
+  let topo_sort t =
+    let n = Array.length t.id_to_name in
+    let visited = Array.make n false in
+    let result = ref [] in
+    let rec visit id =
+      if not visited.(id) then (
+        visited.(id) <- true;
+        List.iter visit t.succ.(id);
+        result := id :: !result)
+    in
+    for id = 0 to n - 1 do
+      visit id
+    done;
+    List.rev !result
+
+  let topo_sort_names t =
+    List.filter_map (name_of_id t) (topo_sort t)
+
+  let in_degree t =
+    let n = Array.length t.id_to_name in
+    let deg = Array.make n 0 in
+    iter_edges t (fun _caller callee -> deg.(callee) <- deg.(callee) + 1);
+    deg
+
+  end
