@@ -74,5 +74,81 @@ module Callgraph = struct
     let acc = ref init in
     iter_edges t (fun caller_id callee_id -> acc := f !acc caller_id callee_id);
     !acc
+
+  let dfs_from_id t start_id =
+    let n = Array.length t.id_to_name in
+    let visited = Array.make n false in
+    let rec visit acc id =
+      if id < 0 || id >= n || visited.(id) then acc
+      else (
+        visited.(id) <- true;
+        let acc' = id :: acc in
+        List.fold_left visit acc' t.succ.(id))
+    in
+    List.rev (visit [] start_id)
+
+  let dfs_from_name t name =
+    match id_of_name t name with
+    | None -> []
+    | Some id -> dfs_from_id t id
+
+  let bfs_from_id t start_id =
+    let n = Array.length t.id_to_name in
+    let visited = Array.make n false in
+    let queue = Queue.create () in
+    let acc = ref [] in
+    if start_id >= 0 && start_id < n then (
+      visited.(start_id) <- true;
+      Queue.add start_id queue);
+    while not (Queue.is_empty queue) do
+      let id = Queue.take queue in
+      acc := id :: !acc;
+      List.iter
+        (fun succ_id ->
+          if succ_id >= 0 && succ_id < n && not visited.(succ_id) then (
+            visited.(succ_id) <- true;
+            Queue.add succ_id queue))
+        t.succ.(id)
+    done;
+    List.rev !acc
+
+  let bfs_from_name t name =
+    match id_of_name t name with
+    | None -> []
+    | Some id -> bfs_from_id t id
+
+  let scc t =
+    (* Kosaraju's algorithm: order by finish time, then DFS on transposed graph. *)
+    let n = Array.length t.id_to_name in
+    let visited = Array.make n false in
+    let order = ref [] in
+    let rec dfs1 id =
+      if not visited.(id) then (
+        visited.(id) <- true;
+        List.iter dfs1 t.succ.(id);
+        order := id :: !order)
+    in
+    for id = 0 to n - 1 do
+      dfs1 id
+    done;
+    let rev_succ = Array.make n [] in
+    for u = 0 to n - 1 do
+      List.iter (fun v -> rev_succ.(v) <- u :: rev_succ.(v)) t.succ.(u)
+    done;
+    Array.fill visited 0 n false;
+    let rec dfs2 acc id =
+      if visited.(id) then acc
+      else (
+        visited.(id) <- true;
+        List.fold_left dfs2 (id :: acc) rev_succ.(id))
+    in
+    let components = ref [] in
+    List.iter
+      (fun id ->
+        if not visited.(id) then
+          let comp = dfs2 [] id in
+          components := comp :: !components)
+      !order;
+    List.rev !components
 end
 
