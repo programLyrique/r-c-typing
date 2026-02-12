@@ -1,6 +1,6 @@
 (library
  (name r_c_typing)
- (modules ast defs in_channel_ext parser PAst runner type_parser utils vectors type_order)
+ (modules ast defs in_channel_ext parser PAst runner type_parser utils vectors type_order call_graph)
  (libraries r-c-typing.c mlsem rstt rstt-repl)
  (inline_tests
   (deps ../types/base.ty))
