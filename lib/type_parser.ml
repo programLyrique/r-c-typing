@@ -77,7 +77,14 @@ let build_types ti_map env type_list =
 let add_rf_aliases type_map =
   let open Builder in
   StrMap.fold (fun sym ty acc ->
-    if String.starts_with ~prefix:"R_" sym || String.starts_with ~prefix:"Rf_" sym then
+    let is_uppercase_letter c =
+      let code = Char.code c in
+      code >= Char.code 'A' && code <= Char.code 'Z'
+    in
+    let starts_with_two_uppercase =
+      String.length sym >= 2 && is_uppercase_letter sym.[0] && is_uppercase_letter sym.[1]
+    in
+    if starts_with_two_uppercase || String.starts_with ~prefix:"R_" sym || String.starts_with ~prefix:"Rf_" sym then
       acc
     else
       let rf_sym = "Rf_" ^ sym in

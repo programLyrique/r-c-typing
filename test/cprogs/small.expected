@@ -18,11 +18,11 @@ check: () -> c_false
 
 incr: (int1) -> int1
 
-isFunction: ((any -> any) -> c_true) & ((vec | list | sym | lang | null | env) -> c_false)
+isFunction: ((any -> any) -> c_true) & ((vec | lang | list | null | sym | env) -> c_false)
 
-isPrimitive: ((any -> any) -> c_true) & ((env | sym | list | lang | vec | null) -> c_false)
+isPrimitive: ((any -> any) -> c_true) & ((vec | env | null | list | sym | lang) -> c_false)
 
-isList: ((vec | sym | list | env | (any -> any)) -> c_false) & ((null) | (lang) -> c_true)
+isList: ((vec | env | sym | (any -> any) | list) -> c_false) & ((null) | (lang) -> c_true)
 
-isNewList: ((sym | lang | vec | (any -> any) | env) -> c_false) & ((null) | (list) -> c_true)
+isNewList: (((any -> any) | lang | vec | env | sym) -> c_false) & ((null) | (list) -> c_true)
 
