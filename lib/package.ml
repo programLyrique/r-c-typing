@@ -55,13 +55,13 @@ let find_native_calls path =
       with _ -> ""
   in
 
-  (* Strip prefix from function name if it matches the detected prefix *)
-  let strip_prefix prefix func_name =
+  (* Ensure function name uses the detected prefix when needed *)
+  let apply_prefix prefix func_name =
     if prefix = "" then func_name
     else if String.starts_with ~prefix func_name then
-      String.sub func_name (String.length prefix) (String.length func_name - String.length prefix)
-    else
       func_name
+    else
+      prefix ^ func_name
   in
 
   (* Find native calls in R source files *)
@@ -88,8 +88,8 @@ let find_native_calls path =
                     ignore (Str.search_forward pattern content pos);
                     let func_name = Str.matched_group 1 content in
                     let next_pos = Str.match_end () in
-                    let clean_name = strip_prefix prefix func_name in
-                    find_all next_pos ((clean_name, calling_convention_to_string convention) :: acc)
+                    let full_name = apply_prefix prefix func_name in
+                    find_all next_pos ((full_name, convention) :: acc)
                   with Not_found -> List.rev acc
                 in
                 find_all 0 []
@@ -107,3 +107,17 @@ let find_native_calls path =
 
   let prefix = find_prefix () in
   find_calls prefix
+
+let get_c_files path =
+  let src_dir = Filename.concat path "src" in
+  if not (Sys.file_exists src_dir && Sys.is_directory src_dir) then []
+  else
+    try
+      let files = Sys.readdir src_dir in
+      Array.fold_left (fun acc filename ->
+        let filepath = Filename.concat src_dir filename in
+        if not (Sys.is_directory filepath) && Filename.check_suffix filename ".c" then
+          filepath :: acc
+        else acc
+      ) [] files
+    with _ -> []

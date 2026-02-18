@@ -74,11 +74,21 @@ let build_types ti_map env type_list =
     (StrMap.add sym ty ty_env, ti_map, env)
     ) (Builder.StrMap.empty, ti_map, env) type_list
 
-let load_file filename =
+let add_rf_aliases type_map =
+  let open Builder in
+  StrMap.fold (fun sym ty acc ->
+    if String.starts_with ~prefix:"R_" sym || String.starts_with ~prefix:"Rf_" sym then
+      acc
+    else
+      let rf_sym = "Rf_" ^ sym in
+      if StrMap.mem rf_sym acc then acc else StrMap.add rf_sym ty acc
+  ) type_map type_map
+
+let load_file ?(rf_aliases=false) filename =
   let parsed_types = parse_type_file filename in
   let ti_map = Builder.TIdMap.empty in
   let type_map, _,_ = build_types ti_map Builder.empty_env parsed_types in
-  type_map
+  if rf_aliases then add_rf_aliases type_map else type_map
 
 
 let mk_arg l =

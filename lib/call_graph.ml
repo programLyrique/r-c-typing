@@ -284,6 +284,14 @@ let keep_reachable t entry_points =
   ) reachable_names;
   new_graph
 
+let topo_sort pasts call_graph =
+  let past_map = Hashtbl.create (List.length pasts) in
+  List.iter (fun (filename, past) ->
+    match past with
+      | _, PAst.Fundef (_, name, _, _) -> Hashtbl.add past_map name (filename, past)
+  ) pasts;
+  let sorted_names = Callgraph.topo_sort_names call_graph in
+  List.filter_map (fun name -> Hashtbl.find_opt past_map name) sorted_names
 
 
 (* Inline tests *)

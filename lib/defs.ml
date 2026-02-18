@@ -123,7 +123,7 @@ end
 
 (* For the new type algebra *)
 let filename = Type_parser.find_types_base_ty () 
-let parsed_types = Type_parser.load_file filename 
+let parsed_types = Type_parser.load_file ~rf_aliases:true filename 
 
 let build_vars m = 
   let add_var name ty acc =

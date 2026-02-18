@@ -4,6 +4,11 @@ open CST
 module A = PAst
 open Mlsem.Common
 
+let warn_unsupported = ref true
+
+let set_warn_unsupported value =
+  warn_unsupported := value
+
 let print_res (res: (CST.translation_unit, CST.extra) Tree_sitter_run.Parsing_result.t) = 
   Printf.printf "Errors: %d. Lines with errors: %d / %d\n" res.stat.error_count
     res.stat.error_line_count res.stat.total_line_count ;
@@ -550,8 +555,12 @@ and aux_prep_func_def (func_def: preproc_function_def) =
         let items = List.filter_map (fun item -> 
           match item with 
           | `Top_level_stmt stmt -> Some (aux_top_level_statement stmt)
-          | _ -> Printf.printf "Not supported yet: top level item in define";
-              print_top_level_item item; None
+          | _ ->
+              if !warn_unsupported then begin
+                Printf.printf "Not supported yet: top level item in define";
+                print_top_level_item item
+              end;
+              None
         ) tu in 
         List.hd items
   in
@@ -569,7 +578,12 @@ let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
      Some (Mlsem.Common.Position.dummy, Fundef (return_type, name, params, body))
      ) 
   | `Prep_func_def func_def -> Some (aux_prep_func_def func_def)
-  | _ -> (Printf.printf "Not supported yet: top level item\n";print_top_level_item item ; None)
+  | _ ->
+      if !warn_unsupported then begin
+        Printf.printf "Not supported yet: top level item\n";
+        print_top_level_item item
+      end;
+      None
 
 
 let aux_translation_unit tree =

@@ -108,6 +108,75 @@ let run_on_file opts filename idenv env =
   end;
   List.fold_left (infer_fun_def visible_name opts) (idenv, env) past
 
+let run_on_files opts filenames ?entry_points idenv env =
+  (* Parse all the files to past *)
+  let pasts = List.map (fun filename ->
+      if not (Sys.file_exists filename) then
+        failwith (Printf.sprintf "File not found: %s" filename);
+      let cst = Parser.parse_file filename in
+      if opts.cst then Parser.print_res cst;
+      let past = Parser.to_ast cst in
+      (filename, past)
+    ) filenames in
+  let call_graph = Call_graph.of_past_list (List.map snd pasts) in
+  let call_graph = match entry_points with
+    | None -> call_graph
+    | Some entries -> Call_graph.keep_reachable call_graph entries in
+  (* Only keep the transitive closure of the entry points *)
+  let filtered_pasts = List.concat_map (fun (filename, past) ->
+      List.filter_map (fun item ->
+        match item with
+        | (_,PAst.Fundef (_, name, _, _)) when Call_graph.Callgraph.has_node call_graph name ->
+            Some (filename, item)
+        | _ -> None
+      ) past
+    ) pasts in
+  (* Sort the call graph *)
+  let sorted_pasts = Call_graph.topo_sort filtered_pasts call_graph in
+
+  let visible_name = make_substring_pred opts.filter in
+  if opts.past then begin
+    let visible_past = match opts.filter with
+      | None -> List.map snd sorted_pasts
+      | Some _ ->
+          List.filter_map (fun (_, item) ->
+            match item with
+            | _, PAst.Fundef (_, name, _, _) when visible_name name -> Some item
+            | _ -> None
+          ) sorted_pasts
+    in
+    Printf.printf "%s\n" (PAst.show_definitions visible_past)
+  end;
+  List.fold_left (fun acc (_, item) -> infer_fun_def visible_name opts acc item) (idenv, env) sorted_pasts
+
+
+let run_on_package opts path idenv env =
+  let native_calls = Package.find_native_calls path in
+  if opts.debug then begin
+    Printf.printf "Native calls found in package %s:\n" path;
+    List.iter (fun (func_name, convention) ->
+      Printf.printf "  %s: %s\n" func_name (Package.calling_convention_to_string convention)
+    ) native_calls;
+    Printf.printf "\n"
+  end;
+
+  (*Get all C files in src/ *)
+  let c_files = Package.get_c_files path in
+  if opts.debug then begin
+    Printf.printf "C source files found in package %s:\n" path;
+    List.iter (fun filepath ->
+      Printf.printf "  %s\n" filepath
+    ) c_files;
+    Printf.printf "\n"
+  end;
+  (* Infer types for .Call entrypoints *)
+  let entry_points = native_calls |> List.filter_map (fun (func_name, convention) ->
+    match convention with
+    | Package.Call -> Some func_name
+    | _ -> None
+  ) in
+  run_on_files opts c_files ~entry_points idenv env
+  
 let () =
   Mlsem_types.PEnv.add_printer_param (Rstt.Pp.printer_params ()) ;
   Mlsem_system.Config.normalization_fun := Rstt.Simplify.partition_vecs

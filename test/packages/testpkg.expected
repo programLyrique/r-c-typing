@@ -1,0 +1,4 @@
+testpkg_make_pair: (chr | any, chr | any) -> lang
+
+testpkg_reverse_strings: ∀'a. ((chr1) -> chr1) & ((chr[int(i('a & int & ~1))]) -> chr['a])
+

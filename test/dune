@@ -12,4 +12,19 @@
  (modules package_test)
  (libraries r_c_typing))
 
- (include dune.inc)
+(rule
+ (alias runtest)
+ (deps
+  (source_tree packages/testpkg))
+ (action
+  (with-stdout-to
+   testpkg.output
+   (run %{exe:package_test.exe} packages/testpkg))))
+
+(rule
+ (alias runtest)
+ (deps packages/testpkg.expected testpkg.output)
+ (action
+  (diff packages/testpkg.expected testpkg.output)))
+
+(include dune.inc)
