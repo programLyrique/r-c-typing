@@ -300,3 +300,153 @@ let map f e =
     f (pos, e)
   in aux e
 
+(** Extract function call names from an expression *)
+let rec extract_calls_from_expr (_pos, e') =
+  match e' with
+  | Const _ | Id _ | Break | Next -> []
+  | Unop (_, e) -> extract_calls_from_expr e
+  | Binop (_, (e1, e2)) ->
+      extract_calls_from_expr e1 @ extract_calls_from_expr e2
+  | VarDeclare (_, e) -> extract_calls_from_expr e
+  | VarAssign (e1, e2) ->
+      extract_calls_from_expr e1 @ extract_calls_from_expr e2
+  | Call ((_, Id fname), args) ->
+      fname :: List.concat_map extract_calls_from_expr args
+  | Call (f, args) ->
+      extract_calls_from_expr f @ List.concat_map extract_calls_from_expr args
+  | If (cond, then_, else_opt) ->
+      let acc = extract_calls_from_expr cond @ extract_calls_from_expr then_ in
+      (match else_opt with
+       | None -> acc
+       | Some e -> acc @ extract_calls_from_expr e)
+  | Ite (cond, then_, else_) ->
+      extract_calls_from_expr cond
+      @ extract_calls_from_expr then_
+      @ extract_calls_from_expr else_
+  | While (cond, body) ->
+      extract_calls_from_expr cond @ extract_calls_from_expr body
+  | For (init, cond_opt, incr_opt, body) ->
+      let acc = extract_calls_from_expr init in
+      let acc =
+        match cond_opt with None -> acc | Some e -> acc @ extract_calls_from_expr e
+      in
+      let acc =
+        match incr_opt with None -> acc | Some e -> acc @ extract_calls_from_expr e
+      in
+      acc @ extract_calls_from_expr body
+  | Return e_opt ->
+      (match e_opt with None -> [] | Some e -> extract_calls_from_expr e)
+  | Case (e1, e2) ->
+      extract_calls_from_expr e1 @ extract_calls_from_expr e2
+  | Default e -> extract_calls_from_expr e
+  | Switch (e, cases) ->
+      extract_calls_from_expr e @ List.concat_map extract_calls_from_expr cases
+  | Seq exprs -> List.concat_map extract_calls_from_expr exprs
+  | Comma (e1, e2) ->
+      extract_calls_from_expr e1 @ extract_calls_from_expr e2
+  | Cast (_, e) -> extract_calls_from_expr e
+
+(* Inline tests for extract_calls_from_expr *)
+let%test "simple function call" =
+  let pos = Mlsem.Common.Position.dummy in
+  let mk_e e' = (pos, e') in
+  let expr = mk_e (Call (mk_e (Id "foo"), [])) in
+  let calls = extract_calls_from_expr expr in
+  calls = ["foo"]
+
+let%test "function call with arguments" =
+  let pos = Mlsem.Common.Position.dummy in
+  let mk_e e' = (pos, e') in
+  let expr = mk_e (Call (mk_e (Id "bar"), [mk_e (Const (CInt 42)); mk_e (Id "x")])) in
+  let calls = extract_calls_from_expr expr in
+  calls = ["bar"]
+
+let%test "nested function calls" =
+  let pos = Mlsem.Common.Position.dummy in
+  let mk_e e' = (pos, e') in
+  let inner_call = mk_e (Call (mk_e (Id "inner"), [])) in
+  let expr = mk_e (Call (mk_e (Id "outer"), [inner_call])) in
+  let calls = extract_calls_from_expr expr in
+  calls = ["outer"; "inner"]
+
+let%test "binary operation with function calls" =
+  let pos = Mlsem.Common.Position.dummy in
+  let mk_e e' = (pos, e') in
+  let call1 = mk_e (Call (mk_e (Id "func1"), [])) in
+  let call2 = mk_e (Call (mk_e (Id "func2"), [])) in
+  let expr = mk_e (Binop ("+", (call1, call2))) in
+  let calls = extract_calls_from_expr expr in
+  calls = ["func1"; "func2"]
+
+let%test "if-then-else with function calls" =
+  let pos = Mlsem.Common.Position.dummy in
+  let mk_e e' = (pos, e') in
+  let cond = mk_e (Call (mk_e (Id "is_ready"), [])) in
+  let then_branch = mk_e (Call (mk_e (Id "process"), [])) in
+  let else_branch = mk_e (Call (mk_e (Id "skip"), [])) in
+  let expr = mk_e (If (cond, then_branch, Some else_branch)) in
+  let calls = extract_calls_from_expr expr in
+  calls = ["is_ready"; "process"; "skip"]
+
+let%test "while loop with function calls" =
+  let pos = Mlsem.Common.Position.dummy in
+  let mk_e e' = (pos, e') in
+  let cond = mk_e (Call (mk_e (Id "has_next"), [])) in
+  let body = mk_e (Call (mk_e (Id "process_next"), [])) in
+  let expr = mk_e (While (cond, body)) in
+  let calls = extract_calls_from_expr expr in
+  calls = ["has_next"; "process_next"]
+
+let%test "for loop with function calls" =
+  let pos = Mlsem.Common.Position.dummy in
+  let mk_e e' = (pos, e') in
+  let init = mk_e (Call (mk_e (Id "init_loop"), [])) in
+  let cond = mk_e (Call (mk_e (Id "check_cond"), [])) in
+  let incr = mk_e (Call (mk_e (Id "increment"), [])) in
+  let body = mk_e (Call (mk_e (Id "process"), [])) in
+  let expr = mk_e (For (init, Some cond, Some incr, body)) in
+  let calls = extract_calls_from_expr expr in
+  calls = ["init_loop"; "check_cond"; "increment"; "process"]
+
+let%test "switch statement with function calls" =
+  let pos = Mlsem.Common.Position.dummy in
+  let mk_e e' = (pos, e') in
+  let switch_expr = mk_e (Call (mk_e (Id "get_value"), [])) in
+  let case1 = mk_e (Case (mk_e (Const (CInt 1)), mk_e (Call (mk_e (Id "handle_one"), [])))) in
+  let default = mk_e (Default (mk_e (Call (mk_e (Id "handle_default"), [])))) in
+  let expr = mk_e (Switch (switch_expr, [case1; default])) in
+  let calls = extract_calls_from_expr expr in
+  calls = ["get_value"; "handle_one"; "handle_default"]
+
+let%test "sequence with multiple function calls" =
+  let pos = Mlsem.Common.Position.dummy in
+  let mk_e e' = (pos, e') in
+  let call1 = mk_e (Call (mk_e (Id "step1"), [])) in
+  let call2 = mk_e (Call (mk_e (Id "step2"), [])) in
+  let call3 = mk_e (Call (mk_e (Id "step3"), [])) in
+  let expr = mk_e (Seq [call1; call2; call3]) in
+  let calls = extract_calls_from_expr expr in
+  calls = ["step1"; "step2"; "step3"]
+
+let%test "return with function call" =
+  let pos = Mlsem.Common.Position.dummy in
+  let mk_e e' = (pos, e') in
+  let call = mk_e (Call (mk_e (Id "compute"), [])) in
+  let expr = mk_e (Return (Some call)) in
+  let calls = extract_calls_from_expr expr in
+  calls = ["compute"]
+
+let%test "no function calls" =
+  let pos = Mlsem.Common.Position.dummy in
+  let mk_e e' = (pos, e') in
+  let expr = mk_e (Binop ("+", (mk_e (Const (CInt 1)), mk_e (Const (CInt 2))))) in
+  let calls = extract_calls_from_expr expr in
+  calls = []
+
+let%test "assignment with function call" =
+  let pos = Mlsem.Common.Position.dummy in
+  let mk_e e' = (pos, e') in
+  let call = mk_e (Call (mk_e (Id "getValue"), [])) in
+  let expr = mk_e (VarAssign (mk_e (Id "x"), call)) in
+  let calls = extract_calls_from_expr expr in
+  calls = ["getValue"]

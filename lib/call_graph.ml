@@ -175,4 +175,40 @@ module Callgraph = struct
     iter_edges t (fun _caller callee -> deg.(callee) <- deg.(callee) + 1);
     deg
 
-  end
+  let topo_sort_kahn t =
+    let deg = in_degree t in
+    let queue = Queue.create () in
+    Array.iteri (fun id d -> if d = 0 then Queue.add id queue) deg;
+    let result = ref [] in
+    while not (Queue.is_empty queue) do
+      let u = Queue.take queue in
+      result := u :: !result;
+      List.iter
+        (fun v ->
+          deg.(v) <- deg.(v) - 1;
+          if deg.(v) = 0 then Queue.add v queue)
+        t.succ.(u)
+    done;
+    List.rev !result
+
+  (** Build a call graph from a single PAst top-level unit *)
+  let of_past_unit t (_pos, unit') =
+    match unit' with
+    | PAst.Fundef (_, fname, _params, body) ->
+        let callees = PAst.extract_calls_from_expr body in
+        List.iter (fun callee -> add_edge t ~caller:fname ~callee) callees
+
+  (** Build a call graph from a PAst definition (list of top-level units) *)
+  let of_past defs =
+    let t = create ~capacity:(List.length defs) () in
+    List.iter (of_past_unit t) defs;
+    t
+
+  (** Build a call graph from multiple PAst definitions *)
+  let of_past_list defs_list =
+    let total = List.fold_left (fun acc defs -> acc + List.length defs) 0 defs_list in
+    let t = create ~capacity:total () in
+    List.iter (List.iter (of_past_unit t)) defs_list;
+    t
+end
+
