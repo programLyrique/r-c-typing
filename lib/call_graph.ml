@@ -155,6 +155,8 @@ module Callgraph = struct
     let n = Array.length t.id_to_name in
     let visited = Array.make n false in
     let result = ref [] in
+    (* More efficient than calling the dfs_from_id multiple times as 
+    we can share the visited array. *)
     let rec visit id =
       if not visited.(id) then (
         visited.(id) <- true;
@@ -191,24 +193,130 @@ module Callgraph = struct
     done;
     List.rev !result
 
-  (** Build a call graph from a single PAst top-level unit *)
-  let of_past_unit t (_pos, unit') =
-    match unit' with
-    | PAst.Fundef (_, fname, _params, body) ->
-        let callees = PAst.extract_calls_from_expr body in
-        List.iter (fun callee -> add_edge t ~caller:fname ~callee) callees
+  (** Compute all nodes reachable from a list of starting node IDs *)
+  let reachable_from_ids t start_ids =
+    let n = Array.length t.id_to_name in
+    let visited = Array.make n false in
+    let result = ref [] in
+    let rec visit id =
+      if id >= 0 && id < n && not visited.(id) then (
+        visited.(id) <- true;
+        result := id :: !result;
+        List.iter visit t.succ.(id))
+    in
+    List.iter visit start_ids;
+    List.rev !result
 
-  (** Build a call graph from a PAst definition (list of top-level units) *)
-  let of_past defs =
-    let t = create ~capacity:(List.length defs) () in
-    List.iter (of_past_unit t) defs;
-    t
+  (** Compute all nodes reachable from a list of starting node names *)
+  let reachable_from_names t start_names =
+    let start_ids = List.filter_map (id_of_name t) start_names in
+    let reachable_ids = reachable_from_ids t start_ids in
+    List.filter_map (name_of_id t) reachable_ids
 
-  (** Build a call graph from multiple PAst definitions *)
-  let of_past_list defs_list =
-    let total = List.fold_left (fun acc defs -> acc + List.length defs) 0 defs_list in
-    let t = create ~capacity:total () in
-    List.iter (List.iter (of_past_unit t)) defs_list;
-    t
+  (* Inline tests *)
+  let%test "reachable from single node" =
+    let g = create () in
+    let _a = add_node g "a" in
+    let _b = add_node g "b" in
+    let _c = add_node g "c" in
+    add_edge g ~caller:"a" ~callee:"b";
+    add_edge g ~caller:"b" ~callee:"c";
+    let reachable = reachable_from_names g ["a"] in
+    reachable = ["a"; "b"; "c"]
+
+  let%test "reachable from multiple nodes" =
+    let g = create () in
+    add_edge g ~caller:"a" ~callee:"b";
+    add_edge g ~caller:"c" ~callee:"d";
+    add_edge g ~caller:"b" ~callee:"e";
+    let reachable = reachable_from_names g ["a"; "c"] in
+    List.sort String.compare reachable = ["a"; "b"; "c"; "d"; "e"]
+
+  let%test "reachable with cycles" =
+    let g = create () in
+    add_edge g ~caller:"a" ~callee:"b";
+    add_edge g ~caller:"b" ~callee:"c";
+    add_edge g ~caller:"c" ~callee:"a";
+    let reachable = reachable_from_names g ["a"] in
+    List.sort String.compare reachable = ["a"; "b"; "c"]
+
+  let%test "reachable from disconnected nodes" =
+    let g = create () in
+    add_edge g ~caller:"a" ~callee:"b";
+    add_edge g ~caller:"c" ~callee:"d";
+    let reachable = reachable_from_names g ["x"; "y"] in
+    reachable = []
 end
+
+
+(** Build a call graph from a single PAst top-level unit *)
+let of_past_unit t (_pos, unit') =
+  match unit' with
+  | PAst.Fundef (_, fname, _params, body) ->
+      let callees = PAst.extract_calls_from_expr body in
+      List.iter (fun callee -> Callgraph.add_edge t ~caller:fname ~callee) callees
+
+(** Build a call graph from a PAst definition (list of top-level units) *)
+let of_past defs =
+  let t = Callgraph.create ~capacity:(List.length defs) () in
+  List.iter (of_past_unit t) defs;
+  t
+
+(** Build a call graph from multiple PAst definitions *)
+let of_past_list defs_list =
+  let total = List.fold_left (fun acc defs -> acc + List.length defs) 0 defs_list in
+  let t = Callgraph.create ~capacity:total () in
+  List.iter (List.iter (of_past_unit t)) defs_list;
+  t
+
+let keep_reachable t entry_points =
+  let reachable_names = Callgraph.reachable_from_names t entry_points in
+  let module StrSet = Set.Make(String) in
+  let reachable_set = StrSet.of_list reachable_names in
+  let new_graph = Callgraph.create ~capacity:(List.length reachable_names) () in
+  (* Add edges only between reachable nodes *)
+  List.iter (fun caller ->
+    let callees = Callgraph.successors_by_name t caller in
+    List.iter (fun callee ->
+      if StrSet.mem callee reachable_set then
+        Callgraph.add_edge new_graph ~caller ~callee
+    ) callees
+  ) reachable_names;
+  new_graph
+
+
+
+(* Inline tests *)
+
+(* Inline test for keep_reachable *)
+let%test "keep_reachable filters unreachable nodes" =
+  let g = Callgraph.create () in
+  Callgraph.add_edge g ~caller:"main" ~callee:"helper1";
+  Callgraph.add_edge g ~caller:"helper1" ~callee:"util";
+  Callgraph.add_edge g ~caller:"unused" ~callee:"dead_code";
+  let filtered = keep_reachable g ["main"] in
+  Callgraph.node_count filtered = 3 &&
+  Callgraph.has_node filtered "main" &&
+  Callgraph.has_node filtered "helper1" &&
+  Callgraph.has_node filtered "util" &&
+  not (Callgraph.has_node filtered "unused") &&
+  not (Callgraph.has_node filtered "dead_code")
+
+let%test "keep_reachable preserves edges" =
+  let g = Callgraph.create () in
+  Callgraph.add_edge g ~caller:"a" ~callee:"b";
+  Callgraph.add_edge g ~caller:"b" ~callee:"c";
+  let filtered = keep_reachable g ["a"] in
+  Callgraph.successors_by_name filtered "a" = ["b"] &&
+  Callgraph.successors_by_name filtered "b" = ["c"]
+
+let%test "keep_reachable with multiple entry points" =
+  let g = Callgraph.create () in
+  Callgraph.add_edge g ~caller:"main1" ~callee:"shared";
+  Callgraph.add_edge g ~caller:"main2" ~callee:"shared";
+  Callgraph.add_edge g ~caller:"unused" ~callee:"dead";
+  let filtered = keep_reachable g ["main1"; "main2"] in
+  Callgraph.node_count filtered = 3 &&
+  not (Callgraph.has_node filtered "unused")
+
 
