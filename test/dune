@@ -7,4 +7,9 @@
  (modules typing_test)
  (libraries r_c_typing))
 
+(executable
+ (name package_test)
+ (modules package_test)
+ (libraries r_c_typing))
+
  (include dune.inc)
