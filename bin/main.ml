@@ -4,12 +4,21 @@ open Mlsem.Types
 module System = Mlsem.System
 
 
-let main opts filename =
+let main opts path =
   System.Config.infer_overload := true;
   Mlsem.Types.Recording.start_recording ();
   let idenv = Runner.StrMap.empty in
   let env = Defs.initial_env in
-  Runner.run_on_file opts filename idenv env |> ignore;
+  if not (Sys.file_exists path) then
+    failwith (Printf.sprintf "Path not found: %s" path);
+  let is_package = Sys.is_directory path in
+  Printf.printf "Typing %s: %s\n"
+    (if is_package then "package" else "file")
+    path;
+  if is_package then
+    Runner.run_on_package opts path idenv env |> ignore
+  else
+    Runner.run_on_file opts path idenv env |> ignore;
   Mlsem.Types.Recording.save_to_file "mlsem_recording.json" (Mlsem.Types.Recording.tally_calls ());
   ()
 
@@ -41,9 +50,9 @@ let filter_opt =
   let doc = "Filter output to only *show* variables matching the given substring" in
   Arg.(value & opt (some string) None & info ["f";"filter"] ~docv:"SUBSTRING" ~doc)
 
-let file_arg =
-  let doc = "C source file to parse" in
-  Arg.(required & pos 0 (some string) None & info [] ~docv:"FILE" ~doc)
+let path_arg =
+  let doc = "C source file to parse or package directory to analyze" in
+  Arg.(required & pos 0 (some string) None & info [] ~docv:"PATH" ~doc)
 
 
 let cmd =
@@ -57,8 +66,8 @@ let cmd =
      and+ no_typing = no_typing_opt
      and+ debug = debug_opt
      and+ filter = filter_opt
-     and+ filename = file_arg in
-     PEnv.sequential_handler PEnv.empty (fun filename -> main {cst; past; ast; mlsem ; typing = not no_typing ; debug ; filter} filename) filename |> fst)
+    and+ path = path_arg in
+    PEnv.sequential_handler PEnv.empty (fun path -> main {cst; past; ast; mlsem ; typing = not no_typing ; debug ; filter} path) path |> fst)
      
 
 let () = exit (Cmd.eval cmd)

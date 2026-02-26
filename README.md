@@ -47,6 +47,8 @@ Avoid editing `test/dune.inc` manually. Re-run `add_test.sh` if you need to refr
 
 ## CLI examples
 
+The positional argument is a `PATH`: either a C source file or an R package directory.
+
 Show the parsed AST for functions whose name contains "from":
 
 ```bash
@@ -57,4 +59,10 @@ Run inference for a single file:
 
 ```bash
 dune exec r-c-typing -- test/cprogs/string.c
+```
+
+Run inference for an R package directory:
+
+```bash
+dune exec r-c-typing -- test/packages/testpkg
 ```
