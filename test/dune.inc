@@ -182,3 +182,14 @@
  (deps    cprogs/env.c cprogs/env.expected)
  (action  (diff cprogs/env.expected env.output)))
 
+(rule
+ (alias   runtest)
+ (deps    cprogs/struct.c)
+ (action  (with-stdout-to struct.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/struct.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/struct.c cprogs/struct.expected)
+ (action  (diff cprogs/struct.expected struct.output)))
+

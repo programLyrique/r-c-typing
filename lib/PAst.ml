@@ -32,6 +32,7 @@ type const =
   | Const of const 
   | Id of string
   | Unop of string * e
+  | FieldAccess of e * string (* For struct field access, e.g. x.f *)
   | Binop of string * (e * e) 
   | VarDeclare of Ast.ctype * e
   | VarAssign of e * e
@@ -76,6 +77,7 @@ let rec bv_e in_lhs_assign (_,e) =
   | Unop (_, e) -> bv_e in_lhs_assign e
   | Binop (_, (e1,e2)) -> StrSet.union (bv_e in_lhs_assign e1) (bv_e in_lhs_assign e2)
   | VarAssign ((_,Id s), e2) -> (StrSet.singleton s) |> StrSet.union (bv_e in_lhs_assign e2)
+  | FieldAccess (e, _) -> bv_e in_lhs_assign e
   | VarAssign (e,_) -> bv_e true e (* Gross overapproximation! Left side of assignment, we want to collect identifiers in the lhs. Args will be detected as been "assigned". *)
   | Call (f, args) -> List.fold_left (fun acc arg -> StrSet.union acc (bv_e in_lhs_assign arg)) (bv_e  false f) args
   | If (cond, then_, else_) -> 
@@ -173,7 +175,10 @@ let rec aux_e env (pos,e) =
       )
   | VarAssign ((loc1, Unop (_op, e1)) ,e2) -> (* Currently, remove the * or & operator *)
      let _,_,e = aux_e env (loc1, VarAssign(e1, e2)) in e
+  | VarAssign ((_, FieldAccess (e1, field)) ,e2) -> 
+      Ast.FieldUpdate (aux_e env e1, field, aux_e env e2)
   | VarAssign (_,_) -> failwith ("Unexpected left-hand side in assignment. Got: " ^ show_e (pos,e))
+  | FieldAccess (e, field) -> Ast.FieldRead (aux_e env e, field)
   | Call (f, args) -> process_call env f args
   | If (cond, then_, else_) -> 
       Ast.If (aux_e env cond, aux_e env then_, Option.map (aux_e env) else_)
@@ -281,6 +286,7 @@ let map f e =
     | Binop (op, (e1, e2)) -> Binop (op, (aux e1, aux e2))
     | VarDeclare (ty, e1) -> VarDeclare (ty, aux e1)
     | VarAssign (e1, e2) -> VarAssign (aux e1, aux e2)
+    | FieldAccess (e, field) -> FieldAccess (aux e, field)
     | Call (f, args) -> Call (aux f, List.map aux args)
     | If (cond, then_, else_) -> 
         If (aux cond, aux then_, Option.map aux else_)
@@ -307,6 +313,7 @@ let rec extract_calls_from_expr (_pos, e') =
   | Unop (_, e) -> extract_calls_from_expr e
   | Binop (_, (e1, e2)) ->
       extract_calls_from_expr e1 @ extract_calls_from_expr e2
+  | FieldAccess (e, _) -> extract_calls_from_expr e
   | VarDeclare (_, e) -> extract_calls_from_expr e
   | VarAssign (e1, e2) ->
       extract_calls_from_expr e1 @ extract_calls_from_expr e2

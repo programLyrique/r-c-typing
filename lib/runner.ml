@@ -113,6 +113,8 @@ let run_on_files opts filenames ?entry_points idenv env =
   let pasts = List.map (fun filename ->
       if not (Sys.file_exists filename) then
         failwith (Printf.sprintf "File not found: %s" filename);
+      if opts.debug then
+        Printf.printf "Parsing file: %s\n" filename;
       let cst = Parser.parse_file filename in
       if opts.cst then Parser.print_res cst;
       let past = Parser.to_ast cst in

@@ -75,25 +75,94 @@ let aux_primitive_type t =
   match t with 
   | "void" -> Ast.Void
   | "char" -> Ast.Char
-  | "short" | "int" | "long" -> Ast.Int
+  | "short" | "int" | "long" | "size_t" | "uint8_t" -> Ast.Int
   | "float" | "double" -> Ast.Float
   | "bool" -> Ast.Bool
   | _ -> failwith ("Unknown primitive type: " ^ t)
 
-let aux_struct _struc = []
-
-
 let token_to_string (_loc, s) = s
 
-let aux_type_spec (type_spec : type_specifier)  =
+let rec aux_struct_fields name fields =
+  let rec aux_field_decl_name (decl : field_declarator) : int * string =
+    match decl with
+    | `Id (_loc, s) -> (0, s)
+    | `Poin_field_decl (_, _, _, _, d) ->
+        let level, field_name = aux_field_decl_name d in
+        (level + 1, field_name)
+    | `Array_field_decl (d, _, _, _, _) ->
+        let level, field_name = aux_field_decl_name d in
+        (level + 1, field_name)
+    | `Paren_field_decl (_, _, d, _) -> aux_field_decl_name d
+    | `Attr_field_decl (d, _) -> aux_field_decl_name d
+    | `Func_field_decl _ -> failwith "Not supported yet: function pointer fields"
+  in
+  let aux_field_decl (field_decl : field_declaration_declarator) =
+    let first_decl, first_bits, other_decls = field_decl in
+    let all_decls =
+      (first_decl, first_bits)
+      :: List.map (fun (_, decl, bits) -> (decl, bits)) other_decls
+    in
+    all_decls
+  in
+  (* We keep an explicit collector instead of a direct [List.map] because each
+     input item can produce 0, 1, or many fields (e.g. preprocessor entries are
+     skipped, and a declaration may contain several declarators), while also
+     emitting warnings for unsupported cases. *)
+  let rec collect acc = function
+    | [] -> List.rev acc
+    | item :: rest ->
+        begin
+          match item with
+          | `Field_decl (decl_spec, field_decl, _attrs, _semi) ->
+              let base_ty = aux_decl_spec decl_spec in
+              let fields_from_item =
+                match field_decl with
+                | None -> []
+                | Some fd ->
+                    aux_field_decl fd
+                    |> List.map (fun (decl, bits) ->
+                           (match bits with
+                           | None -> ()
+                           | Some _ when !warn_unsupported ->
+                               Printf.printf
+                                 "Not supported yet: bitfield width is ignored in struct field declaration\n"
+                           | Some _ -> ());
+                           let level, field_name = aux_field_decl_name decl in
+                           (Ast.build_ptr level base_ty, field_name))
+              in
+              collect (List.rev_append fields_from_item acc) rest
+          | `Prep_def _ | `Prep_func_def _ | `Prep_call _
+          | `Prep_if_in_field_decl_list _ | `Prep_ifdef_in_field_decl_list _ ->
+              if !warn_unsupported then
+                Printf.printf
+                  "Not supported yet: preprocessor directives inside struct fields\n";
+              collect acc rest
+        end
+  in
+  Ast.Struct (name, collect [] fields)
+
+and aux_struct struc = 
+  match struc with 
+  |`Id_opt_field_decl_list ((_loc, name), Some (_,fields,_)) -> aux_struct_fields name fields
+  (* Anonymous struct: we don't give it a name so far *)
+  | `Field_decl_list (_,fields,_) -> aux_struct_fields "" fields
+  (* This one happens when we declare a struct, as an argument of a function for instance. 
+  Currently, we don't recall the name and we will jusy type structurally *)
+  | `Id_opt_field_decl_list ((_loc, _name), None) -> Ast.Any
+
+and aux_type_spec (type_spec : type_specifier)  =
   match type_spec with
   | `Prim_type tok -> let (_loc, s) = tok in aux_primitive_type s
   | `Id (_loc, s) when s = "SEXP" -> Ast.SEXP
   | `Id _ -> Ast.Any
-  | `Struct_spec _ -> failwith "Not supported yet"
-  | _ -> failwith "Not supported yet: type specifier"
+  | `Struct_spec (_,_, _,struc, _) -> aux_struct struc
+  (* We don't handle enums for now, we just give them the int type *)
+  | `Enum_spec (_,`Id_opt_COLON_prim_type_opt_enum_list (_,None, None), _) -> Ast.Int
+  | _ -> (let tree = Boilerplate.map_type_specifier () type_spec in
+    Raw_tree.to_channel stderr tree ;
+    failwith "Not supported yet: type specifier")
 
-let aux_decl_spec decl_spec = 
+and aux_decl_spec decl_spec = 
   let (_, type_spec, _) = decl_spec in
   aux_type_spec type_spec
 
@@ -268,10 +337,17 @@ and aux_not_bin_expression (e : expression_not_binary) =
       let pos = Position.join (loc_to_pos loc1) (fst e) in
       (pos, A.Cast (cast_type, e))
   | `Poin_exp expr -> aux_pointer_expression expr
+  | `Field_exp expr -> aux_field_expression expr
   | _ -> (
     Boilerplate.map_expression_not_binary () e |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: expresion_not_binary"
   )
+and aux_field_expression (field_expr: field_expression) =
+  (* Do we really care if it is . or -> here? *)
+  let expr, _, (loc2, field_name) = field_expr in
+  let e = aux_expression expr in
+  let pos = Position.join (fst e) (loc_to_pos loc2) in
+  (pos, A.FieldAccess (e,  field_name))
 and aux_update_expression (e: update_expression) =
   (* For typing purposes, we don't care about whether it is pre or post incr/decr*)
   let (op,e) = match e with
@@ -305,6 +381,7 @@ and aux_assign_left_expression (e: assignment_left_expression) : A.e =
   | `Id (loc, s) -> (loc_to_pos loc, A.Id s)
   | `Subs_exp expr -> aux_subscription_expression expr (*Like that so far, but may require special treatment *)
   | `Poin_exp expr -> aux_pointer_expression expr
+  | `Field_exp expr -> aux_field_expression expr
   | _ -> (
     Boilerplate.map_assignment_left_expression () e |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: left side of assignment must be an identifier"

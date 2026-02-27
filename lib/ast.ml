@@ -80,6 +80,8 @@ type e' =
 | Declare of Variable.t * e
 | Let of Variable.t * e * e
 | VarAssign of Variable.t * e
+| FieldRead of e * string 
+| FieldUpdate of e * string * e
 | Unop of Variable.t * e
 | Binop of Variable.t * e * e
 | Call of e * e list
@@ -126,7 +128,11 @@ let rec typeof_ctype ct =
   | Ptr ty -> Cptr.mk (typeof_ctype ty)
   | SEXP -> Defs.any_sexp
   | Any -> Defs.any_c
+  | Struct (name, fields) -> record_of_struct name fields
   | _ -> failwith ("Type not supported yet in typeof_ctype: " ^ show_ctype ct)
+and record_of_struct _name fields = 
+  Record.mk_closed (List.map (fun (field_ty, field_name) -> (field_name, (typeof_ctype field_ty, false))) fields)
+
 
 
 module AttrProj = struct
@@ -173,6 +179,9 @@ let rec aux_e (eid, vars, e) =
     | VarAssign (v,e2) -> A.VarAssign (v, aux_e e2)
     | Unop (op,e) -> aux (Call ((Eid.unique (), vars, Id op), [e]))
     | Binop (op,e1,e2) -> aux (Call ((Eid.unique (), vars, Id op), [e1; e2]))
+    | FieldRead (e, field) -> A.Projection (SA.PiField field, aux_e e)
+    | FieldUpdate (e, field, value) -> 
+        A.Operation (SA.RecUpd field, (Eid.unique (), A.Constructor (SA.Tuple 2, [aux_e e; aux_e value])))
     (* Some special cases for some calls*)
     | Call ((_,_, Id v), [(_, _,Id vty); ( _ ,_, Const (CInt n)) ]) 
       when (Variable.get_name v = Some "allocVector") && 
@@ -312,6 +321,8 @@ let rec aux_e (eid, vars, e) =
       | VarAssign (v,e2) -> VarAssign (v, aux e2)
       | Unop (op,e) -> Unop (op, aux e)
       | Binop (op,e1,e2) -> Binop (op, aux e1, aux e2)
+      | FieldRead (e, field) -> FieldRead (aux e, field)
+      | FieldUpdate (e, field, value) -> FieldUpdate (aux e, field, aux value)
       | Call (f,args) -> Call (aux f, List.map aux args)
       | If (cond, then_, else_) -> 
           If (aux cond, aux then_, Option.map aux else_)
@@ -437,6 +448,16 @@ let rec aux_e (eid, vars, e) =
             | _ -> (Binop (op, e1', e2'), None)
           in
           ((id, env, expr'), env2, kres)
+
+      | FieldRead (e1, field) ->
+          let e1', env1, _k1 = aux e1 env in
+          (* We could propagate field accesses on constants if we had a more precise representation of constants (e.g. structs with fields). For now we don't. *)
+          ((id, env, FieldRead (e1', field)), env1, None)
+
+      | FieldUpdate (e1, field, e2) ->
+          let e1', env1, _k1 = aux e1 env in
+          let e2', env2, _k2 = aux e2 env1 in
+          ((id, env, FieldUpdate (e1', field, e2')), env2, None)
 
       | Call (f, args) ->
           let f', env1, _ = aux f env in
