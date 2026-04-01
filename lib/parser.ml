@@ -150,6 +150,21 @@ and aux_struct struc =
      We keep the struct tag and resolve it later through DeclMap. *)
   | `Id_opt_field_decl_list ((_loc, name), None) -> Ast.Struct (name, [])
 
+and aux_sized_type_spec (_sized : sized_type_specifier) : Ast.ctype =
+  let aux_choice_type = function
+    | `Prim_type (_loc, s) -> aux_primitive_type s
+    | `Id (_loc, s) when s = "SEXP" -> Ast.SEXP
+    | `Id _ -> Ast.Any
+  in
+  match _sized with
+  | `Rep_choice_signed_opt_choice_id_rep1_choice_signed (_, Some t, _)
+  | `Rep1_choice_signed_rep_type_qual_opt_choice_id_rep_choice_signed (_, _, Some t, _) ->
+      aux_choice_type t
+  (* E.g. "unsigned", "long long": defaults to integer family. *)
+  | `Rep_choice_signed_opt_choice_id_rep1_choice_signed (_, None, _)
+  | `Rep1_choice_signed_rep_type_qual_opt_choice_id_rep_choice_signed (_, _, None, _) ->
+      Ast.Int
+
 and aux_type_spec (type_spec : type_specifier)  =
   match type_spec with
   | `Prim_type tok -> let (_loc, s) = tok in aux_primitive_type s
@@ -158,6 +173,7 @@ and aux_type_spec (type_spec : type_specifier)  =
   | `Struct_spec (_,_, _,struc, _) -> aux_struct struc
   (* We don't handle enums for now, we just give them the int type *)
   | `Enum_spec (_,`Id_opt_COLON_prim_type_opt_enum_list (_,None, None), _) -> Ast.Int
+  | `Sized_type_spec sized -> aux_sized_type_spec sized
   | _ -> (let tree = Boilerplate.map_type_specifier () type_spec in
     Raw_tree.to_channel stderr tree ;
     failwith "Not supported yet: type specifier")

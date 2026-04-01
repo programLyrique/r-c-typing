@@ -17,3 +17,6 @@ let () =
 
   let _prefixed_char_ast = Parser.parse_string "int main() { int c = u'\\u0041'; return c; }" in
   print_endline "Prefixed char literal parsed successfully";
+
+  let _sized_type_ast = Parser.parse_string "int main() { unsigned long x = 1; return (int)x; }" in
+  print_endline "Sized type specifier parsed successfully";

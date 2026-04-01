@@ -3,3 +3,4 @@ Cast expression parsed successfully
 Nested cast expression parsed successfully
 Escaped char literal parsed successfully
 Prefixed char literal parsed successfully
+Sized type specifier parsed successfully
