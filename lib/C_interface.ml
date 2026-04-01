@@ -8,8 +8,10 @@ open Mlsem.Types
 open PAst
 
 let mk_C_ty fundef = 
-  let (_pos, Fundef (return_ty, _name, params, _body)) = fundef in
-  let args = List.map (fun (ty, _) -> Ast.typeof_ctype ty) params in
-  let arg_tuple = Tuple.mk args in
-  let ret_ty = Ast.typeof_ctype return_ty in
-  Arrow.mk arg_tuple ret_ty
+  match fundef with
+  | _pos, Fundef (return_ty, _name, params, _body) ->
+      let args = List.map (fun (ty, _) -> Ast.typeof_ctype ty) params in
+      let arg_tuple = Tuple.mk args in
+      let ret_ty = Ast.typeof_ctype return_ty in
+      Arrow.mk arg_tuple ret_ty
+  | _pos, Struct _ -> failwith "mk_C_ty expects a function definition"

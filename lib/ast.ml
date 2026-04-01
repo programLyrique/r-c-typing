@@ -38,7 +38,7 @@ type ctype =
  | Struct of string * (ctype * string) list
  | Union of string * (ctype * string) list
  | Enum of string * (string * int option) list
- | Typedef of string
+ | Typeref of string (*Refer to another named type, e.g. a named struct or a typedef*)
  (* SEXPs *)
  | SEXP
  | Any (* Do we actually need that?*)
@@ -64,6 +64,21 @@ module VarMap = struct
       (bindings m)
   end
 
+(* For struct declarations, typedefs and so on*)
+module DeclMap = struct 
+  include Map.Make(String)
+  let pp (pp_v : Format.formatter -> 'v -> unit)
+      (fmt : Format.formatter)
+      (m : 'v t) : unit =
+    let pp_binding fmt (k, v) =
+      Format.fprintf fmt "%s -> %a" k pp_v v
+    in
+    Format.fprintf fmt "{@[<hov 1>%a@]}"
+      (Format.pp_print_list
+        ~pp_sep:(fun fmt () -> Format.fprintf fmt ";@ ")
+        pp_binding)
+      (bindings m)
+end
 
 type kind = 
   | C of const 
@@ -96,7 +111,7 @@ type e' =
 | Noop (* Hack for the declarations. We should rather use the declarations directly rather than doing the imprecise analysis of used variables in bv_e*)
 | Return of e option | Break | Next
 [@@deriving show]
-and e = Eid.t * (kind VarMap.t) * e'
+and e = Eid.t * (ctype DeclMap.t) * (kind VarMap.t) * e'
 [@@deriving show]
 
 type funcs = e list (* list of function definitions *)
@@ -169,7 +184,7 @@ let build_call f args =
 (* Transformation to MLsem ast
   GTy is used for gradual types, Ty for "normal" types
 *)
-let rec aux_e (eid, vars, e) =
+let rec aux_e (eid, _decl, vars, e) =
   let rec aux e = 
     match e with 
     | Const c -> A.Value (typeof_const c |> GTy.mk )
@@ -177,18 +192,18 @@ let rec aux_e (eid, vars, e) =
     | Declare (v,e) -> A.Declare (v, aux_e e)
     | Let (v,e1,e2) -> A.Let ([], v, aux_e e1, aux_e e2)
     | VarAssign (v,e2) -> A.VarAssign (v, aux_e e2)
-    | Unop (op,e) -> aux (Call ((Eid.unique (), vars, Id op), [e]))
-    | Binop (op,e1,e2) -> aux (Call ((Eid.unique (), vars, Id op), [e1; e2]))
+    | Unop (op,e) -> aux (Call ((Eid.unique (), DeclMap.empty, vars, Id op), [e]))
+    | Binop (op,e1,e2) -> aux (Call ((Eid.unique (), DeclMap.empty, vars, Id op), [e1; e2]))
     | FieldRead (e, field) -> A.Projection (SA.PiField field, aux_e e)
     | FieldUpdate (e, field, value) -> 
         A.Operation (SA.RecUpd field, (Eid.unique (), A.Constructor (SA.Tuple 2, [aux_e e; aux_e value])))
     (* Some special cases for some calls*)
-    | Call ((_,_, Id v), [(_, _,Id vty); ( _ ,_, Const (CInt n)) ]) 
+    | Call ((_,_,_, Id v), [(_, _,_,Id vty); ( _ ,_,_, Const (CInt n)) ]) 
       when (Variable.get_name v = Some "allocVector") && 
            (Variable.get_name vty = Some "VECSXP") ->
         let ty = Defs.allocVector_vecsxp_ty n in
         A.Value (GTy.mk ty)
-    | Call ((_,_,Id v1), [(_, _,Id vty); ( _ ,_, Id v2) ]) 
+    | Call ((_,_,_,Id v1), [(_, _,_,Id vty); ( _ ,_,_, Id v2) ]) 
       when (Variable.get_name v1 = Some "mkNamed") && 
            (Variable.get_name vty = Some "VECSXP") ->
         Format.eprintf "%a@." (VarMap.pp pp_kind) vars;
@@ -201,7 +216,7 @@ let rec aux_e (eid, vars, e) =
            in
         let ty = Defs.mkNamed_vecsxp_ty names in
         A.Value (GTy.mk ty)
-    | Call ((eid,_,Id v1), [(_, _,Id v2) as id2; ( _ ,_, idx); value]) 
+    | Call ((eid,_,_,Id v1), [(_, _,_,Id v2) as id2; ( _ ,_,_, idx); value]) 
       when (Variable.get_name v1 = Some "SET_VECTOR_ELT") ->
         let kind = VarMap.find_opt v2 vars in 
         let idx = match idx with 
@@ -274,11 +289,11 @@ let rec aux_e (eid, vars, e) =
         let e = aux_e e in
         let make_pattern_case acc (case_e, body_e, has_break) =
           let case_ty = match case_e with 
-            | _,_,Const c -> typeof_const c 
-            | _,_,Id v -> (match Defs.BuiltinVar.find_builtin v with 
+            | _,_,_,Const c -> typeof_const c 
+            | _,_,_,Id v -> (match Defs.BuiltinVar.find_builtin v with 
                 | Some ty -> ty
                 | None -> failwith ("Invalid switch case expression: unknown define " ^ (Variable.get_unique_name v)))
-            | _,_,Noop -> Ty.any (* Default case *)
+            | _,_,_,Noop -> Ty.any (* Default case *)
             | _ -> failwith "Invalid switch case expression"
           in
           let body = aux_e body_e in
@@ -293,7 +308,7 @@ let rec aux_e (eid, vars, e) =
               Note: the empty body optimization does not seem to bring much in terms of perf. 
               A better optimization might be to encode it as a series of if, else if else. *)
              match body_e with 
-            | _,_,Const CNull -> 
+            | _,_,_,Const CNull -> 
               (A.POr (A.PType case_ty, last_case), last_body) :: (List.tl acc)
             | _ -> let new_body = Eid.unique (), A.Seq (last_body, body) in 
               (A.PType case_ty, new_body) :: acc
@@ -313,7 +328,7 @@ let rec aux_e (eid, vars, e) =
 
 
   let map f e = 
-    let rec aux (eid, vars, e) = 
+    let rec aux (eid, decl, vars, e) = 
       let e = match e with 
       | Const _ | Id _ -> e
       | Declare (v,e) -> Declare (v, aux e)
@@ -342,32 +357,32 @@ let rec aux_e (eid, vars, e) =
       | Next -> Next
       | Noop -> Noop
     in
-    f (eid, vars, e)
+    f (eid, decl, vars, e)
   in aux e
 
 
   let recognize_const_comparison e =
     let f expr = match expr with 
-    | id, vars, (Binop (op, e, (_,_,Const c)) | Binop (op, (_,_,Const c), e))
-    when Variable.equal op Defs.BuiltinOp.eq -> id, vars, TyCheck (e, typeof_const c)
-    | id, vars, (Binop (op, e, (_,_,Id v)) | Binop (op, (_,_,Id v), e))
+    | id, decl, vars, (Binop (op, e, (_,_,_,Const c)) | Binop (op, (_,_,_,Const c), e))
+    when Variable.equal op Defs.BuiltinOp.eq -> id, decl, vars, TyCheck (e, typeof_const c)
+    | id, decl, vars, (Binop (op, e, (_,_,_,Id v)) | Binop (op, (_,_,_,Id v), e))
     when Variable.equal op Defs.BuiltinOp.eq -> 
       (match Defs.BuiltinVar.find_builtin v with 
-      | Some built -> id, vars, TyCheck (e, built)
+      | Some built -> id, decl, vars, TyCheck (e, built)
       | None -> expr)
-    | id, vars, (Binop (op, e, (_,_,Const c)) | Binop (op, (_,_,Const c), e))
-    when Variable.equal op Defs.BuiltinOp.neq -> id, vars, TyCheck (e, Ty.neg (typeof_const c))
-    | id, vars, (Binop (op, e, (_,_,Id v)) | Binop (op, (_,_,Id v), e))
+    | id, decl, vars, (Binop (op, e, (_,_,_,Const c)) | Binop (op, (_,_,_,Const c), e))
+    when Variable.equal op Defs.BuiltinOp.neq -> id, decl, vars, TyCheck (e, Ty.neg (typeof_const c))
+    | id, decl, vars, (Binop (op, e, (_,_,_,Id v)) | Binop (op, (_,_,_,Id v), e))
     when Variable.equal op Defs.BuiltinOp.neq -> 
       (match Defs.BuiltinVar.find_builtin v with 
-      | Some built -> id, vars, TyCheck (e, Ty.neg built)
+      | Some built -> id, decl, vars, TyCheck (e, Ty.neg built)
       | None -> expr)
-    | id, vars, (Binop (op, e, (_, _,Const (CInt c))) | Binop (op, (_, _,Const (CInt c)), e))
+    | id, decl, vars, (Binop (op, e, (_, _,_,Const (CInt c))) | Binop (op, (_, _,_,Const (CInt c)), e))
     when Variable.equal op Defs.BuiltinOp.inf_strict -> 
-      id, vars, TyCheck (e, Rstt.Cint.interval (None, Some (c-1))) (* interval is closed by < is open on the right*)
-    | id, vars, (Binop (op, e, (_, _,Const (CInt c))) | Binop (op, (_, _,Const (CInt c)), e))
+      id, decl, vars, TyCheck (e, Rstt.Cint.interval (None, Some (c-1))) (* interval is closed by < is open on the right*)
+    | id, decl, vars, (Binop (op, e, (_, _,_,Const (CInt c))) | Binop (op, (_, _,_,Const (CInt c)), e))
     when Variable.equal op Defs.BuiltinOp.sup_strict -> 
-      id, vars, TyCheck (e, Rstt.Cint.interval (Some (c+1), None)) (* interval is closed by > is open on the left*)
+      id, decl, vars, TyCheck (e, Rstt.Cint.interval (Some (c+1), None)) (* interval is closed by > is open on the left*)
     | e -> e
     in
     map f e
@@ -395,15 +410,15 @@ let rec aux_e (eid, vars, e) =
 
     (* Returns (transformed_expr, updated_env, value_of_expr) where value_of_expr
        is the known kind (constant or label list) of the expression, if any. *)
-    let rec aux ((id, _vars, expr) : e) (env : kind VarMap.t) : e * kind VarMap.t * kind option =
+    let rec aux ((id, decl, _vars, expr) : e) (env : kind VarMap.t) : e * kind VarMap.t * kind option =
       match expr with
-      | Const c -> ((id, env, expr), env, Some (C c))
-      | Id v -> ((id, env, expr), env, VarMap.find_opt v env)
-      | Noop | Break | Next -> ((id, env, expr), env, None)
+      | Const c -> ((id, decl, env, expr), env, Some (C c))
+      | Id v -> ((id, decl, env, expr), env, VarMap.find_opt v env)
+      | Noop | Break | Next -> ((id, decl, env, expr), env, None)
 
       | Declare (v, e1) ->
           let e1', env', _ = aux e1 env in
-          ((id, env, Declare (v, e1')), env', None)
+          ((id, decl, env, Declare (v, e1')), env', None)
 
       | Let (v, e1, e2) ->
           let e1', env1, k1 = aux e1 env in
@@ -413,7 +428,7 @@ let rec aux_e (eid, vars, e) =
             | None -> env1
           in
           let e2', env2, k2 = aux e2 env_for_body in
-          ((id, env, Let (v, e1', e2')), env2, k2)
+          ((id, decl, env, Let (v, e1', e2')), env2, k2)
 
       | VarAssign (v, e1) ->
           let e1', env1, k1 = aux e1 env in
@@ -422,7 +437,7 @@ let rec aux_e (eid, vars, e) =
             | Some k -> VarMap.add v k env1
             | None -> env1
           in
-          ((id, env, VarAssign (v, e1')), env', None)
+          ((id, decl, env, VarAssign (v, e1')), env', None)
 
       | Unop (op, e1) ->
           let e1', env1, k1 = aux e1 env in
@@ -434,7 +449,7 @@ let rec aux_e (eid, vars, e) =
                 | None -> (Unop (op, e1'), None))
             | _ -> (Unop (op, e1'), None)
           in
-          ((id, env, expr'), env1, kres)
+          ((id, decl, env, expr'), env1, kres)
 
       | Binop (op, e1, e2) ->
           let e1', env1, k1 = aux e1 env in
@@ -447,17 +462,17 @@ let rec aux_e (eid, vars, e) =
                 | None -> (Binop (op, e1', e2'), None))
             | _ -> (Binop (op, e1', e2'), None)
           in
-          ((id, env, expr'), env2, kres)
+          ((id, decl, env, expr'), env2, kres)
 
       | FieldRead (e1, field) ->
           let e1', env1, _k1 = aux e1 env in
           (* We could propagate field accesses on constants if we had a more precise representation of constants (e.g. structs with fields). For now we don't. *)
-          ((id, env, FieldRead (e1', field)), env1, None)
+          ((id, decl, env, FieldRead (e1', field)), env1, None)
 
       | FieldUpdate (e1, field, e2) ->
           let e1', env1, _k1 = aux e1 env in
           let e2', env2, _k2 = aux e2 env1 in
-          ((id, env, FieldUpdate (e1', field, e2')), env2, None)
+          ((id, decl, env, FieldUpdate (e1', field, e2')), env2, None)
 
       | Call (f, args) ->
           let f', env1, _ = aux f env in
@@ -474,16 +489,16 @@ let rec aux_e (eid, vars, e) =
           let kres =
             match f', args_with_kinds with
             (* PROTECT(arg): propagate the kind of the argument *)
-            | (_, _, Id fv), [(_, k)]
+            | (_, _, _, Id fv), [(_, k)]
               when Variable.get_name fv = Some "PROTECT" -> k
             (* mkNamed(VECSXP, names_var): resolve names from the kind *)
-            | (_, _, Id fv), [((_, _, Id vty), _); (_, Some (C (CArray names)))]
+            | (_, _, _, Id fv), [((_, _, _, Id vty), _); (_, Some (C (CArray names)))]
               when Variable.get_name fv = Some "mkNamed"
                    && Variable.get_name vty = Some "VECSXP" ->
                 Some (L (extract_names names))
             | _ -> None
           in
-          ((id, env, Call (f', args')), env2, kres)
+          ((id, decl, env, Call (f', args')), env2, kres)
 
       | If (cond, then_, else_) ->
           let cond', env1, _ = aux cond env in
@@ -495,23 +510,23 @@ let rec aux_e (eid, vars, e) =
                 let e3', env3, _ = aux e3 env2 in
                 (Some e3', env3)
           in
-          ((id, env, If (cond', then_', else_')), env3, None)
+          ((id, decl, env, If (cond', then_', else_')), env3, None)
 
       | Ite (cond, then_, else_) ->
           let cond', env1, _ = aux cond env in
           let then_', env2, _ = aux then_ env1 in
           let else_', env3, _ = aux else_ env2 in
-          ((id, env, Ite (cond', then_', else_')), env3, None)
+          ((id, decl, env, Ite (cond', then_', else_')), env3, None)
 
       | While (cond, body) ->
           let cond', env1, _ = aux cond env in
           let body', env2, _ = aux body env1 in
-          ((id, env, While (cond', body')), env2, None)
+          ((id, decl, env, While (cond', body')), env2, None)
 
       | Seq (e1, e2) ->
           let e1', env1, _ = aux e1 env in
           let e2', env2, k2 = aux e2 env1 in
-          ((id, env, Seq (e1', e2')), env2, k2)
+          ((id, decl, env, Seq (e1', e2')), env2, k2)
 
       | Return eo ->
           let eo', env' =
@@ -521,20 +536,20 @@ let rec aux_e (eid, vars, e) =
                 let e1', env', _ = aux e1 env in
                 (Some e1', env')
           in
-          ((id, env, Return eo'), env', None)
+          ((id, decl, env, Return eo'), env', None)
 
       | TyCheck (e1, ty) ->
           let e1', env1, k1 = aux e1 env in
-          ((id, env, TyCheck (e1', ty)), env1, k1)
+          ((id, decl, env, TyCheck (e1', ty)), env1, k1)
 
       | Cast (ty, e1) ->
           let e1', env1, _ = aux e1 env in
-          ((id, env, Cast (ty, e1')), env1, None)
+          ((id, decl, env, Cast (ty, e1')), env1, None)
 
       | Function (name, ret_type, params, body) ->
           (* Do not propagate outer constants into function bodies. *)
           let body', _, _ = aux body VarMap.empty in
-          ((id, env, Function (name, ret_type, params, body')), env, None)
+          ((id, decl, env, Function (name, ret_type, params, body')), env, None)
 
       | Switch (e1, cases) ->
           let e1', env1, _ = aux e1 env in
@@ -547,7 +562,7 @@ let rec aux_e (eid, vars, e) =
               ([], env1)
               cases
           in
-          ((id, env, Switch (e1', cases')), env', None)
+          ((id, decl, env, Switch (e1', cases')), env', None)
     in
     let e', _, _ = aux e VarMap.empty in
     e'

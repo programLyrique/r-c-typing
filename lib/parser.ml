@@ -146,9 +146,9 @@ and aux_struct struc =
   |`Id_opt_field_decl_list ((_loc, name), Some (_,fields,_)) -> aux_struct_fields name fields
   (* Anonymous struct: we don't give it a name so far *)
   | `Field_decl_list (_,fields,_) -> aux_struct_fields "" fields
-  (* This one happens when we declare a struct, as an argument of a function for instance. 
-  Currently, we don't recall the name and we will jusy type structurally *)
-  | `Id_opt_field_decl_list ((_loc, _name), None) -> Ast.Any
+  (* Named reference to an already declared struct, e.g. `struct Point p;`.
+     We keep the struct tag and resolve it later through DeclMap. *)
+  | `Id_opt_field_decl_list ((_loc, name), None) -> Ast.Struct (name, [])
 
 and aux_type_spec (type_spec : type_specifier)  =
   match type_spec with
@@ -655,6 +655,9 @@ let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
      Some (Mlsem.Common.Position.dummy, Fundef (return_type, name, params, body))
      ) 
   | `Prep_func_def func_def -> Some (aux_prep_func_def func_def)
+  | `Empty_decl (type_spec, _tok) ->
+   let s = aux_type_spec type_spec in
+    Some( Mlsem.Common.Position.dummy, Struct s)
   | _ ->
       if !warn_unsupported then begin
         Printf.printf "Not supported yet: top level item\n";

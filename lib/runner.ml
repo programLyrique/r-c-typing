@@ -38,10 +38,10 @@ let extend_env mlast env =
     (fun env v -> (Printf.printf "Missing: %s at %s \n" (Variable.get_unique_name v) (Position.string_of_pos (Variable.get_location v));
      Env.add v (TyScheme.mk_mono GTy.dyn) env)) env
 
-let infer_ast visible opts (idenv, env) (ast : Ast.e) =
+let infer_ast visible opts (idenv, env, decl) (ast : Ast.e) =
   let name,v = 
     match ast with 
-    | _,_,Ast.Function (name, _, _, _) -> name,MVariable.create Immut (Some name)
+    | _,_,_,Ast.Function (name, _, _, _) -> name,MVariable.create Immut (Some name)
     | _ -> failwith "Expected a function definition at the top level."
   in
   let mlsem_ast = Ast.to_mlsem ast in 
@@ -63,29 +63,33 @@ let infer_ast visible opts (idenv, env) (ast : Ast.e) =
         (*Format.printf "%a: upper bound= %a@.@." Variable.pp v  Ty.pp typ ;*)
         (* We only keep the upper bound as type for v and add it to the environment *)
         let tys = TyScheme.mk vars (GTy.mk typ) in
-        StrMap.add name v idenv, Env.add v tys env
+        StrMap.add name v idenv, Env.add v tys env, decl
       end
     else 
-      idenv,env
+      idenv, env, decl
   with System.Checker.Untypeable err ->
     Format.printf "%s:@.untypeable: %s@." name err.title;
     err.descr |> Option.iter (Format.printf "%s@." ) ;
     if not opts.mlsem && opts.debug  then (* Still print the mlsem ast*)
       Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp mlsem_ast ;
-    idenv, env
+    idenv, env, decl
 
 (** past: the parsed AST *)
-let infer_fun_def visible_name opts (idenv, env) past = 
+let infer_fun_def visible_name opts (idenv, env, decl) past = 
   let name = 
     match past with 
     | _,PAst.Fundef (_,name, _, _) -> name
+    | _,PAst.Struct (Ast.Struct (name, _)) -> name
+    | _ -> failwith "Expected a function definition or a struct declaration at the top level."
   in
   let visible = visible_name name in 
 
-  let e = PAst.transform  {PAst.id = idenv} past in
+  let e = PAst.transform {PAst.id = idenv; decl} past in
   if opts.ast && visible then
     Printf.printf "%s\n" (Ast.show_e e);
- infer_ast visible opts (idenv, env) e
+  match e with
+  | _, decl', _, Ast.Noop -> (idenv, env, decl')
+  | _, decl', _, _ -> infer_ast visible opts (idenv, env, decl') e
 
 let run_on_file opts filename idenv env =
   if not (Sys.file_exists filename) then
@@ -101,12 +105,14 @@ let run_on_file opts filename idenv env =
       | Some _ ->
           List.filter
             (function
-              | _, PAst.Fundef (_, name, _, _) -> visible_name name)
+              | _, PAst.Fundef (_, name, _, _) -> visible_name name
+              | _, PAst.Struct _ -> false)
             past
     in
     Printf.printf "%s\n" (PAst.show_definitions visible_past)
   end;
-  List.fold_left (infer_fun_def visible_name opts) (idenv, env) past
+  let idenv, env, _ = List.fold_left (infer_fun_def visible_name opts) (idenv, env, Ast.DeclMap.empty) past in
+  (idenv, env)
 
 let run_on_files opts filenames ?entry_points idenv env =
   (* Parse all the files to past *)
@@ -149,7 +155,13 @@ let run_on_files opts filenames ?entry_points idenv env =
     in
     Printf.printf "%s\n" (PAst.show_definitions visible_past)
   end;
-  List.fold_left (fun acc (_, item) -> infer_fun_def visible_name opts acc item) (idenv, env) sorted_pasts
+  let idenv, env, _ =
+    List.fold_left
+      (fun acc (_, item) -> infer_fun_def visible_name opts acc item)
+      (idenv, env, Ast.DeclMap.empty)
+      sorted_pasts
+  in
+  (idenv, env)
 
 
 let run_on_package opts path idenv env =
