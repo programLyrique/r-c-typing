@@ -539,8 +539,13 @@ and aux_while_statement (while_stmt: while_statement) =
   pos,A.While (aux_paren_expr cond, b)
 
 and aux_do_statement (do_stmt: do_statement) =
-  let _,_body,_,_cond,_ = do_stmt in
-  failwith "Not supported yet: do statement"
+  let (loc_do, _), body, _, cond, (loc_semi, _) = do_stmt in
+  let body_ast = aux_statement body in
+  let cond_ast = aux_paren_expr cond in
+  let while_ast =
+    (locs_to_pos loc_do loc_semi, A.While (cond_ast, body_ast))
+  in
+  (locs_to_pos loc_do loc_semi, A.Seq [body_ast; while_ast])
 
 and aux_compound_stmt (stmt: compound_statement) = 
   let (l1,_),block_items,(l2,_) = stmt in

@@ -10,3 +10,5 @@ test_while: ∀'a. ('a & int) -> 'a & int
 
 sum_while: (dbl) -> dbl1
 
+count_do_while: (int) -> int1
+

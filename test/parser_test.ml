@@ -26,3 +26,6 @@ let () =
 
   let _sizeof_type_ast = Parser.parse_string "int main() { return sizeof(int); }" in
   print_endline "sizeof type parsed successfully";
+
+  let _do_while_ast = Parser.parse_string "int main() { int i = 0; do { i = i + 1; } while (i < 3); return i; }" in
+  print_endline "do while parsed successfully";

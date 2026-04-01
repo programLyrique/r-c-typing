@@ -22,3 +22,15 @@ SEXP sum_while(SEXP v) {
     UNPROTECT(1);
     return result;
 }
+
+SEXP count_do_while(SEXP n) {
+    int i = 0;
+    do {
+        i = i + 1;
+    } while (i < INTEGER(n)[0]);
+
+    SEXP result = PROTECT(allocVector(INTSXP, 1));
+    INTEGER(result)[0] = i;
+    UNPROTECT(1);
+    return result;
+}
