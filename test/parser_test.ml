@@ -11,3 +11,9 @@ let () =
   
   let _nested_cast_ast = Parser.parse_string "int main() { double x = 3.7; double y = 2.3; int z = (int)(x + y); return z; }" in
   print_endline "Nested cast expression parsed successfully";
+
+  let _char_ast = Parser.parse_string "int main() { char c = '\\n'; return c; }" in
+  print_endline "Escaped char literal parsed successfully";
+
+  let _prefixed_char_ast = Parser.parse_string "int main() { int c = u'\\u0041'; return c; }" in
+  print_endline "Prefixed char literal parsed successfully";

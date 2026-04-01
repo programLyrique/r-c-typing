@@ -266,14 +266,65 @@ and aux_num_lit  s =
     | Failure _ -> A.CFloat (Float.of_string s)
   )
 
-and aux_char_lit (c: char_literal) = 
-  let (start, c, (loc2,_)) = c in 
-  let loc1,c = match (start,c) with 
-   | `SQUOT (loc1,_), [`Imm_tok_pat_36637e2 (_,c)] -> assert (String.length c == 1);loc1, c.[0]
-   | _ -> failwith "Not supported yet: char literals with escape sequences"
+and aux_char_lit (c: char_literal) =
+  let decode_escape_sequence s =
+    let fail () = failwith ("Invalid C escape sequence: " ^ s) in
+    if String.length s < 2 || s.[0] <> '\\' then fail ()
+    else
+      let parse_int base digits =
+        if String.length digits = 0 then fail () else int_of_string (base ^ digits)
+      in
+      match s.[1] with
+      | 'a' when String.length s = 2 -> 7
+      | 'b' when String.length s = 2 -> 8
+      | 'f' when String.length s = 2 -> 12
+      | 'n' when String.length s = 2 -> 10
+      | 'r' when String.length s = 2 -> 13
+      | 't' when String.length s = 2 -> 9
+      | 'v' when String.length s = 2 -> 11
+      | '\\' when String.length s = 2 -> Char.code '\\'
+      | '\'' when String.length s = 2 -> Char.code '\''
+      | '"' when String.length s = 2 -> Char.code '"'
+      | '?' when String.length s = 2 -> Char.code '?'
+      | 'x' -> parse_int "0x" (String.sub s 2 (String.length s - 2))
+      | 'u' when String.length s = 6 -> parse_int "0x" (String.sub s 2 4)
+      | 'U' when String.length s = 10 -> parse_int "0x" (String.sub s 2 8)
+      | c2 when '0' <= c2 && c2 <= '7' -> parse_int "0o" (String.sub s 1 (String.length s - 1))
+      | c2 when String.length s = 2 -> Char.code c2
+      | _ -> fail ()
   in
-  let pos = locs_to_pos loc1 loc2 in
-  (pos, A.Const (A.CChar c))
+  let (start, chars, (loc2, _)) = c in
+  let loc1 =
+    match start with
+    | `LSQUOT (loc, _)
+    | `USQUOT_d861d39 (loc, _)
+    | `USQUOT_2701bdc (loc, _)
+    | `U8SQUOT (loc, _)
+    | `SQUOT (loc, _) -> loc
+  in
+  let values =
+    List.map
+      (function
+        | `Imm_tok_pat_36637e2 (_, s) ->
+            assert (String.length s = 1);
+            Char.code s.[0]
+        | `Esc_seq (_, s) -> decode_escape_sequence s)
+      chars
+  in
+  let is_plain_char =
+    match (start, values) with
+    | (`SQUOT _, [v]) when v >= 0 && v <= 255 -> true
+    | _ -> false
+  in
+  let const =
+    match values with
+    | [v] when is_plain_char -> A.CChar (Char.chr v)
+    | _ ->
+        (* C multi-char constants are implementation-defined; use a stable byte packing. *)
+        let packed = List.fold_left (fun acc v -> (acc lsl 8) lor (v land 0xFF)) 0 values in
+        A.CInt packed
+  in
+  (locs_to_pos loc1 loc2, A.Const const)
     
 and aux_not_bin_expression (e : expression_not_binary) = 
   match e with 
