@@ -416,10 +416,25 @@ and aux_not_bin_expression (e : expression_not_binary) =
       (pos, A.Cast (cast_type, e))
   | `Poin_exp expr -> aux_pointer_expression expr
   | `Field_exp expr -> aux_field_expression expr
-  | _ -> (
+  | `Sizeof_exp ((loc1,_), arg) ->
+      let sizeof_id = (loc_to_pos loc1, A.Id "sizeof") in
+      begin
+        match arg with
+        | `Exp e ->
+            let e = aux_expression e in
+            let pos = Position.join (loc_to_pos loc1) (fst e) in
+            (pos, A.Call (sizeof_id, [e]))
+        | `LPAR_type_desc_RPAR ((_loc_lp, _), ty, (loc_rp, _)) ->
+            (* Lower sizeof(type) to sizeof((type)0) to stay in expression space. *)
+            let ty = aux_type_descriptor ty in
+            let zero = (loc_to_pos loc1, A.Const (A.CInt 0)) in
+            let cast_zero = (locs_to_pos loc1 loc_rp, A.Cast (ty, zero)) in
+            (locs_to_pos loc1 loc_rp, A.Call (sizeof_id, [cast_zero]))
+      end
+  | _ ->
     Boilerplate.map_expression_not_binary () e |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: expresion_not_binary"
-  )
+
 and aux_field_expression (field_expr: field_expression) =
   (* Do we really care if it is . or -> here? *)
   let expr, _, (loc2, field_name) = field_expr in

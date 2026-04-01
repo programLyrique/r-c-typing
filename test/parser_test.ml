@@ -20,3 +20,9 @@ let () =
 
   let _sized_type_ast = Parser.parse_string "int main() { unsigned long x = 1; return (int)x; }" in
   print_endline "Sized type specifier parsed successfully";
+
+  let _sizeof_expr_ast = Parser.parse_string "int main() { int x = 1; return sizeof x; }" in
+  print_endline "sizeof expression parsed successfully";
+
+  let _sizeof_type_ast = Parser.parse_string "int main() { return sizeof(int); }" in
+  print_endline "sizeof type parsed successfully";

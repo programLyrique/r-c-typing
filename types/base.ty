@@ -79,6 +79,7 @@ UNPROTECT: t(c_int) -> c_void
 
 R_INT_MIN: c_int
 R_INT_MAX: c_int
+sizeof: t(any) -> c_int
 
 
 Rf_envlength: t(any) -> c_int
