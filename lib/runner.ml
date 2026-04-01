@@ -189,6 +189,9 @@ let run_on_package opts path idenv env =
     | Package.Call -> Some func_name
     | _ -> None
   ) in
+  Printf.printf "Entry points for .Call convention:\n";
+  List.iter (fun entry -> Printf.printf "  %s\n" entry) entry_points;
+  Printf.printf "\n";
   run_on_files opts c_files ~entry_points idenv env
   
 let () =
