@@ -645,15 +645,19 @@ and aux_declaration typ (decl: anon_choice_opt_ms_call_modi_decl_decl_opt_gnu_as
       let var_assign = (Mlsem.Common.Position.dummy, A.VarAssign ((Mlsem.Common.Position.dummy, name), e)) in
       (Mlsem.Common.Position.dummy, A.Seq [var_decl; var_assign])
   | `Opt_ms_call_modi_decl_decl_opt_gnu_asm_exp (_, declr, _) -> 
-      let name = aux_decl2_name declr in
+      let (level, name) = aux_decl2_name declr in
+      let typ = Ast.build_ptr level typ in
       (Mlsem.Common.Position.dummy, A.VarDeclare (typ, (Mlsem.Common.Position.dummy, A.Id name)))
 and aux_declarations ((decl_type, decl1, decls, _loc2): declaration) =
   let typ = aux_decl_spec decl_type in
   (Mlsem.Common.Position.dummy, A.Seq ((aux_declaration typ decl1) :: (List.map (fun (_, d) -> aux_declaration typ d) decls)))
 and aux_decl2_name (decl: declaration_declarator) = 
   match decl  with
-  | `Id tok -> token_to_string tok
-  | _ -> failwith "Not supported yet: complex declaration names"
+  | `Id tok -> (0, token_to_string tok)
+  | `Poin_decl (_,_,_,_,decl) -> let (level, name) = aux_decl_name decl in (level + 1, name)
+  | _ -> 
+    Boilerplate.map_declaration_declarator () decl |> Tree_sitter_run.Raw_tree.to_channel stderr ;
+    failwith "Not supported yet: complex declaration names"
 and aux_block_item (item : block_item) =
   match item with
   | `Stmt stmt -> aux_statement stmt
