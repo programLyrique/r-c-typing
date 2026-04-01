@@ -75,9 +75,9 @@ jobs:
       - name: Pin private dep packages SST, MLsem, Rstt
         run: |
           eval $(opam env)
-          opam pin add sstt git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/sstt.git#srp --yes
-          opam pin add sstt-repl git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/sstt.git#srp --yes
-          opam pin add sstt-bin git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/sstt.git#srp --yes
+          opam pin add sstt git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/sstt.git --yes
+          opam pin add sstt-repl git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/sstt.git --yes
+          opam pin add sstt-bin git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/sstt.git --yes
 
           for pkg in mlsem-types mlsem-common mlsem-system mlsem-lang mlsem mlsem-app mlsem-bin; do
             opam pin add $pkg git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/MLsem.git --yes

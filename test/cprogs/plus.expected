@@ -8,7 +8,7 @@ Prep_incl (
 )
 r_plus_scalar_real: (dbl, dbl) -> dbl1
 
-make_int_or_float: ((c_false) -> empty) & ((c_int_na \ c_bool) | (c_true) -> int1)
+make_int_or_float: ((c_false) -> empty) & ((c_int_na) -> int1)
 
 incr_real: (dbl1) -> dbl1
 
