@@ -41,6 +41,13 @@ let parse_string s =
   process_res res
 
 
+  let gen_id = 
+    let id =ref 0 in 
+    fun () -> 
+      let current_id = !id in 
+      id := current_id + 1 ;
+      current_id
+
 (* Taken from E-Sh4rk/typed-r *)
 let line_length = 0x10000
 let conv_pos tspos =
@@ -214,8 +221,12 @@ let aux_param (p: anon_choice_param_decl_4ac2852) =
     let ty = aux_decl_spec decl_spec in
     let level, name = aux_decl_name decl in
     (Ast.build_ptr level ty, name)
+  | `Param_decl (decl_spec, None, _) ->
+    let ty = aux_decl_spec decl_spec in
+    (ty, "anon_param_" ^ string_of_int (gen_id ()))
   | `Vari_param _ -> failwith "Not supported yet: variable number of parameters (...) in declaration"
-  | _ -> failwith "Not supported yet: parameter declaration"
+  | _ -> Boilerplate.map_anon_choice_param_decl_4ac2852 () p |> Tree_sitter_run.Raw_tree.to_channel stderr ;
+    failwith "Not supported yet: parameter declaration"
 
 let rec aux_params (decl: declarator) : int * A.param list =
   match decl with 
