@@ -1,0 +1,16 @@
+Not supported yet: top level item
+Prep_incl (
+  (
+    "#include"
+    System_lib_str "<Rinternals.h>"
+    "\n"
+  )
+)
+sizeof_type_pattern: () -> c_int
+
+sizeof_expr_pattern: (c_int_na) -> c_int
+
+sized_decl_pattern: ((c_int) -> c_int) & ((c_int_na) -> c_int_na)
+
+mixed_pattern: (c_int_na, c_int_na) -> c_int_na
+
