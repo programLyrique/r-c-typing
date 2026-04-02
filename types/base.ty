@@ -55,6 +55,10 @@ R_BaseNamespace: env
 R_NewEnv: t(env, c_int, c_int) -> env
 R_GetCurrentEnv: () -> env
 
+// Casts
+asLogical: t(any) -> c_true | c_false
+asInteger: t(any) -> c_int
+
 // Pairlists
 list2: t(any, any) -> lang
 

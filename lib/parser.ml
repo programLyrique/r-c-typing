@@ -286,12 +286,57 @@ and aux_string (s: string_) =
     (locs_to_pos start_loc end_loc, A.Const (A.CStr str))
   | _ -> failwith "Not supported yet: strings with escaped characters or concatenated strings"
 and aux_num_lit  s = 
-  A.Const(
-    try 
-      A.CInt (int_of_string s)
-  with 
-    | Failure _ -> A.CFloat (Float.of_string s)
-  )
+  let has_float_syntax s =
+    let rec loop i =
+      if i >= String.length s then false
+      else
+        match s.[i] with
+        | '.' | 'e' | 'E' | 'p' | 'P' -> true
+        | _ -> loop (i + 1)
+    in
+    loop 0
+  in
+  let strip_int_suffix s =
+    let i = ref (String.length s - 1) in
+    while
+      !i >= 0
+      && match s.[!i] with 'u' | 'U' | 'l' | 'L' -> true | _ -> false
+    do
+      decr i
+    done;
+    String.sub s 0 (!i + 1)
+  in
+  let strip_float_suffix s =
+    if String.length s = 0 then s
+    else
+      match s.[String.length s - 1] with
+      | 'f' | 'F' | 'l' | 'L' -> String.sub s 0 (String.length s - 1)
+      | _ -> s
+  in
+  let normalize_int_literal s =
+    let len = String.length s in
+    if len >= 2 && s.[0] = '0' && (s.[1] = 'x' || s.[1] = 'X' || s.[1] = 'b' || s.[1] = 'B') then s
+    else if len > 1 && s.[0] = '0' then
+      let rec all_octal i =
+        i >= len || ((s.[i] >= '0' && s.[i] <= '7') && all_octal (i + 1))
+      in
+      if all_octal 1 then "0o" ^ String.sub s 1 (len - 1) else s
+    else s
+  in
+  let parse_int s =
+    let core = s |> strip_int_suffix |> normalize_int_literal in
+    int_of_string core
+  in
+  let parse_float s =
+    let core = strip_float_suffix s in
+    Float.of_string core
+  in
+  if has_float_syntax s then
+    A.Const (A.CFloat (parse_float s))
+  else
+    A.Const
+      (try A.CInt (parse_int s)
+       with Failure _ -> A.CFloat (parse_float s))
 
 and aux_char_lit (c: char_literal) =
   let decode_escape_sequence s =
@@ -777,3 +822,25 @@ let to_ast (res: (CST.translation_unit, CST.extra) Tree_sitter_run.Parsing_resul
   | None -> [] 
   | Some translation_unit ->
     aux_translation_unit translation_unit
+
+let%test "aux_num_lit parses integer long suffix" =
+  aux_num_lit "1L" = A.Const (A.CInt 1)
+
+let%test "aux_num_lit parses hexadecimal integer" =
+  aux_num_lit "0x2a" = A.Const (A.CInt 42)
+
+let%test "aux_num_lit parses hexadecimal integer with suffixes" =
+  aux_num_lit "0x2aUL" = A.Const (A.CInt 42)
+
+let%test "aux_num_lit parses c-style octal" =
+  aux_num_lit "077" = A.Const (A.CInt 63)
+
+let%test "aux_num_lit parses float suffix" =
+  match aux_num_lit "3.5f" with
+  | A.Const (A.CFloat f) -> Float.abs (f -. 3.5) < 1e-12
+  | _ -> false
+
+let%test "aux_num_lit parses hexadecimal float" =
+  match aux_num_lit "0x1.fp3" with
+  | A.Const (A.CFloat f) -> Float.abs (f -. 15.5) < 1e-12
+  | _ -> false

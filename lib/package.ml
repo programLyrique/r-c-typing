@@ -98,7 +98,7 @@ let find_native_calls path =
               let call_calls = extract_calls "Call" Call in
               let fortran_calls = extract_calls "Fortran" Fortran in
               let external_calls = extract_calls "External" External in
-              calls := c_calls @ call_calls @ fortran_calls @ external_calls
+              calls := !calls @ c_calls @ call_calls @ fortran_calls @ external_calls
             with _ -> ())
         ) files;
         !calls
