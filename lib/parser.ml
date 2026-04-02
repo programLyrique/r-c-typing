@@ -660,6 +660,7 @@ and aux_decl2_name (decl: declaration_declarator) =
   match decl  with
   | `Id tok -> (0, token_to_string tok)
   | `Poin_decl (_,_,_,_,decl) -> let (level, name) = aux_decl_name decl in (level + 1, name)
+  | `Array_decl (decl,_,_,_,_) -> let (level, name) = aux_decl_name decl in (level + 1, name)
   | _ -> 
     Boilerplate.map_declaration_declarator () decl |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: complex declaration names"
