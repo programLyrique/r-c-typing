@@ -26,6 +26,7 @@ type const =
  type top_level_unit' = 
   | Fundef of Ast.ctype * string * param list * e
   | Struct of Ast.ctype (* struct name, list of fields with their types *)
+  | Define of string * const
   [@@deriving show]
  and top_level_unit = Position.t * top_level_unit'
   [@@deriving show]
@@ -324,7 +325,8 @@ and transform env (pos, topl_unit) =
     let ret_ty = resolve_ctype env.decl ret_ty in
     (env.decl, Ast.Function (name, ret_ty, params, e)) 
   | Struct (Ast.Struct (name,_) as s) -> (Ast.DeclMap.add name s env.decl, Ast.Noop) 
-  | _ -> failwith "Unexpected top-level unit. Expected a function definition or a struct declaration."
+  | Define (_name, _value) -> (env.decl, Ast.Noop)
+  | _ -> failwith "Unexpected top-level unit. Expected a function definition, struct declaration, or define."
   in
   (eid, decl, Ast.VarMap.empty, e)
 

@@ -76,20 +76,30 @@ let infer_ast visible opts (idenv, env, decl) (ast : Ast.e) =
 
 (** past: the parsed AST *)
 let infer_fun_def visible_name opts (idenv, env, decl) past = 
-  let name = 
-    match past with 
-    | _,PAst.Fundef (_,name, _, _) -> name
-    | _,PAst.Struct (Ast.Struct (name, _)) -> name
-    | _ -> failwith "Expected a function definition or a struct declaration at the top level."
+  let name =
+    match past with
+    | _, PAst.Fundef (_, name, _, _) -> name
+    | _, PAst.Struct (Ast.Struct (name, _)) -> name
+    | _, PAst.Define (name, _) -> name
+    | _ -> failwith "Expected a function definition, struct declaration, or define at the top level."
   in
   let visible = visible_name name in 
 
-  let e = PAst.transform {PAst.id = idenv; decl} past in
-  if opts.ast && visible then
-    Printf.printf "%s\n" (Ast.show_e e);
-  match e with
-  | _, decl', _, Ast.Noop -> (idenv, env, decl')
-  | _, decl', _, _ -> infer_ast visible opts (idenv, env, decl') e
+  match past with
+  | _, PAst.Define (name, value) ->
+      let v = MVariable.create Immut (Some name) in
+      let ty = Ast.typeof_const (PAst.aux_const value) |> GTy.mk |> TyScheme.mk_mono in
+      if opts.debug && visible then
+        Format.printf "define %a: @[<h>%a@]@.@." Variable.pp v TyScheme.pp_short ty;
+      (StrMap.add name v idenv, Env.add v ty env, decl)
+  | _ ->
+
+      let e = PAst.transform {PAst.id = idenv; decl} past in
+      if opts.ast && visible then
+        Printf.printf "%s\n" (Ast.show_e e);
+      match e with
+      | _, decl', _, Ast.Noop -> (idenv, env, decl')
+      | _, decl', _, _ -> infer_ast visible opts (idenv, env, decl') e
 
 let run_on_file opts filename idenv env =
   if not (Sys.file_exists filename) then
@@ -106,7 +116,8 @@ let run_on_file opts filename idenv env =
           List.filter
             (function
               | _, PAst.Fundef (_, name, _, _) -> visible_name name
-              | _, PAst.Struct _ -> false)
+              | _, PAst.Struct _ -> false
+              | _, PAst.Define _ -> false)
             past
     in
     Printf.printf "%s\n" (PAst.show_definitions visible_past)
@@ -139,10 +150,21 @@ let run_on_files opts filenames ?entry_points idenv env =
         | _ -> None
       ) past
     ) pasts in
-  (* Sort the call graph *)
+  let visible_name = make_substring_pred opts.filter in
+  (* First apply non-function top-level units (structs, defines) in source order. *)
+  let idenv, env, decl =
+    List.concat_map snd pasts
+    |> List.fold_left
+         (fun acc item ->
+           match item with
+           | _, PAst.Fundef _ -> acc
+           | _ -> infer_fun_def visible_name opts acc item)
+         (idenv, env, Ast.DeclMap.empty)
+  in
+
+  (* Sort function definitions by call graph. *)
   let sorted_pasts = Call_graph.topo_sort filtered_pasts call_graph in
 
-  let visible_name = make_substring_pred opts.filter in
   if opts.past then begin
     let visible_past = match opts.filter with
       | None -> List.map snd sorted_pasts
@@ -158,7 +180,7 @@ let run_on_files opts filenames ?entry_points idenv env =
   let idenv, env, _ =
     List.fold_left
       (fun acc (_, item) -> infer_fun_def visible_name opts acc item)
-      (idenv, env, Ast.DeclMap.empty)
+      (idenv, env, decl)
       sorted_pasts
   in
   (idenv, env)

@@ -791,6 +791,61 @@ and aux_prep_func_def (func_def: preproc_function_def) =
   in
   (locs_to_pos loc1 loc2, A.Fundef (Ast.Any, name, params, body))
 
+let aux_preproc_define (prepoc : preproc_def) : A.top_level_unit option =
+  let ((loc1, _), name_tok, value_opt, _nl) = prepoc in
+  let name = token_to_string name_tok in
+  let rec strip_outer_parens s =
+    let s = String.trim s in
+    let len = String.length s in
+    if len >= 2 && s.[0] = '(' && s.[len - 1] = ')' then
+      strip_outer_parens (String.sub s 1 (len - 2))
+    else s
+  in
+  let parse_char_literal s =
+    let len = String.length s in
+    if len = 3 && s.[0] = '\'' && s.[2] = '\'' then Some (A.CChar s.[1])
+    else None
+  in
+  let parse_define_value s =
+    let s = strip_outer_parens s in
+    let len = String.length s in
+    if len = 0 then None
+    else
+      match s with
+      | "NULL" | "nullptr" -> Some A.CNull
+      | "true" | "TRUE" -> Some (A.CBool true)
+      | "false" | "FALSE" -> Some (A.CBool false)
+      | _ when len >= 2 && s.[0] = '"' && s.[len - 1] = '"' ->
+          Some (A.CStr (String.sub s 1 (len - 2)))
+      | _ ->
+          begin
+            match parse_char_literal s with
+            | Some c -> Some c
+            | None ->
+                (match aux_num_lit s with
+                | A.Const c -> Some c
+                | _ -> None)
+          end
+  in
+  match value_opt with
+  | None -> None
+  | Some (_, raw_value) ->
+      let raw_value = String.trim raw_value in
+      begin
+        try
+          match parse_define_value raw_value with
+          | Some c -> Some (loc_to_pos loc1, A.Define (name, c))
+          | None ->
+              if !warn_unsupported then
+                Printf.printf "Not supported yet: #define %s with empty/invalid value\n" name;
+              None
+        with Failure _ ->
+          if !warn_unsupported then
+            Printf.printf "Not supported yet: #define %s with non-literal value `%s`\n" name raw_value;
+          None
+      end
+
+
 let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
   match item with
   | `Func_defi (_, decl_spec, _, decl, body) -> (
@@ -803,6 +858,7 @@ let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
      Some (Mlsem.Common.Position.dummy, Fundef (return_type, name, params, body))
      ) 
   (* | `Prep_func_def func_def -> Some (aux_prep_func_def func_def) *)
+  | `Prep_def prepoc_def -> aux_preproc_define prepoc_def
   | `Empty_decl (type_spec, _tok) ->
    let s = aux_type_spec type_spec in
     Some( Mlsem.Common.Position.dummy, Struct s)
@@ -843,4 +899,10 @@ let%test "aux_num_lit parses float suffix" =
 let%test "aux_num_lit parses hexadecimal float" =
   match aux_num_lit "0x1.fp3" with
   | A.Const (A.CFloat f) -> Float.abs (f -. 15.5) < 1e-12
+  | _ -> false
+
+let%test "preproc define with literal creates PAst.Define" =
+  let res = parse_string "#define ONE 1L\nint f() { return ONE; }" in
+  match to_ast res with
+  | (_, A.Define ("ONE", A.CInt 1)) :: _ -> true
   | _ -> false

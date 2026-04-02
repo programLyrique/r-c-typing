@@ -14,4 +14,5 @@ let mk_C_ty fundef =
       let arg_tuple = Tuple.mk args in
       let ret_ty = Ast.typeof_ctype return_ty in
       Arrow.mk arg_tuple ret_ty
-  | _pos, Struct _ -> failwith "mk_C_ty expects a function definition"
+  | _pos, Struct _ | _pos, Define _ -> failwith "mk_C_ty expects a function definition"
+
