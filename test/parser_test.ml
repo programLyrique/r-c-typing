@@ -29,3 +29,15 @@ let () =
 
   let _do_while_ast = Parser.parse_string "int main() { int i = 0; do { i = i + 1; } while (i < 3); return i; }" in
   print_endline "do while parsed successfully";
+
+  let _nested_init_list_ast =
+    Parser.parse_string
+      "int main() { int m[2][2] = {{1, 2}, {3, 4}}; return m[0][0]; }"
+  in
+  print_endline "Nested initializer list parsed successfully";
+
+  let _init_pair_ast =
+    Parser.parse_string
+      "typedef struct { int x; int y; } P; int main() { P p = {.x = 1, .y = 2}; return p.x; }"
+  in
+  print_endline "Initializer pair parsed successfully";

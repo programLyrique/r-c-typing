@@ -665,22 +665,37 @@ and aux_statement (stmt: statement) =
  | `Case_stmt st -> aux_case_statement st
  | `Choice_attr_stmt st -> aux_non_case_statement st
 and aux_initializer_list (init_list: initializer_list) =
- let (l1,_), initializers, _, (l2,_) = init_list in 
- let pos = locs_to_pos l1 l2 in
- let process_init (init : anon_choice_init_pair_1a6981e) =
-   match init with
-   | `Exp e -> (let res = aux_expression e in
-       match snd res with 
-      | A.Const c -> c 
-      | _ -> failwith "Not supported yet: initializer lists with non-constant expressions")
-   | _ -> failwith "Not supported yet: initializer lists with nested initializer lists or pairs"
- in
- let vals = match initializers with 
-  | None -> []
-  | Some (init1,inits) ->
-    (process_init init1) :: List.map (fun (_, init) -> process_init init) inits
+  let rec process_expr_as_const e =
+    let res = aux_expression e in
+    match snd res with
+    | A.Const c -> c
+    | _ -> failwith "Not supported yet: initializer lists with non-constant expressions"
+  and process_initializer_pair (pair : initializer_pair) =
+    match pair with
+    | `Rep1_choice_subs_desi_EQ_choice_exp (_, _, init)
+    | `Id_COLON_choice_exp (_, _, init) -> process_pair_rhs init
+  and process_pair_rhs (init : anon_choice_exp_3078596) =
+    match init with
+    | `Exp e -> process_expr_as_const e
+    | `Init_list nested -> process_initializer_list_to_const nested
+  and process_initializer (init : anon_choice_init_pair_1a6981e) =
+    match init with
+    | `Exp e -> process_expr_as_const e
+    | `Init_list nested -> process_initializer_list_to_const nested
+    | `Init_pair pair -> process_initializer_pair pair
+  and process_initializer_list_to_const ((_, initializers, _, _) : initializer_list) =
+    let vals =
+      match initializers with
+      | None -> []
+      | Some (init1, inits) ->
+          process_initializer init1
+          :: List.map (fun (_, init) -> process_initializer init) inits
+    in
+    A.CArray vals
   in
- (pos, A.Const (A.CArray vals)) 
+  let ((l1, _), _, _, (l2, _)) = init_list in
+  let pos = locs_to_pos l1 l2 in
+  (pos, A.Const (process_initializer_list_to_const init_list))
 and aux_declaration typ (decl: anon_choice_opt_ms_call_modi_decl_decl_opt_gnu_asm_exp_2fa2f9e) =
   match decl with 
   |`Init_decl (declr, _, init) -> 

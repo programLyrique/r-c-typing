@@ -7,3 +7,5 @@ Sized type specifier parsed successfully
 sizeof expression parsed successfully
 sizeof type parsed successfully
 do while parsed successfully
+Nested initializer list parsed successfully
+Initializer pair parsed successfully
