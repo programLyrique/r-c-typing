@@ -75,9 +75,12 @@ UNPROTECT: t(c_int) -> c_void
 
 -__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na)
 
+*__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na)
+
 %__2: t(c_int, c_int) -> c_int
 
 ++__1: (t(c_int) -> c_int) & (t(c_double) -> c_double) & (t(any) -> any)
+--__1: (t(c_int) -> c_int) & (t(c_double) -> c_double) & (t(any) -> any)
 
 *__1: t(*'a) -> 'a
 &__1: t('a) -> *'a
@@ -94,6 +97,7 @@ CDR: t(any) -> any
 ||__2: (t(c_true, c_true) | t(c_true, c_false) | t(c_false, c_true) -> c_true) & (t(c_false, c_false) -> c_false)
 &&__2: (t(c_false, c_false) | t(c_true, c_false) | t(c_false, c_true) -> c_false) & (t(c_true, c_true) -> c_true)
 ==__2: t(any, any) -> c_bool
+!=__2: t(any, any) -> c_bool
 !__1: (t(c_true) -> c_false) & (t(c_false) -> c_true)
 <__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
 >__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
@@ -126,3 +130,7 @@ LANGSXP: lang
 ENVSXP: env
 ANYSXP: any_r_not_vec | vec
 DOTSXP: any
+
+// C functions
+
+assert: t(any) -> c_void //We might differentiate between the true and false case here

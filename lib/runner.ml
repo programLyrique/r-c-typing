@@ -205,6 +205,7 @@ let run_on_package opts path idenv env =
     ) c_files;
     Printf.printf "\n"
   end;
+  
   (* Infer types for .Call entrypoints *)
   let entry_points = native_calls |> List.filter_map (fun (func_name, convention) ->
     match convention with
