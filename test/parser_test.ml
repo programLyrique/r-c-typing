@@ -41,3 +41,9 @@ let () =
       "typedef struct { int x; int y; } P; int main() { P p = {.x = 1, .y = 2}; return p.x; }"
   in
   print_endline "Initializer pair parsed successfully";
+
+  let _dynamic_init_list_ast =
+    Parser.parse_string
+      "int main() { int x = 1; int a[2] = {x, x + 1}; return a[0]; }"
+  in
+  print_endline "Non-constant initializer list parsed successfully";

@@ -82,12 +82,36 @@ let aux_primitive_type t =
   match t with 
   | "void" -> Ast.Void
   | "char" -> Ast.Char
-  | "short" | "int" | "long" | "size_t" | "uint8_t" -> Ast.Int
+  | "short" | "int" | "long" | "size_t" | "uint8_t" | "ssize_t" -> Ast.Int
   | "float" | "double" -> Ast.Float
   | "bool" -> Ast.Bool
   | _ -> failwith ("Unknown primitive type: " ^ t)
 
 let token_to_string (_loc, s) = s
+
+type init_step =
+  | InitIndex of A.e
+  | InitField of string
+
+type init_plan =
+  | InitConst of A.const
+  | InitDynamic of (init_step list * A.e) list
+
+let rec placeholder_const_of_ctype ty =
+  match ty with
+  | Ast.Void -> A.CNull
+  | Ast.Int -> A.CNa
+  | Ast.Float -> A.CFloat 0.
+  | Ast.Char -> A.CChar '\000'
+  | Ast.Bool -> A.CBool false
+  | Ast.Ptr _ | Ast.SEXP | Ast.Any -> A.CNull
+  | Ast.Array (elem_ty, _) -> A.CArray [placeholder_const_of_ctype elem_ty]
+  | Ast.Struct _ | Ast.Union _ | Ast.Enum _ | Ast.Typeref _ -> A.CNull
+
+let top_level_initializer_count ((_, initializers, _, _) : initializer_list) =
+  match initializers with
+  | None -> 0
+  | Some (_, inits) -> 1 + List.length inits
 
 let rec aux_struct_fields name fields =
   let rec aux_field_decl_name (decl : field_declarator) : int * string =
@@ -664,51 +688,140 @@ and aux_statement (stmt: statement) =
  match stmt with 
  | `Case_stmt st -> aux_case_statement st
  | `Choice_attr_stmt st -> aux_non_case_statement st
-and aux_initializer_list (init_list: initializer_list) =
-  let rec process_expr_as_const e =
-    let res = aux_expression e in
-    match snd res with
-    | A.Const c -> c
-    | _ -> failwith "Not supported yet: initializer lists with non-constant expressions"
-  and process_initializer_pair (pair : initializer_pair) =
+
+and aux_initializer_list_plan (init_list: initializer_list) =
+  let rec const_of_expr e =
+    match snd (aux_expression e) with
+    | A.Const c -> Some c
+    | _ -> None
+  and const_of_pair (pair : initializer_pair) =
     match pair with
-    | `Rep1_choice_subs_desi_EQ_choice_exp (_, _, init)
-    | `Id_COLON_choice_exp (_, _, init) -> process_pair_rhs init
-  and process_pair_rhs (init : anon_choice_exp_3078596) =
+    | `Rep1_choice_subs_desi_EQ_choice_exp (_, _, _)
+    | `Id_COLON_choice_exp (_, _, _) -> None
+  and const_of_initializer (init : anon_choice_init_pair_1a6981e) =
     match init with
-    | `Exp e -> process_expr_as_const e
-    | `Init_list nested -> process_initializer_list_to_const nested
-  and process_initializer (init : anon_choice_init_pair_1a6981e) =
-    match init with
-    | `Exp e -> process_expr_as_const e
-    | `Init_list nested -> process_initializer_list_to_const nested
-    | `Init_pair pair -> process_initializer_pair pair
-  and process_initializer_list_to_const ((_, initializers, _, _) : initializer_list) =
-    let vals =
-      match initializers with
-      | None -> []
-      | Some (init1, inits) ->
-          process_initializer init1
-          :: List.map (fun (_, init) -> process_initializer init) inits
-    in
-    A.CArray vals
+    | `Exp e -> const_of_expr e
+    | `Init_list nested -> const_of_initializer_list nested
+    | `Init_pair pair -> const_of_pair pair
+  and const_of_initializer_list ((_, initializers, _, _) : initializer_list) =
+    match initializers with
+    | None -> Some (A.CArray [])
+    | Some (init1, inits) ->
+        let rec gather acc = function
+          | [] -> Some (A.CArray (List.rev acc))
+          | init :: tl ->
+              begin
+                match const_of_initializer init with
+                | Some c -> gather (c :: acc) tl
+                | None -> None
+              end
+        in
+        gather [] (init1 :: List.map snd inits)
   in
+  match const_of_initializer_list init_list with
+  | Some c -> InitConst c
+  | None ->
+      let rec rhs_to_dynamic base_path (init : anon_choice_exp_3078596) =
+        match init with
+        | `Exp e -> [ (base_path, aux_expression e) ]
+        | `Init_list nested -> dynamic_of_initializer_list base_path nested
+      and path_with_designator path d =
+        match d with
+        | `Subs_desi (_, idx, _) -> path @ [InitIndex (aux_expression idx)]
+        | `Field_desi (_, (_, field_name)) -> path @ [InitField field_name]
+        | `Subs_range_desi _ -> failwith "Not supported yet: subscript range designators"
+      and item_to_dynamic base_path seq_index (init : anon_choice_init_pair_1a6981e) =
+        let default_path = base_path @ [InitIndex (Position.dummy, A.Const (A.CInt seq_index))] in
+        match init with
+        | `Exp e -> [ (default_path, aux_expression e) ]
+        | `Init_list nested -> dynamic_of_initializer_list default_path nested
+        | `Init_pair pair ->
+            begin
+              match pair with
+              | `Rep1_choice_subs_desi_EQ_choice_exp (designators, _, rhs) ->
+                  let path = List.fold_left path_with_designator base_path designators in
+                  rhs_to_dynamic path rhs
+              | `Id_COLON_choice_exp ((_, field_name), _, rhs) ->
+                  rhs_to_dynamic (base_path @ [InitField field_name]) rhs
+            end
+      and dynamic_of_initializer_list base_path ((_, initializers, _, _) : initializer_list) =
+        match initializers with
+        | None -> []
+        | Some (init1, inits) ->
+            let all_inits = init1 :: List.map snd inits in
+            let rec aux idx acc = function
+              | [] -> List.rev acc
+              | init :: tl ->
+                  let leaves = item_to_dynamic base_path idx init in
+                  aux (idx + 1) (List.rev_append leaves acc) tl
+            in
+            aux 0 [] all_inits
+      in
+      InitDynamic (dynamic_of_initializer_list [] init_list)
+
+and aux_initializer_list (init_list: initializer_list) =
+  let plan = aux_initializer_list_plan init_list in
   let ((l1, _), _, _, (l2, _)) = init_list in
   let pos = locs_to_pos l1 l2 in
-  (pos, A.Const (process_initializer_list_to_const init_list))
+  match plan with
+  | InitConst c -> (pos, A.Const c)
+  | InitDynamic _ ->
+      failwith "Internal error: dynamic initializer list cannot be converted to a single expression"
+
 and aux_declaration typ (decl: anon_choice_opt_ms_call_modi_decl_decl_opt_gnu_asm_exp_2fa2f9e) =
   match decl with 
   |`Init_decl (declr, _, init) -> 
       let level,name = aux_decl_name declr in
       let name = A.Id name in
       let typ = Ast.build_ptr level typ in
-      let e = match init with 
-        | `Exp expr -> aux_expression expr
-        | `Init_list init_list -> aux_initializer_list init_list
-      in
       let var_decl = (Mlsem.Common.Position.dummy, A.VarDeclare (typ, (Mlsem.Common.Position.dummy, name))) in
-      let var_assign = (Mlsem.Common.Position.dummy, A.VarAssign ((Mlsem.Common.Position.dummy, name), e)) in
-      (Mlsem.Common.Position.dummy, A.Seq [var_decl; var_assign])
+      let rec lhs_from_steps base (steps : init_step list) =
+        match steps with
+        | [] -> base
+        | InitIndex idx :: tl ->
+            let lhs = (Position.dummy, A.Call ((Position.dummy, A.Id "[]"), [base; idx])) in
+            lhs_from_steps lhs tl
+        | InitField field :: tl ->
+            let lhs = (Position.dummy, A.FieldAccess (base, field)) in
+            lhs_from_steps lhs tl
+      in
+      begin
+        match init with
+        | `Exp expr ->
+            let e = aux_expression expr in
+            let var_assign = (Mlsem.Common.Position.dummy, A.VarAssign ((Mlsem.Common.Position.dummy, name), e)) in
+            (Mlsem.Common.Position.dummy, A.Seq [var_decl; var_assign])
+        | `Init_list init_list ->
+            begin
+              match aux_initializer_list_plan init_list with
+              | InitConst c ->
+                  let e = (Position.dummy, A.Const c) in
+                  let var_assign = (Mlsem.Common.Position.dummy, A.VarAssign ((Mlsem.Common.Position.dummy, name), e)) in
+                  (Mlsem.Common.Position.dummy, A.Seq [var_decl; var_assign])
+              | InitDynamic entries ->
+                  let base = (Position.dummy, name) in
+                  let element_ty =
+                    match typ with
+                    | Ast.Ptr elem_ty -> elem_ty
+                    | _ -> Ast.Any
+                  in
+                  let placeholder = placeholder_const_of_ctype element_ty in
+                  let init_len = top_level_initializer_count init_list in
+                  let bootstrap_vals = List.init init_len (fun _ -> placeholder) in
+                  let init_empty =
+                    (Position.dummy,
+                     A.VarAssign (base, (Position.dummy, A.Const (A.CArray bootstrap_vals))))
+                  in
+                  let assigns =
+                    List.map
+                      (fun (steps, rhs) ->
+                        let lhs = lhs_from_steps base steps in
+                        (Position.dummy, A.VarAssign (lhs, rhs)))
+                      entries
+                  in
+                  (Mlsem.Common.Position.dummy, A.Seq (var_decl :: init_empty :: assigns))
+            end
+      end
   | `Opt_ms_call_modi_decl_decl_opt_gnu_asm_exp (_, declr, _) -> 
       let (level, name) = aux_decl2_name declr in
       let typ = Ast.build_ptr level typ in

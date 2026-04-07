@@ -204,7 +204,17 @@ let rec aux_e env (pos,e) =
   | Unop (op, e) -> Ast.Unop (var env (op ^ "__1"), aux_e env e)
   | Binop (op, (e1,e2)) -> Ast.Binop (var env (op ^ "__2"), aux_e env e1, aux_e env e2)
   | VarAssign ((_,Id s), e2) -> Ast.VarAssign (var env s, aux_e env e2)
-  | VarAssign ((loc1, Call ((_,Id "[]"), args)) ,e2) -> 
+  | VarAssign ((loc1, Call ((_,Id "[]"), ((_, Id base_name) :: _ as args))) ,e2) ->
+      (* Model arr[i] = v as a functional update arr = []<-(arr, i, v) so
+         subsequent reads can use the updated value. *)
+      Ast.VarAssign (
+        var env base_name,
+        fresh_e env (Ast.Call (
+          aux_e env (loc1, Id "[]<-"),
+          (List.map (aux_e env) args) @ [aux_e env e2]
+        ))
+      )
+  | VarAssign ((loc1, Call ((_,Id "[]"), args)) ,e2) ->
       Ast.Call (
         aux_e env (loc1, Id "[]<-"),
         (List.map (aux_e env) args) @ [aux_e env e2]

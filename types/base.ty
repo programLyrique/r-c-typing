@@ -63,7 +63,7 @@ asInteger: t(any) -> c_int
 // Pairlists
 list2: t(any, any) -> lang
 
-[]<-: t(*'a, c_int, 'a) -> c_void
+[]<-: t(*'a, c_int, 'a) -> *'a
 []: t(*'a, c_int) -> 'a
 
 PROTECT: t('a) -> 'a

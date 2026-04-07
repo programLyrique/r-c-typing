@@ -219,10 +219,12 @@ let run_on_package opts path idenv env =
   let n_c = count_convention Package.C in
   let n_fortran = count_convention Package.Fortran in
   let n_external = count_convention Package.External in
-  Printf.printf "Entry points detected: Call=%d, C=%d, Fortran=%d, External=%d\n" n_call n_c n_fortran n_external;
-  Printf.printf "Entry points for .Call convention:\n";
-  List.iter (fun entry -> Printf.printf "  %s\n" entry) entry_points;
-  Printf.printf "\n";
+  Format.printf
+    "Entry points detected: Call=%d, C=%d, Fortran=%d, External=%d@."
+    n_call n_c n_fortran n_external;
+  Format.printf "Entry points for .Call convention:@.";
+  List.iter (fun entry -> Format.printf "  %s@." entry) entry_points;
+  Format.printf "@.";
   run_on_files opts c_files ~entry_points idenv env
   
 let () =
