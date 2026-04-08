@@ -567,5 +567,5 @@ let rec aux_e (eid, _decl, vars, e) =
     let e', _, _ = aux e VarMap.empty in
     e'
 
-  let to_mlsem e = 
+  let to_mlsem e =
     e |> recognize_const_comparison |> propagate_const |> aux_e |> Mlsem.Lang.Transform.transform

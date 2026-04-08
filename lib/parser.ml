@@ -608,13 +608,19 @@ and aux_while_statement (while_stmt: while_statement) =
   pos,A.While (aux_paren_expr cond, b)
 
 and aux_do_statement (do_stmt: do_statement) =
+  (* Transform do { body } while (cond) into while(true) { body; if(!cond) break; }
+     The previous approach Seq([body, While(cond, body)]) duplicated the body, which
+     placed break statements from the first copy outside any loop, causing orphan
+     Ret(BLoop) nodes during the MLsem control-flow transformation. *)
   let (loc_do, _), body, _, cond, (loc_semi, _) = do_stmt in
+  let pos = locs_to_pos loc_do loc_semi in
   let body_ast = aux_statement body in
   let cond_ast = aux_paren_expr cond in
-  let while_ast =
-    (locs_to_pos loc_do loc_semi, A.While (cond_ast, body_ast))
-  in
-  (locs_to_pos loc_do loc_semi, A.Seq [body_ast; while_ast])
+  let true_cond = (Mlsem.Common.Position.dummy, A.Const (A.CBool true)) in
+  let break_stmt = (Mlsem.Common.Position.dummy, A.Break) in
+  let cond_check = (Mlsem.Common.Position.dummy, A.If (cond_ast, (Mlsem.Common.Position.dummy, A.Const A.CNull), Some break_stmt)) in
+  let loop_body = (pos, A.Seq [body_ast; cond_check]) in
+  (pos, A.While (true_cond, loop_body))
 
 and aux_compound_stmt (stmt: compound_statement) = 
   let (l1,_),block_items,(l2,_) = stmt in
