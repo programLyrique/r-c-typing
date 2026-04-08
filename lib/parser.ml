@@ -848,13 +848,12 @@ and aux_block_item (item : block_item) =
   | `Stmt stmt -> aux_statement stmt
   | `Decl decls -> aux_declarations decls
   | `Attr_stmt _attr_stmt -> failwith "Not supported yet: attribute statements"
-  | `Type_defi _ -> (Mlsem.Common.Position.dummy, Return None) (* Type definitions don't produce values *)
-  | `Empty_decl _ -> (Mlsem.Common.Position.dummy, Return None)
+  | `Type_defi _ -> (Mlsem.Common.Position.dummy, Const CNull) (* Type definitions don't produce values *)
+  | `Empty_decl _ -> (Mlsem.Common.Position.dummy, Const CNull)
 
-  | `Prep_if _ | `Prep_ifdef _ | `Prep_incl _ | `Prep_def _ 
-  | `Prep_func_def _ | `Prep_call _ -> 
-      (Mlsem.Common.Position.dummy, Return None) (*TODO: Handle preprocessor! *)
-      (* TODO: same as a function definition out of function*)
+  | `Prep_if _ | `Prep_ifdef _ | `Prep_incl _ | `Prep_def _
+  | `Prep_func_def _ | `Prep_call _ ->
+      (Mlsem.Common.Position.dummy, Const CNull) (*TODO: Handle preprocessor! *)
   | `Func_defi _ -> failwith "Function definitions inside a block not supported"
   | _ -> failwith "Not supported yet: old function defi or link spec"
 

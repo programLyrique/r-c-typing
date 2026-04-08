@@ -141,6 +141,7 @@ ANYSXP: any_r_not_vec | vec
 DOTSXP: any
 
 // R API: error/warning
+Rf_error: any -> empty // redundant with error but like fail. The best would be to generate 2 versions of the function and pick the one which type checks?
 Rf_errorcall: (t(any, any) -> empty) & (t(any, any, any) -> empty) & (t(any, any, any, any) -> empty)
 Rf_warningcall: (t(any, any) -> c_void) & (t(any, any, any) -> c_void) & (t(any, any, any, any) -> c_void)
 
