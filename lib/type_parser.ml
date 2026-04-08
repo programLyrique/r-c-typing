@@ -180,17 +180,20 @@ let find_file_in_ancestors ~start ~target =
   in
   aux start
 
-let find_types_base_ty () =
+let find_types_dir () =
   (* In dune inline-tests, the cwd is typically a sandbox (under _build/.sandbox/...).
      Prefer a search from cwd (will work if the file is staged via (inline_tests (deps ...))).
      Fall back to the source tree location while developing outside dune. *)
   match find_file_in_ancestors ~start:(Sys.getcwd ()) ~target:"types/base.ty" with
-  | Some f -> f
+  | Some f -> Filename.dirname f
   | None -> (
       match find_file_in_ancestors ~start:(Filename.dirname __FILE__) ~target:"../types/base.ty" with
-      | Some f -> f
-      | None -> "types/base.ty"
+      | Some f -> Filename.dirname f
+      | None -> "types"
     )
+
+let find_types_base_ty () =
+  Filename.concat (find_types_dir ()) "base.ty"
 
 let%test "load file" = 
     let open Builder in

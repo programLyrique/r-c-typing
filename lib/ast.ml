@@ -140,6 +140,7 @@ let rec typeof_ctype ct =
   | Float -> Cenums.double
   | Char -> Cenums.char
   | Bool -> Cint.bool
+  | Ptr Char -> Cstring.any
   | Ptr ty -> Cptr.mk (typeof_ctype ty)
   | SEXP -> Defs.any_sexp
   | Any -> Defs.any_c

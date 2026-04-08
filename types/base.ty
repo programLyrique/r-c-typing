@@ -78,6 +78,13 @@ UNPROTECT: t(c_int) -> c_void
 *__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na)
 
 %__2: t(c_int, c_int) -> c_int
+/__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any)
+|__2: t(c_int, c_int) -> c_int
+^__2: t(c_int, c_int) -> c_int
+~__1: t(c_int) -> c_int
+<<__2: t(c_int, c_int) -> c_int
+>>__2: t(c_int, c_int) -> c_int
+
 
 ++__1: (t(c_int) -> c_int) & (t(c_double) -> c_double) & (t(any) -> any)
 --__1: (t(c_int) -> c_int) & (t(c_double) -> c_double) & (t(any) -> any)
@@ -101,6 +108,8 @@ CDR: t(any) -> any
 !__1: (t(c_true) -> c_false) & (t(c_false) -> c_true)
 <__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
 >__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
+<=__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
+>=__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
 
 // TODO: add more non vector types for the 2nd overload
 TYPEOF: (t(v('a)) -> 'a) & (t('b & ~vec & any_r_not_vec) -> 'b)
@@ -130,6 +139,32 @@ LANGSXP: lang
 ENVSXP: env
 ANYSXP: any_r_not_vec | vec
 DOTSXP: any
+
+// R API: error/warning
+Rf_errorcall: (t(any, any) -> empty) & (t(any, any, any) -> empty) & (t(any, any, any, any) -> empty)
+Rf_warningcall: (t(any, any) -> c_void) & (t(any, any, any) -> c_void) & (t(any, any, any, any) -> c_void)
+
+// R API: type tests
+isFunction: (t(any -> any) -> c_true) & (t(~(any -> any)) -> c_false)
+
+// R API: evaluation
+R_ToplevelExec: t(any, any) -> c_bool
+R_tryEval: t(any, env, *c_int) -> any
+R_CheckUserInterrupt: () -> c_void
+
+// R API: pairlists
+LCONS: t(any, lang | null) -> lang
+CONS: t(any, lang | null) -> lang
+CAR: t(lang) -> any
+CADR: t(lang) -> any
+
+// R API: raw vectors
+RAW: t(v(raw)) -> *c_int
+
+// R API: misc
+Rf_length: t(v[int('a)](any)) -> c_int('a)
+asReal: t(any) -> c_double
+memcpy: t(any, any, c_int) -> any
 
 // C functions
 
