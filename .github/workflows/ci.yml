@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, ci-sandbox, new-type-algebra]
+    branches: [main, ci-sandbox]
   pull_request:
-    branches: [main]
+    branches: [main, ci-sandbox]
 
 jobs:
   build-and-test:
@@ -21,7 +21,6 @@ jobs:
         with:
           ocaml-compiler: 5.3.0
           dune-cache: true # Enables caching for faster builds
-
 
       - name: Configure opam networking
         run: |
@@ -60,8 +59,7 @@ jobs:
           key: ${{ runner.os }}-tree-sitter-${{ hashFiles('r-parser/core/downloads/tree-sitter/target/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-tree-sitter-
-      
-      
+
       - name: Preinstall ocamlfind
         run: |
           eval $(opam env)
@@ -72,7 +70,7 @@ jobs:
         run: opam install dune --yes
 
       # Pin  packages in dependency order
-      - name: Pin private dep packages SST, MLsem, Rstt
+      - name: Pin private dep packages SST, MLsem
         run: |
           eval $(opam env)
           opam pin add sstt git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/sstt.git#srp --yes
@@ -83,13 +81,10 @@ jobs:
             opam pin add $pkg git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/MLsem.git --yes
           done
 
-          opam pin add rstt git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/rstt.git --yes
-          opam pin add rstt-repl git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/rstt.git --yes
-
       # FIX: Pin cmdliner to 1.0.4 to fix "Unbound value Term.info" error
       - name: Pin cmdliner version
         run: opam install cmdliner.1.0.4 --yes
-      
+
       # Install r-parser dependency from private repo
       - name: Clone r-parser
         run: |
@@ -104,7 +99,7 @@ jobs:
           # 2. Configure git to rewrite all submodule SSH URLs to HTTPS.
           # This allows the submodule update to succeed without SSH keys.
           sed -i 's|git@github.com:|https://github.com/|' .gitmodules
-          
+
           export CARGO_TARGET_DIR=$PWD/core/downloads/tree-sitter/target
           opam exec -- bash -c "make update && make setup"
           # Build and install the dependency
@@ -135,7 +130,7 @@ jobs:
 
       # Run tests
       - name: Build and run tests
-        run: | 
+        run: |
           opam exec -- dune clean
           mkdir -p _coverage
           opam exec -- env BISSECT_COVERAGE_OUTPUT=_coverage dune runtest --instrument-with bisect_ppx --verbose --force
