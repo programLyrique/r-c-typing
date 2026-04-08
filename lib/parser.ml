@@ -990,7 +990,7 @@ let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
      let body = aux_body body in 
      Some (Mlsem.Common.Position.dummy, Fundef (return_type, name, params, body))
      ) 
-  (* | `Prep_func_def func_def -> Some (aux_prep_func_def func_def) *)
+  | `Prep_func_def func_def -> Some (aux_prep_func_def func_def)
   | `Prep_def prepoc_def -> aux_preproc_define prepoc_def
   | `Empty_decl (type_spec, _tok) ->
    let s = aux_type_spec type_spec in

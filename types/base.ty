@@ -9,6 +9,7 @@ fail: any -> empty
 
 isInteger: (t(v(int)) -> c_true) & (t(~v(int)) -> c_false)
 isReal: (t(v(dbl)) -> c_true) & (t(~v(dbl)) -> c_false)
+isLogical: (t(v(lgl)) -> c_true) & (t(~v(lgl)) -> c_false)
 IS_SCALAR: (t(v[1]('b)) -> c_true) & (t(v[int \ 1]('b)) -> c_false)
 
 INTEGER: t(v(int)) -> *c_int

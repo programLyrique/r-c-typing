@@ -143,7 +143,7 @@ let rec typeof_ctype ct =
   | Ptr Char -> Cstring.any
   | Ptr ty -> Cptr.mk (typeof_ctype ty)
   | SEXP -> Defs.any_sexp
-  | Any -> Defs.any_c
+  | Any -> Ty.any
   | Struct (name, fields) -> record_of_struct name fields
   | _ -> failwith ("Type not supported yet in typeof_ctype: " ^ show_ctype ct)
 and record_of_struct _name fields = 
