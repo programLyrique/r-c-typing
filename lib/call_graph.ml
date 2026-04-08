@@ -250,11 +250,13 @@ end
 
 
 (** Build a call graph from a single PAst top-level unit *)
-let of_past_unit t (_pos, unit') =
+let of_past_unit _t (_pos, unit') =
   match unit' with
   | PAst.Fundef (_, fname, _params, body) ->
       let callees = PAst.extract_calls_from_expr body in
-      List.iter (fun callee -> Callgraph.add_edge t ~caller:fname ~callee) callees
+  List.iter (fun callee -> Callgraph.add_edge _t ~caller:fname ~callee) callees
+  | PAst.Struct _ -> ()
+  | PAst.Define _ -> ()
 
 (** Build a call graph from a PAst definition (list of top-level units) *)
 let of_past defs =
@@ -289,6 +291,8 @@ let topo_sort pasts call_graph =
   List.iter (fun (filename, past) ->
     match past with
       | _, PAst.Fundef (_, name, _, _) -> Hashtbl.add past_map name (filename, past)
+      | _, PAst.Struct _ -> ()
+      | _, PAst.Define _ -> ()
   ) pasts;
   let sorted_names = Callgraph.topo_sort_names call_graph in
   List.filter_map (fun name -> Hashtbl.find_opt past_map name) sorted_names

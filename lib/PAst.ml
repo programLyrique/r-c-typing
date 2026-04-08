@@ -25,6 +25,8 @@ type const =
 
  type top_level_unit' = 
   | Fundef of Ast.ctype * string * param list * e
+  | Struct of Ast.ctype (* struct name, list of fields with their types *)
+  | Define of string * const
   [@@deriving show]
  and top_level_unit = Position.t * top_level_unit'
   [@@deriving show]
@@ -114,7 +116,33 @@ let rec bv_e in_lhs_assign (_,e) =
   | VarDeclare (_, _) -> failwith "Declaration must have an identifier" (*Should be unreachable*)
 
 module StrMap = Map.Make(String)
-type env = { id: Variable.t StrMap.t }
+type env = {
+  id: Variable.t StrMap.t;
+  decl: Ast.ctype Ast.DeclMap.t;
+}
+
+let rec resolve_ctype decl ty =
+  match ty with
+  | Ast.Struct (name, []) -> (
+      match Ast.DeclMap.find_opt name decl with
+      | Some (Ast.Struct (_, fields)) ->
+          Ast.Struct (name, List.map (fun (fty, fname) -> (resolve_ctype decl fty, fname)) fields)
+      | _ -> ty
+    )
+  | Ast.Struct (name, fields) ->
+      Ast.Struct (name, List.map (fun (fty, fname) -> (resolve_ctype decl fty, fname)) fields)
+  | Ast.Ptr t -> Ast.Ptr (resolve_ctype decl t)
+  | Ast.Array (t, len) -> Ast.Array (resolve_ctype decl t, len)
+  | Ast.Union (name, fields) ->
+      Ast.Union (name, List.map (fun (fty, fname) -> (resolve_ctype decl fty, fname)) fields)
+  | _ -> ty
+
+let rec has_struct_type ty =
+  match ty with
+  | Ast.Struct _ -> true
+  | Ast.Ptr t -> has_struct_type t
+  | Ast.Array (t, _) -> has_struct_type t
+  | _ -> false
 
 let var env str = 
   match StrMap.find_opt str env.id with 
@@ -144,8 +172,16 @@ let add_var env str =
 let add_def pid eid e str =
   let v = StrMap.find str eid in
   match StrMap.find_opt str pid with
-  | None -> Eid.unique (), Ast.VarMap.empty, Ast.Declare (v, e)
+  | None ->
+      let _, decl, _, _ = e in
+      (Eid.unique (), decl, Ast.VarMap.empty, Ast.Declare (v, e))
   | _ -> e
+
+let mk_e env eid expr =
+  (eid, env.decl, Ast.VarMap.empty, expr)
+
+let fresh_e env expr =
+  mk_e env (Eid.unique ()) expr
 
 let rec aux_const c = 
   match c with 
@@ -168,13 +204,23 @@ let rec aux_e env (pos,e) =
   | Unop (op, e) -> Ast.Unop (var env (op ^ "__1"), aux_e env e)
   | Binop (op, (e1,e2)) -> Ast.Binop (var env (op ^ "__2"), aux_e env e1, aux_e env e2)
   | VarAssign ((_,Id s), e2) -> Ast.VarAssign (var env s, aux_e env e2)
-  | VarAssign ((loc1, Call ((_,Id "[]"), args)) ,e2) -> 
+  | VarAssign ((loc1, Call ((_,Id "[]"), ((_, Id base_name) :: _ as args))) ,e2) ->
+      (* Model arr[i] = v as a functional update arr = []<-(arr, i, v) so
+         subsequent reads can use the updated value. *)
+      Ast.VarAssign (
+        var env base_name,
+        fresh_e env (Ast.Call (
+          aux_e env (loc1, Id "[]<-"),
+          (List.map (aux_e env) args) @ [aux_e env e2]
+        ))
+      )
+  | VarAssign ((loc1, Call ((_,Id "[]"), args)) ,e2) ->
       Ast.Call (
         aux_e env (loc1, Id "[]<-"),
         (List.map (aux_e env) args) @ [aux_e env e2]
       )
   | VarAssign ((loc1, Unop (_op, e1)) ,e2) -> (* Currently, remove the * or & operator *)
-     let _,_,e = aux_e env (loc1, VarAssign(e1, e2)) in e
+      let _,_,_,e = aux_e env (loc1, VarAssign(e1, e2)) in e
   | VarAssign ((_, FieldAccess (e1, field)) ,e2) -> 
       Ast.FieldUpdate (aux_e env e1, field, aux_e env e2)
   | VarAssign (_,_) -> failwith ("Unexpected left-hand side in assignment. Got: " ^ show_e (pos,e))
@@ -189,19 +235,19 @@ let rec aux_e env (pos,e) =
       (* Transform For into While *)
       let init_e = aux_e env init in
       let cond_e = match cond with 
-        | None -> (Eid.unique (), Ast.VarMap.empty, Ast.Const (Ast.CBool true))
+        | None -> fresh_e env (Ast.Const (Ast.CBool true))
         | Some e -> aux_e env e
       in
       let incr_e = match incr with 
-        | None -> (Eid.unique (), Ast.VarMap.empty, Ast.Const (Ast.CNull))
+        | None -> fresh_e env (Ast.Const (Ast.CNull))
         | Some e -> aux_e env e
       in
       let while_body = 
         let body_e = aux_e env body in
-        let seq_e = Eid.unique (), Ast.VarMap.empty, Ast.Seq (body_e, incr_e) in
+        let seq_e = fresh_e env (Ast.Seq (body_e, incr_e)) in
         seq_e
       in
-      let while_e = Eid.unique (), Ast.VarMap.empty, Ast.While (cond_e, while_body) in
+      let while_e = fresh_e env (Ast.While (cond_e, while_body)) in
       Ast.Seq (init_e, while_e)
   | Return None -> Ast.Return None
   | Return (Some e) -> Ast.Return (Some (aux_e env e))
@@ -233,50 +279,66 @@ let rec aux_e env (pos,e) =
         | _,Default body_e -> 
           let pos,b = body_e in 
           let has_break,b = remove_break b in
-          ((Eid.unique (), Ast.VarMap.empty, Ast.Noop), aux_e env (pos, b), has_break) 
+          (fresh_e env Ast.Noop, aux_e env (pos, b), has_break) 
         | _ -> failwith "Invalid case in switch"
       in
       Ast.Switch (aux_e env e, List.map aux_cases cases)
   | Case _ | Default _ -> failwith "Case and Default should be inside a switch"
   | Seq [] -> Ast.Const Ast.CNull
-  | Seq (e::es) -> let _,_,e = List.fold_left (fun acc e ->
-      Eid.unique (), Ast.VarMap.empty, Ast.Seq (acc, aux_e env e)) (aux_e env e) es in
+  | Seq (e::es) ->
+      let seq_e =
+        List.fold_left
+          (fun acc e2 -> fresh_e env (Ast.Seq (acc, aux_e env e2)))
+          (aux_e env e)
+          es
+      in
+      let _, _, _, e = seq_e in
       e
   | Comma _ -> failwith "Comma operator not supported yet"
-  | Cast (ty, e) -> Ast.Cast (ty, aux_e env e)
-  | VarDeclare (_typ, (_,Id _s)) -> Ast.Noop (* Rather generate a AST. Declare somewhere from them*)
+  | Cast (ty, e) -> Ast.Cast (resolve_ctype env.decl ty, aux_e env e)
+  | VarDeclare (typ, (_,Id s)) ->
+      let typ = resolve_ctype env.decl typ in
+      if has_struct_type typ then
+        let null_e = fresh_e env (Ast.Const Ast.CNull) in
+        Ast.VarAssign (var env s, fresh_e env (Ast.Cast (typ, null_e)))
+      else
+        Ast.Noop
   | VarDeclare (_, _) -> failwith "Declaration must have an identifier" (*Should be unreachable*)
   in
-  (eid, Ast.VarMap.empty, e)
+    mk_e env eid e
 and process_call env f args = 
   (* Set calls modify in place in the R C API, but for typing reason, 
   we make it create a new value and then assign to the original variable. *)
   let e = match (f, args) with 
   | (loc1,Id "SET_VECTOR_ELT"),(_, Id v)::_ ->
    Ast.VarAssign (var env v,
-      (Eid.unique_with_pos loc1, Ast.VarMap.empty, Ast.Call (
+      (mk_e env (Eid.unique_with_pos loc1) (Ast.Call (
          aux_e env f,
         List.map (aux_e env) args
-      ))
+      )))
     )
   | _ -> Ast.Call (aux_e env f, List.map (aux_e env) args) in
   e
 and transform env (pos, topl_unit) = 
   let eid = Eid.unique_with_pos pos in
-  let e = match topl_unit with 
+  let (decl, e) = match topl_unit with 
   | Fundef (ret_ty, name, params, body) -> 
 
     let param_vars = bv_params params in
     let pid = List.fold_left add_var env.id (StrSet.elements param_vars) in
-    let env = {id=pid} in 
+    let env = {env with id=pid} in 
     let body_vars = bv_e false body in
     let eid = List.fold_left add_var env.id (StrSet.elements body_vars) in
-    let env = {id=eid} in
+    let env = {env with id=eid} in
     let e = List.fold_left (add_def pid eid) (aux_e env body) (StrSet.elements body_vars) in
-    let params = List.map (fun (ty,name) -> ty,var env name) params in       
-    Ast.Function (name, ret_ty, params, e) 
+    let params = List.map (fun (ty,name) -> resolve_ctype env.decl ty, var env name) params in
+    let ret_ty = resolve_ctype env.decl ret_ty in
+    (env.decl, Ast.Function (name, ret_ty, params, e)) 
+  | Struct (Ast.Struct (name,_) as s) -> (Ast.DeclMap.add name s env.decl, Ast.Noop) 
+  | Define (_name, _value) -> (env.decl, Ast.Noop)
+  | _ -> failwith "Unexpected top-level unit. Expected a function definition, struct declaration, or define."
   in
-  (eid, Ast.VarMap.empty, e)
+  (eid, decl, Ast.VarMap.empty, e)
 
 let map f e = 
   let rec aux (pos, e) = 

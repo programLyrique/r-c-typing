@@ -193,3 +193,25 @@
  (deps    cprogs/struct.c cprogs/struct.expected)
  (action  (diff cprogs/struct.expected struct.output)))
 
+(rule
+ (alias   runtest)
+ (deps    cprogs/cpatterns.c)
+ (action  (with-stdout-to cpatterns.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/cpatterns.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/cpatterns.c cprogs/cpatterns.expected)
+ (action  (diff cprogs/cpatterns.expected cpatterns.output)))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/preproc-define.c)
+ (action  (with-stdout-to preproc-define.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/preproc-define.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/preproc-define.c cprogs/preproc-define.expected)
+ (action  (diff cprogs/preproc-define.expected preproc-define.output)))
+

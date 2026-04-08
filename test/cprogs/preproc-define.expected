@@ -6,9 +6,7 @@ Prep_incl (
     "\n"
   )
 )
-test_while: ∀'a. ('a & int) -> 'a & int
+add_one: (int) -> int1
 
-sum_while: (dbl) -> dbl1
-
-count_do_while: (int) -> int1
+add_magic: (int) -> int1
 

@@ -18,7 +18,7 @@ let pp fmt ts =
   let rec aux ast =
     Printer.(
       match ast with
-      | Extension ext -> Printf.printf "Extension found\n";
+      | Extension ext ->
           (* Specialize for the various extension printers *)
           (Format.asprintf "%a"
             (fun fmt ext -> print_extension_node_ctx (-1) NoAssoc fmt ext)
@@ -34,7 +34,6 @@ let pp fmt ts =
       | Interval (low, high) -> ((Option.fold ~none:"" ~some:Z.to_string low) ^ ".." ^ (Option.fold ~none:"" ~some:Z.to_string high), ast)
       | Record  _ -> (* TODO?*) ("", ast)
       | Varop (op, l) -> let res = List.map (fun d -> let (s, op) = aux d.op in (s, {op;ty=d.ty})) l in 
-        Format.printf "Varop before sorting: %a@." (Format.pp_print_list (fun fmt (s, _) -> Format.fprintf fmt "%s" s)) res ;
         let res = List.sort (fun (s1, _)(s2, _) -> String.compare s1 s2) res in 
         let s,d' = List.split res in 
         (String.concat "" s, Varop (op, d'))
@@ -48,7 +47,6 @@ let pp fmt ts =
           (s, Unop (op, {op=v'; ty=v.ty}))
     )
   in
-  Format.printf "Main op before ordering: %a@." (fun fmt ast -> Printer.print fmt ast) ast;
   let _,res = aux ast.main.op in 
   let ast = { ast with main = { ast.main with op = res } } in
   Printer.print fmt ast

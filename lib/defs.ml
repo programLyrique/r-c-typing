@@ -122,8 +122,20 @@ end
 
 
 (* For the new type algebra *)
-let filename = Type_parser.find_types_base_ty () 
-let parsed_types = Type_parser.load_file ~rf_aliases:true filename 
+let parsed_types =
+  let types_dir = Type_parser.find_types_dir () in
+  let ty_files =
+    Sys.readdir types_dir
+    |> Array.to_list
+    |> List.filter (fun f -> Filename.check_suffix f ".ty")
+    |> List.sort String.compare
+    |> List.map (Filename.concat types_dir)
+  in
+  List.fold_left (fun acc f ->
+    let rf_aliases = Filename.basename f = "base.ty" in
+    let types = Type_parser.load_file ~rf_aliases f in
+    Rstt.Builder.StrMap.union (fun _k _v1 v2 -> Some v2) acc types
+  ) Rstt.Builder.StrMap.empty ty_files
 
 let build_vars m = 
   let add_var name ty acc =

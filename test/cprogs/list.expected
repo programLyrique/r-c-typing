@@ -8,7 +8,7 @@ Prep_incl (
 )
 create_pos_list: () -> { any, any, any }
 
-create_list: () -> list
+create_list: () -> {  ... }
 
 create_named_list: () -> { a: any, b: any }
 
@@ -18,7 +18,11 @@ create_list_const_prop2: () -> { any, any, any, any, any, any, any }
 
 create_named_list_with_elems: () -> { a: dbl1, b: dbl1 }
 
-create_named_list_with_int: () -> { a: v1(^3), b: v1(^6) }
+create_named_list_with_int: () -> { a: 3, b: 6 }
 
-create_named_list_set_only_one: () -> { a: v1(^3), b: any }
+create_named_list_set_only_one: () -> { a: 3, b: any }
+
+nested_initializer_list: () -> c_int
+
+non_constant_initializer_list: (c_int_na) -> c_int_na
 

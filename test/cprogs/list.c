@@ -49,3 +49,13 @@ SEXP create_named_list_set_only_one() {
     UNPROTECT(1);
     return l;
 }
+
+int nested_initializer_list() {
+    int m[2][2] = {{1, 2}, {3, 4}};
+    return m[0][0] + m[1][1];
+}
+
+int non_constant_initializer_list(int x) {
+    int a[2] = {x, x + 1};
+    return a[0] + a[1];
+}

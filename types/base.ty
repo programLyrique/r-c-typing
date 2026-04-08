@@ -9,6 +9,7 @@ fail: any -> empty
 
 isInteger: (t(v(int)) -> c_true) & (t(~v(int)) -> c_false)
 isReal: (t(v(dbl)) -> c_true) & (t(~v(dbl)) -> c_false)
+isLogical: (t(v(lgl)) -> c_true) & (t(~v(lgl)) -> c_false)
 IS_SCALAR: (t(v[1]('b)) -> c_true) & (t(v[int \ 1]('b)) -> c_false)
 
 INTEGER: t(v(int)) -> *c_int
@@ -46,6 +47,7 @@ StringBlank: (t(p("")) -> c_true) & (t(p(chr \ "")) -> c_false) & (t(null) -> c_
 NA_STRING: na_string
 asChar: (t(v[(1..)]('a)) -> chr1) & (t(p(chr) & 'a) -> 'a) & (t(sym) -> chr1) & (t(any_r_not_vec \ sym | v0('a)) -> na_string)
 type2char:  (t(p(int)) -> c("integer")) & (t(p(dbl)) -> c("double")) & (t(p(lgl)) -> c("logical")) & (t(p(chr)) -> c("character")) & (t(p(clx)) -> c("complex")) & (t(p(raw)) -> c("raw")) & (t(list) -> c("list")) & (t(null) -> c("NULL")) & (t(env) -> c("environment")) & (t(sym) -> c("symbol")) & (t(lang) -> c("language")) & (t(expr) -> c("expression")) & (t(any -> any) -> c("closure"))
+isString: (t(v(chr)) -> c_true) & (t(any \ v(chr)) -> c_false)
 
 // Environments 
 R_GlobalEnv: env
@@ -55,10 +57,14 @@ R_BaseNamespace: env
 R_NewEnv: t(env, c_int, c_int) -> env
 R_GetCurrentEnv: () -> env
 
+// Casts
+asLogical: t(any) -> c_true | c_false
+asInteger: t(any) -> c_int
+
 // Pairlists
 list2: t(any, any) -> lang
 
-[]<-: t(*'a, c_int, 'a) -> c_void
+[]<-: t(*'a, c_int, 'a) -> *'a
 []: t(*'a, c_int) -> 'a
 
 PROTECT: t('a) -> 'a
@@ -70,15 +76,26 @@ UNPROTECT: t(c_int) -> c_void
 
 -__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na)
 
+*__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na)
+
 %__2: t(c_int, c_int) -> c_int
+/__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any)
+|__2: t(c_int, c_int) -> c_int
+^__2: t(c_int, c_int) -> c_int
+~__1: t(c_int) -> c_int
+<<__2: t(c_int, c_int) -> c_int
+>>__2: t(c_int, c_int) -> c_int
+
 
 ++__1: (t(c_int) -> c_int) & (t(c_double) -> c_double) & (t(any) -> any)
+--__1: (t(c_int) -> c_int) & (t(c_double) -> c_double) & (t(any) -> any)
 
 *__1: t(*'a) -> 'a
 &__1: t('a) -> *'a
 
 R_INT_MIN: c_int
 R_INT_MAX: c_int
+sizeof: t(any) -> c_int
 
 
 Rf_envlength: t(any) -> c_int
@@ -88,9 +105,12 @@ CDR: t(any) -> any
 ||__2: (t(c_true, c_true) | t(c_true, c_false) | t(c_false, c_true) -> c_true) & (t(c_false, c_false) -> c_false)
 &&__2: (t(c_false, c_false) | t(c_true, c_false) | t(c_false, c_true) -> c_false) & (t(c_true, c_true) -> c_true)
 ==__2: t(any, any) -> c_bool
+!=__2: t(any, any) -> c_bool
 !__1: (t(c_true) -> c_false) & (t(c_false) -> c_true)
 <__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
 >__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
+<=__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
+>=__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
 
 // TODO: add more non vector types for the 2nd overload
 TYPEOF: (t(v('a)) -> 'a) & (t('b & ~vec & any_r_not_vec) -> 'b)
@@ -120,3 +140,34 @@ LANGSXP: lang
 ENVSXP: env
 ANYSXP: any_r_not_vec | vec
 DOTSXP: any
+
+// R API: error/warning
+Rf_error: any -> empty // redundant with error but like fail. The best would be to generate 2 versions of the function and pick the one which type checks?
+Rf_errorcall: (t(any, any) -> empty) & (t(any, any, any) -> empty) & (t(any, any, any, any) -> empty)
+Rf_warningcall: (t(any, any) -> c_void) & (t(any, any, any) -> c_void) & (t(any, any, any, any) -> c_void)
+
+// R API: type tests
+isFunction: (t(any -> any) -> c_true) & (t(~(any -> any)) -> c_false)
+
+// R API: evaluation
+R_ToplevelExec: t(any, any) -> c_bool
+R_tryEval: t(any, env, *c_int) -> any
+R_CheckUserInterrupt: () -> c_void
+
+// R API: pairlists
+LCONS: t(any, lang | null) -> lang
+CONS: t(any, lang | null) -> lang
+CAR: t(lang) -> any
+CADR: t(lang) -> any
+
+// R API: raw vectors
+RAW: t(v(raw)) -> *c_int
+
+// R API: misc
+Rf_length: t(v[int('a)](any)) -> c_int('a)
+asReal: t(any) -> c_double
+memcpy: t(any, any, c_int) -> any
+
+// C functions
+
+assert: t(any) -> c_void //We might differentiate between the true and false case here

@@ -41,6 +41,13 @@ let parse_string s =
   process_res res
 
 
+  let gen_id = 
+    let id =ref 0 in 
+    fun () -> 
+      let current_id = !id in 
+      id := current_id + 1 ;
+      current_id
+
 (* Taken from E-Sh4rk/typed-r *)
 let line_length = 0x10000
 let conv_pos tspos =
@@ -75,12 +82,36 @@ let aux_primitive_type t =
   match t with 
   | "void" -> Ast.Void
   | "char" -> Ast.Char
-  | "short" | "int" | "long" | "size_t" | "uint8_t" -> Ast.Int
+  | "short" | "int" | "long" | "size_t" | "uint8_t" | "ssize_t" -> Ast.Int
   | "float" | "double" -> Ast.Float
   | "bool" -> Ast.Bool
   | _ -> failwith ("Unknown primitive type: " ^ t)
 
 let token_to_string (_loc, s) = s
+
+type init_step =
+  | InitIndex of A.e
+  | InitField of string
+
+type init_plan =
+  | InitConst of A.const
+  | InitDynamic of (init_step list * A.e) list
+
+let rec placeholder_const_of_ctype ty =
+  match ty with
+  | Ast.Void -> A.CNull
+  | Ast.Int -> A.CNa
+  | Ast.Float -> A.CFloat 0.
+  | Ast.Char -> A.CChar '\000'
+  | Ast.Bool -> A.CBool false
+  | Ast.Ptr _ | Ast.SEXP | Ast.Any -> A.CNull
+  | Ast.Array (elem_ty, _) -> A.CArray [placeholder_const_of_ctype elem_ty]
+  | Ast.Struct _ | Ast.Union _ | Ast.Enum _ | Ast.Typeref _ -> A.CNull
+
+let top_level_initializer_count ((_, initializers, _, _) : initializer_list) =
+  match initializers with
+  | None -> 0
+  | Some (_, inits) -> 1 + List.length inits
 
 let rec aux_struct_fields name fields =
   let rec aux_field_decl_name (decl : field_declarator) : int * string =
@@ -146,9 +177,24 @@ and aux_struct struc =
   |`Id_opt_field_decl_list ((_loc, name), Some (_,fields,_)) -> aux_struct_fields name fields
   (* Anonymous struct: we don't give it a name so far *)
   | `Field_decl_list (_,fields,_) -> aux_struct_fields "" fields
-  (* This one happens when we declare a struct, as an argument of a function for instance. 
-  Currently, we don't recall the name and we will jusy type structurally *)
-  | `Id_opt_field_decl_list ((_loc, _name), None) -> Ast.Any
+  (* Named reference to an already declared struct, e.g. `struct Point p;`.
+     We keep the struct tag and resolve it later through DeclMap. *)
+  | `Id_opt_field_decl_list ((_loc, name), None) -> Ast.Struct (name, [])
+
+and aux_sized_type_spec (_sized : sized_type_specifier) : Ast.ctype =
+  let aux_choice_type = function
+    | `Prim_type (_loc, s) -> aux_primitive_type s
+    | `Id (_loc, s) when s = "SEXP" -> Ast.SEXP
+    | `Id _ -> Ast.Any
+  in
+  match _sized with
+  | `Rep_choice_signed_opt_choice_id_rep1_choice_signed (_, Some t, _)
+  | `Rep1_choice_signed_rep_type_qual_opt_choice_id_rep_choice_signed (_, _, Some t, _) ->
+      aux_choice_type t
+  (* E.g. "unsigned", "long long": defaults to integer family. *)
+  | `Rep_choice_signed_opt_choice_id_rep1_choice_signed (_, None, _)
+  | `Rep1_choice_signed_rep_type_qual_opt_choice_id_rep_choice_signed (_, _, None, _) ->
+      Ast.Int
 
 and aux_type_spec (type_spec : type_specifier)  =
   match type_spec with
@@ -158,6 +204,7 @@ and aux_type_spec (type_spec : type_specifier)  =
   | `Struct_spec (_,_, _,struc, _) -> aux_struct struc
   (* We don't handle enums for now, we just give them the int type *)
   | `Enum_spec (_,`Id_opt_COLON_prim_type_opt_enum_list (_,None, None), _) -> Ast.Int
+  | `Sized_type_spec sized -> aux_sized_type_spec sized
   | _ -> (let tree = Boilerplate.map_type_specifier () type_spec in
     Raw_tree.to_channel stderr tree ;
     failwith "Not supported yet: type specifier")
@@ -198,8 +245,12 @@ let aux_param (p: anon_choice_param_decl_4ac2852) =
     let ty = aux_decl_spec decl_spec in
     let level, name = aux_decl_name decl in
     (Ast.build_ptr level ty, name)
+  | `Param_decl (decl_spec, None, _) ->
+    let ty = aux_decl_spec decl_spec in
+    (ty, "anon_param_" ^ string_of_int (gen_id ()))
   | `Vari_param _ -> failwith "Not supported yet: variable number of parameters (...) in declaration"
-  | _ -> failwith "Not supported yet: parameter declaration"
+  | _ -> Boilerplate.map_anon_choice_param_decl_4ac2852 () p |> Tree_sitter_run.Raw_tree.to_channel stderr ;
+    failwith "Not supported yet: parameter declaration"
 
 let rec aux_params (decl: declarator) : int * A.param list =
   match decl with 
@@ -259,21 +310,117 @@ and aux_string (s: string_) =
     (locs_to_pos start_loc end_loc, A.Const (A.CStr str))
   | _ -> failwith "Not supported yet: strings with escaped characters or concatenated strings"
 and aux_num_lit  s = 
-  A.Const(
-    try 
-      A.CInt (int_of_string s)
-  with 
-    | Failure _ -> A.CFloat (Float.of_string s)
-  )
-
-and aux_char_lit (c: char_literal) = 
-  let (start, c, (loc2,_)) = c in 
-  let loc1,c = match (start,c) with 
-   | `SQUOT (loc1,_), [`Imm_tok_pat_36637e2 (_,c)] -> assert (String.length c == 1);loc1, c.[0]
-   | _ -> failwith "Not supported yet: char literals with escape sequences"
+  let has_float_syntax s =
+    let rec loop i =
+      if i >= String.length s then false
+      else
+        match s.[i] with
+        | '.' | 'e' | 'E' | 'p' | 'P' -> true
+        | _ -> loop (i + 1)
+    in
+    loop 0
   in
-  let pos = locs_to_pos loc1 loc2 in
-  (pos, A.Const (A.CChar c))
+  let strip_int_suffix s =
+    let i = ref (String.length s - 1) in
+    while
+      !i >= 0
+      && match s.[!i] with 'u' | 'U' | 'l' | 'L' -> true | _ -> false
+    do
+      decr i
+    done;
+    String.sub s 0 (!i + 1)
+  in
+  let strip_float_suffix s =
+    if String.length s = 0 then s
+    else
+      match s.[String.length s - 1] with
+      | 'f' | 'F' | 'l' | 'L' -> String.sub s 0 (String.length s - 1)
+      | _ -> s
+  in
+  let normalize_int_literal s =
+    let len = String.length s in
+    if len >= 2 && s.[0] = '0' && (s.[1] = 'x' || s.[1] = 'X' || s.[1] = 'b' || s.[1] = 'B') then s
+    else if len > 1 && s.[0] = '0' then
+      let rec all_octal i =
+        i >= len || ((s.[i] >= '0' && s.[i] <= '7') && all_octal (i + 1))
+      in
+      if all_octal 1 then "0o" ^ String.sub s 1 (len - 1) else s
+    else s
+  in
+  let parse_int s =
+    let core = s |> strip_int_suffix |> normalize_int_literal in
+    int_of_string core
+  in
+  let parse_float s =
+    let core = strip_float_suffix s in
+    Float.of_string core
+  in
+  if has_float_syntax s then
+    A.Const (A.CFloat (parse_float s))
+  else
+    A.Const
+      (try A.CInt (parse_int s)
+       with Failure _ -> A.CFloat (parse_float s))
+
+and aux_char_lit (c: char_literal) =
+  let decode_escape_sequence s =
+    let fail () = failwith ("Invalid C escape sequence: " ^ s) in
+    if String.length s < 2 || s.[0] <> '\\' then fail ()
+    else
+      let parse_int base digits =
+        if String.length digits = 0 then fail () else int_of_string (base ^ digits)
+      in
+      match s.[1] with
+      | 'a' when String.length s = 2 -> 7
+      | 'b' when String.length s = 2 -> 8
+      | 'f' when String.length s = 2 -> 12
+      | 'n' when String.length s = 2 -> 10
+      | 'r' when String.length s = 2 -> 13
+      | 't' when String.length s = 2 -> 9
+      | 'v' when String.length s = 2 -> 11
+      | '\\' when String.length s = 2 -> Char.code '\\'
+      | '\'' when String.length s = 2 -> Char.code '\''
+      | '"' when String.length s = 2 -> Char.code '"'
+      | '?' when String.length s = 2 -> Char.code '?'
+      | 'x' -> parse_int "0x" (String.sub s 2 (String.length s - 2))
+      | 'u' when String.length s = 6 -> parse_int "0x" (String.sub s 2 4)
+      | 'U' when String.length s = 10 -> parse_int "0x" (String.sub s 2 8)
+      | c2 when '0' <= c2 && c2 <= '7' -> parse_int "0o" (String.sub s 1 (String.length s - 1))
+      | c2 when String.length s = 2 -> Char.code c2
+      | _ -> fail ()
+  in
+  let (start, chars, (loc2, _)) = c in
+  let loc1 =
+    match start with
+    | `LSQUOT (loc, _)
+    | `USQUOT_d861d39 (loc, _)
+    | `USQUOT_2701bdc (loc, _)
+    | `U8SQUOT (loc, _)
+    | `SQUOT (loc, _) -> loc
+  in
+  let values =
+    List.map
+      (function
+        | `Imm_tok_pat_36637e2 (_, s) ->
+            assert (String.length s = 1);
+            Char.code s.[0]
+        | `Esc_seq (_, s) -> decode_escape_sequence s)
+      chars
+  in
+  let is_plain_char =
+    match (start, values) with
+    | (`SQUOT _, [v]) when v >= 0 && v <= 255 -> true
+    | _ -> false
+  in
+  let const =
+    match values with
+    | [v] when is_plain_char -> A.CChar (Char.chr v)
+    | _ ->
+        (* C multi-char constants are implementation-defined; use a stable byte packing. *)
+        let packed = List.fold_left (fun acc v -> (acc lsl 8) lor (v land 0xFF)) 0 values in
+        A.CInt packed
+  in
+  (locs_to_pos loc1 loc2, A.Const const)
     
 and aux_not_bin_expression (e : expression_not_binary) = 
   match e with 
@@ -338,10 +485,25 @@ and aux_not_bin_expression (e : expression_not_binary) =
       (pos, A.Cast (cast_type, e))
   | `Poin_exp expr -> aux_pointer_expression expr
   | `Field_exp expr -> aux_field_expression expr
-  | _ -> (
+  | `Sizeof_exp ((loc1,_), arg) ->
+      let sizeof_id = (loc_to_pos loc1, A.Id "sizeof") in
+      begin
+        match arg with
+        | `Exp e ->
+            let e = aux_expression e in
+            let pos = Position.join (loc_to_pos loc1) (fst e) in
+            (pos, A.Call (sizeof_id, [e]))
+        | `LPAR_type_desc_RPAR ((_loc_lp, _), ty, (loc_rp, _)) ->
+            (* Lower sizeof(type) to sizeof((type)0) to stay in expression space. *)
+            let ty = aux_type_descriptor ty in
+            let zero = (loc_to_pos loc1, A.Const (A.CInt 0)) in
+            let cast_zero = (locs_to_pos loc1 loc_rp, A.Cast (ty, zero)) in
+            (locs_to_pos loc1 loc_rp, A.Call (sizeof_id, [cast_zero]))
+      end
+  | _ ->
     Boilerplate.map_expression_not_binary () e |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: expresion_not_binary"
-  )
+
 and aux_field_expression (field_expr: field_expression) =
   (* Do we really care if it is . or -> here? *)
   let expr, _, (loc2, field_name) = field_expr in
@@ -446,8 +608,19 @@ and aux_while_statement (while_stmt: while_statement) =
   pos,A.While (aux_paren_expr cond, b)
 
 and aux_do_statement (do_stmt: do_statement) =
-  let _,_body,_,_cond,_ = do_stmt in
-  failwith "Not supported yet: do statement"
+  (* Transform do { body } while (cond) into while(true) { body; if(!cond) break; }
+     The previous approach Seq([body, While(cond, body)]) duplicated the body, which
+     placed break statements from the first copy outside any loop, causing orphan
+     Ret(BLoop) nodes during the MLsem control-flow transformation. *)
+  let (loc_do, _), body, _, cond, (loc_semi, _) = do_stmt in
+  let pos = locs_to_pos loc_do loc_semi in
+  let body_ast = aux_statement body in
+  let cond_ast = aux_paren_expr cond in
+  let true_cond = (Mlsem.Common.Position.dummy, A.Const (A.CBool true)) in
+  let break_stmt = (Mlsem.Common.Position.dummy, A.Break) in
+  let cond_check = (Mlsem.Common.Position.dummy, A.If (cond_ast, (Mlsem.Common.Position.dummy, A.Const A.CNull), Some break_stmt)) in
+  let loop_body = (pos, A.Seq [body_ast; cond_check]) in
+  (pos, A.While (true_cond, loop_body))
 
 and aux_compound_stmt (stmt: compound_statement) = 
   let (l1,_),block_items,(l2,_) = stmt in
@@ -521,58 +694,166 @@ and aux_statement (stmt: statement) =
  match stmt with 
  | `Case_stmt st -> aux_case_statement st
  | `Choice_attr_stmt st -> aux_non_case_statement st
-and aux_initializer_list (init_list: initializer_list) =
- let (l1,_), initializers, _, (l2,_) = init_list in 
- let pos = locs_to_pos l1 l2 in
- let process_init (init : anon_choice_init_pair_1a6981e) =
-   match init with
-   | `Exp e -> (let res = aux_expression e in
-       match snd res with 
-      | A.Const c -> c 
-      | _ -> failwith "Not supported yet: initializer lists with non-constant expressions")
-   | _ -> failwith "Not supported yet: initializer lists with nested initializer lists or pairs"
- in
- let vals = match initializers with 
-  | None -> []
-  | Some (init1,inits) ->
-    (process_init init1) :: List.map (fun (_, init) -> process_init init) inits
+
+and aux_initializer_list_plan (init_list: initializer_list) =
+  let rec const_of_expr e =
+    match snd (aux_expression e) with
+    | A.Const c -> Some c
+    | _ -> None
+  and const_of_pair (pair : initializer_pair) =
+    match pair with
+    | `Rep1_choice_subs_desi_EQ_choice_exp (_, _, _)
+    | `Id_COLON_choice_exp (_, _, _) -> None
+  and const_of_initializer (init : anon_choice_init_pair_1a6981e) =
+    match init with
+    | `Exp e -> const_of_expr e
+    | `Init_list nested -> const_of_initializer_list nested
+    | `Init_pair pair -> const_of_pair pair
+  and const_of_initializer_list ((_, initializers, _, _) : initializer_list) =
+    match initializers with
+    | None -> Some (A.CArray [])
+    | Some (init1, inits) ->
+        let rec gather acc = function
+          | [] -> Some (A.CArray (List.rev acc))
+          | init :: tl ->
+              begin
+                match const_of_initializer init with
+                | Some c -> gather (c :: acc) tl
+                | None -> None
+              end
+        in
+        gather [] (init1 :: List.map snd inits)
   in
- (pos, A.Const (A.CArray vals)) 
+  match const_of_initializer_list init_list with
+  | Some c -> InitConst c
+  | None ->
+      let rec rhs_to_dynamic base_path (init : anon_choice_exp_3078596) =
+        match init with
+        | `Exp e -> [ (base_path, aux_expression e) ]
+        | `Init_list nested -> dynamic_of_initializer_list base_path nested
+      and path_with_designator path d =
+        match d with
+        | `Subs_desi (_, idx, _) -> path @ [InitIndex (aux_expression idx)]
+        | `Field_desi (_, (_, field_name)) -> path @ [InitField field_name]
+        | `Subs_range_desi _ -> failwith "Not supported yet: subscript range designators"
+      and item_to_dynamic base_path seq_index (init : anon_choice_init_pair_1a6981e) =
+        let default_path = base_path @ [InitIndex (Position.dummy, A.Const (A.CInt seq_index))] in
+        match init with
+        | `Exp e -> [ (default_path, aux_expression e) ]
+        | `Init_list nested -> dynamic_of_initializer_list default_path nested
+        | `Init_pair pair ->
+            begin
+              match pair with
+              | `Rep1_choice_subs_desi_EQ_choice_exp (designators, _, rhs) ->
+                  let path = List.fold_left path_with_designator base_path designators in
+                  rhs_to_dynamic path rhs
+              | `Id_COLON_choice_exp ((_, field_name), _, rhs) ->
+                  rhs_to_dynamic (base_path @ [InitField field_name]) rhs
+            end
+      and dynamic_of_initializer_list base_path ((_, initializers, _, _) : initializer_list) =
+        match initializers with
+        | None -> []
+        | Some (init1, inits) ->
+            let all_inits = init1 :: List.map snd inits in
+            let rec aux idx acc = function
+              | [] -> List.rev acc
+              | init :: tl ->
+                  let leaves = item_to_dynamic base_path idx init in
+                  aux (idx + 1) (List.rev_append leaves acc) tl
+            in
+            aux 0 [] all_inits
+      in
+      InitDynamic (dynamic_of_initializer_list [] init_list)
+
+and aux_initializer_list (init_list: initializer_list) =
+  let plan = aux_initializer_list_plan init_list in
+  let ((l1, _), _, _, (l2, _)) = init_list in
+  let pos = locs_to_pos l1 l2 in
+  match plan with
+  | InitConst c -> (pos, A.Const c)
+  | InitDynamic _ ->
+      failwith "Internal error: dynamic initializer list cannot be converted to a single expression"
+
 and aux_declaration typ (decl: anon_choice_opt_ms_call_modi_decl_decl_opt_gnu_asm_exp_2fa2f9e) =
   match decl with 
   |`Init_decl (declr, _, init) -> 
       let level,name = aux_decl_name declr in
       let name = A.Id name in
       let typ = Ast.build_ptr level typ in
-      let e = match init with 
-        | `Exp expr -> aux_expression expr
-        | `Init_list init_list -> aux_initializer_list init_list
-      in
       let var_decl = (Mlsem.Common.Position.dummy, A.VarDeclare (typ, (Mlsem.Common.Position.dummy, name))) in
-      let var_assign = (Mlsem.Common.Position.dummy, A.VarAssign ((Mlsem.Common.Position.dummy, name), e)) in
-      (Mlsem.Common.Position.dummy, A.Seq [var_decl; var_assign])
+      let rec lhs_from_steps base (steps : init_step list) =
+        match steps with
+        | [] -> base
+        | InitIndex idx :: tl ->
+            let lhs = (Position.dummy, A.Call ((Position.dummy, A.Id "[]"), [base; idx])) in
+            lhs_from_steps lhs tl
+        | InitField field :: tl ->
+            let lhs = (Position.dummy, A.FieldAccess (base, field)) in
+            lhs_from_steps lhs tl
+      in
+      begin
+        match init with
+        | `Exp expr ->
+            let e = aux_expression expr in
+            let var_assign = (Mlsem.Common.Position.dummy, A.VarAssign ((Mlsem.Common.Position.dummy, name), e)) in
+            (Mlsem.Common.Position.dummy, A.Seq [var_decl; var_assign])
+        | `Init_list init_list ->
+            begin
+              match aux_initializer_list_plan init_list with
+              | InitConst c ->
+                  let e = (Position.dummy, A.Const c) in
+                  let var_assign = (Mlsem.Common.Position.dummy, A.VarAssign ((Mlsem.Common.Position.dummy, name), e)) in
+                  (Mlsem.Common.Position.dummy, A.Seq [var_decl; var_assign])
+              | InitDynamic entries ->
+                  let base = (Position.dummy, name) in
+                  let element_ty =
+                    match typ with
+                    | Ast.Ptr elem_ty -> elem_ty
+                    | _ -> Ast.Any
+                  in
+                  let placeholder = placeholder_const_of_ctype element_ty in
+                  let init_len = top_level_initializer_count init_list in
+                  let bootstrap_vals = List.init init_len (fun _ -> placeholder) in
+                  let init_empty =
+                    (Position.dummy,
+                     A.VarAssign (base, (Position.dummy, A.Const (A.CArray bootstrap_vals))))
+                  in
+                  let assigns =
+                    List.map
+                      (fun (steps, rhs) ->
+                        let lhs = lhs_from_steps base steps in
+                        (Position.dummy, A.VarAssign (lhs, rhs)))
+                      entries
+                  in
+                  (Mlsem.Common.Position.dummy, A.Seq (var_decl :: init_empty :: assigns))
+            end
+      end
   | `Opt_ms_call_modi_decl_decl_opt_gnu_asm_exp (_, declr, _) -> 
-      let name = aux_decl2_name declr in
+      let (level, name) = aux_decl2_name declr in
+      let typ = Ast.build_ptr level typ in
       (Mlsem.Common.Position.dummy, A.VarDeclare (typ, (Mlsem.Common.Position.dummy, A.Id name)))
 and aux_declarations ((decl_type, decl1, decls, _loc2): declaration) =
   let typ = aux_decl_spec decl_type in
   (Mlsem.Common.Position.dummy, A.Seq ((aux_declaration typ decl1) :: (List.map (fun (_, d) -> aux_declaration typ d) decls)))
 and aux_decl2_name (decl: declaration_declarator) = 
   match decl  with
-  | `Id tok -> token_to_string tok
-  | _ -> failwith "Not supported yet: complex declaration names"
+  | `Id tok -> (0, token_to_string tok)
+  | `Poin_decl (_,_,_,_,decl) -> let (level, name) = aux_decl_name decl in (level + 1, name)
+  | `Array_decl (decl,_,_,_,_) -> let (level, name) = aux_decl_name decl in (level + 1, name)
+  | _ -> 
+    Boilerplate.map_declaration_declarator () decl |> Tree_sitter_run.Raw_tree.to_channel stderr ;
+    failwith "Not supported yet: complex declaration names"
 and aux_block_item (item : block_item) =
   match item with
   | `Stmt stmt -> aux_statement stmt
   | `Decl decls -> aux_declarations decls
   | `Attr_stmt _attr_stmt -> failwith "Not supported yet: attribute statements"
-  | `Type_defi _ -> (Mlsem.Common.Position.dummy, Return None) (* Type definitions don't produce values *)
-  | `Empty_decl _ -> (Mlsem.Common.Position.dummy, Return None)
+  | `Type_defi _ -> (Mlsem.Common.Position.dummy, Const CNull) (* Type definitions don't produce values *)
+  | `Empty_decl _ -> (Mlsem.Common.Position.dummy, Const CNull)
 
-  | `Prep_if _ | `Prep_ifdef _ | `Prep_incl _ | `Prep_def _ 
-  | `Prep_func_def _ | `Prep_call _ -> 
-      (Mlsem.Common.Position.dummy, Return None) (*TODO: Handle preprocessor! *)
-      (* TODO: same as a function definition out of function*)
+  | `Prep_if _ | `Prep_ifdef _ | `Prep_incl _ | `Prep_def _
+  | `Prep_func_def _ | `Prep_call _ ->
+      (Mlsem.Common.Position.dummy, Const CNull) (*TODO: Handle preprocessor! *)
   | `Func_defi _ -> failwith "Function definitions inside a block not supported"
   | _ -> failwith "Not supported yet: old function defi or link spec"
 
@@ -643,6 +924,61 @@ and aux_prep_func_def (func_def: preproc_function_def) =
   in
   (locs_to_pos loc1 loc2, A.Fundef (Ast.Any, name, params, body))
 
+let aux_preproc_define (prepoc : preproc_def) : A.top_level_unit option =
+  let ((loc1, _), name_tok, value_opt, _nl) = prepoc in
+  let name = token_to_string name_tok in
+  let rec strip_outer_parens s =
+    let s = String.trim s in
+    let len = String.length s in
+    if len >= 2 && s.[0] = '(' && s.[len - 1] = ')' then
+      strip_outer_parens (String.sub s 1 (len - 2))
+    else s
+  in
+  let parse_char_literal s =
+    let len = String.length s in
+    if len = 3 && s.[0] = '\'' && s.[2] = '\'' then Some (A.CChar s.[1])
+    else None
+  in
+  let parse_define_value s =
+    let s = strip_outer_parens s in
+    let len = String.length s in
+    if len = 0 then None
+    else
+      match s with
+      | "NULL" | "nullptr" -> Some A.CNull
+      | "true" | "TRUE" -> Some (A.CBool true)
+      | "false" | "FALSE" -> Some (A.CBool false)
+      | _ when len >= 2 && s.[0] = '"' && s.[len - 1] = '"' ->
+          Some (A.CStr (String.sub s 1 (len - 2)))
+      | _ ->
+          begin
+            match parse_char_literal s with
+            | Some c -> Some c
+            | None ->
+                (match aux_num_lit s with
+                | A.Const c -> Some c
+                | _ -> None)
+          end
+  in
+  match value_opt with
+  | None -> None
+  | Some (_, raw_value) ->
+      let raw_value = String.trim raw_value in
+      begin
+        try
+          match parse_define_value raw_value with
+          | Some c -> Some (loc_to_pos loc1, A.Define (name, c))
+          | None ->
+              if !warn_unsupported then
+                Printf.printf "Not supported yet: #define %s with empty/invalid value\n" name;
+              None
+        with Failure _ ->
+          if !warn_unsupported then
+            Printf.printf "Not supported yet: #define %s with non-literal value `%s`\n" name raw_value;
+          None
+      end
+
+
 let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
   match item with
   | `Func_defi (_, decl_spec, _, decl, body) -> (
@@ -655,6 +991,10 @@ let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
      Some (Mlsem.Common.Position.dummy, Fundef (return_type, name, params, body))
      ) 
   | `Prep_func_def func_def -> Some (aux_prep_func_def func_def)
+  | `Prep_def prepoc_def -> aux_preproc_define prepoc_def
+  | `Empty_decl (type_spec, _tok) ->
+   let s = aux_type_spec type_spec in
+    Some( Mlsem.Common.Position.dummy, Struct s)
   | _ ->
       if !warn_unsupported then begin
         Printf.printf "Not supported yet: top level item\n";
@@ -671,3 +1011,31 @@ let to_ast (res: (CST.translation_unit, CST.extra) Tree_sitter_run.Parsing_resul
   | None -> [] 
   | Some translation_unit ->
     aux_translation_unit translation_unit
+
+let%test "aux_num_lit parses integer long suffix" =
+  aux_num_lit "1L" = A.Const (A.CInt 1)
+
+let%test "aux_num_lit parses hexadecimal integer" =
+  aux_num_lit "0x2a" = A.Const (A.CInt 42)
+
+let%test "aux_num_lit parses hexadecimal integer with suffixes" =
+  aux_num_lit "0x2aUL" = A.Const (A.CInt 42)
+
+let%test "aux_num_lit parses c-style octal" =
+  aux_num_lit "077" = A.Const (A.CInt 63)
+
+let%test "aux_num_lit parses float suffix" =
+  match aux_num_lit "3.5f" with
+  | A.Const (A.CFloat f) -> Float.abs (f -. 3.5) < 1e-12
+  | _ -> false
+
+let%test "aux_num_lit parses hexadecimal float" =
+  match aux_num_lit "0x1.fp3" with
+  | A.Const (A.CFloat f) -> Float.abs (f -. 15.5) < 1e-12
+  | _ -> false
+
+let%test "preproc define with literal creates PAst.Define" =
+  let res = parse_string "#define ONE 1L\nint f() { return ONE; }" in
+  match to_ast res with
+  | (_, A.Define ("ONE", A.CInt 1)) :: _ -> true
+  | _ -> false
