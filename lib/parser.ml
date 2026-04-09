@@ -902,27 +902,32 @@ and aux_prep_func_def (func_def: preproc_function_def) =
   ) params |> 
     List.map (fun p -> (Ast.Any, p)) 
   in
-  let body = match body with 
-    | None -> (locs_to_pos end_param loc2, A.Return None)
-    | Some (_loc3,comp) -> 
-      let res = parse_string comp in
-      match res.program with
-      | None -> failwith ("Failed to parse preprocessor function body for " ^ name)
-      | Some tu -> 
-        Printf.printf "List length: %d\n" (List.length tu);
-        let items = List.filter_map (fun item -> 
-          match item with 
-          | `Top_level_stmt stmt -> Some (aux_top_level_statement stmt)
-          | _ ->
-              if !warn_unsupported then begin
-                Printf.printf "Not supported yet: top level item in define";
-                print_top_level_item item
-              end;
-              None
-        ) tu in 
-        List.hd items
-  in
-  (locs_to_pos loc1 loc2, A.Fundef (Ast.Any, name, params, body))
+  try
+    let body = match body with 
+      | None -> (locs_to_pos end_param loc2, A.Return None)
+      | Some (_loc3,comp) -> 
+        let res = parse_string comp in
+        match res.program with
+        | None -> failwith ("Failed to parse preprocessor function body for " ^ name)
+        | Some tu -> 
+          Printf.printf "List length: %d\n" (List.length tu);
+          let items = List.filter_map (fun item -> 
+            match item with 
+            | `Top_level_stmt stmt -> Some (aux_top_level_statement stmt)
+            | _ ->
+                if !warn_unsupported then begin
+                  Printf.printf "Not supported yet: top level item in define";
+                  print_top_level_item item
+                end;
+                None
+          ) tu in 
+          List.hd items
+    in
+    Some(locs_to_pos loc1 loc2, A.Fundef (Ast.Any, name, params, body))
+  with Failure msg ->
+    if !warn_unsupported then
+      Printf.printf "Not supported yet: failed to parse preprocessor function body for %s: %s\n" name msg;
+    None
 
 let aux_preproc_define (prepoc : preproc_def) : A.top_level_unit option =
   let ((loc1, _), name_tok, value_opt, _nl) = prepoc in
@@ -990,7 +995,7 @@ let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
      let body = aux_body body in 
      Some (Mlsem.Common.Position.dummy, Fundef (return_type, name, params, body))
      ) 
-  | `Prep_func_def func_def -> Some (aux_prep_func_def func_def)
+  | `Prep_func_def func_def -> aux_prep_func_def func_def
   | `Prep_def prepoc_def -> aux_preproc_define prepoc_def
   | `Empty_decl (type_spec, _tok) ->
    let s = aux_type_spec type_spec in
