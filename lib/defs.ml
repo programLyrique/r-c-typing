@@ -12,22 +12,23 @@ let any_sexp =
 let any_c = Ty.disj [Cint.any; Cenums.char; Cenums.double; Cptr.any]
 
 let exprsxp = Rstt.Builder.(
-  build TIdMap.empty (TList ([], [], TOption (TCup (TLang, TSym))))
+  build TIdMap.empty (TList {pos=[] ; named=[] ; sym=[] ; tl=TOption (TCup (TLang, TSym))})
 )
 
 (* Special type constructors for lists*)
 let allocVector_vecsxp_ty n =
   let open Rstt.Builder in 
-  let builder = TList (List.init n (fun _ -> TAny), [], TOption TEmpty) in
+  let builder = TList ({ pos = List.init n (fun _ -> TAny) ; named = [] ; sym = [] ; tl = TOption TEmpty }) in
   build TIdMap.empty builder
 
 let mkNamed_vecsxp_ty names = 
   let open Rstt.Builder in 
   let builder =
     TList
-      ( [],
-        List.map (fun name -> (name, TAny)) names,
-        TOption TEmpty )
+      {pos = [];
+        named = List.map (fun name -> (name, TAny)) names;
+        sym = [];
+        tl = TOption TEmpty }
   in 
   build TIdMap.empty builder
 
@@ -38,8 +39,8 @@ let set_vector_elt_ty name =
   (* t({;`r}, 'a) -> {name: 'a; `r} ; actually, maybe 'a & any_sexp for the 1st argument... *)
   let builder =
     TArrow
-      ( TTuple [TList ([], [], TRowVar r'); TVar a],
-        TList ([], [ (name, TVar a) ], TRowVar r') )
+      ( TTuple [TList {pos = []; named = []; sym = []; tl = TRowVar r'}; TVar a],
+        TList ({pos = []; named = [(name, TVar a)]; sym = []; tl = TRowVar r'}) )
   in
   build TIdMap.empty builder
 
