@@ -1,0 +1,7 @@
+_build
+_coverage
+.git
+.github
+*.md
+setup-env.sh
+mlsem_recording.json
