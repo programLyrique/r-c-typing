@@ -34,16 +34,18 @@ RUN eval $(opam env) && \
 #   • --mount=type=secret means it is never written to any image layer.
 #   • We immediately overwrite the remote URL so the PAT is not stored in
 #     .git/config inside the builder layer either.
-RUN --mount=type=secret,id=pat \
+RUN --mount=type=secret,id=pat,mode=0444 \
     PAT=$(cat /run/secrets/pat) && \
     git clone "https://${PAT}@github.com/E-Sh4rk/r-parser.git" r-parser && \
     git -C r-parser remote set-url origin https://github.com/E-Sh4rk/r-parser.git && \
     cd r-parser && \
     sed -i 's|git@github.com:|https://github.com/|' .gitmodules && \
-    eval $(opam env) && \
-    make update && make setup && make && \
+    git submodule sync && \
+    export CARGO_TARGET_DIR="$PWD/core/downloads/tree-sitter/target" && \
+    opam exec -- bash -c "make update && make setup" && \
+    opam exec -- bash -c "make" && \
     cd core && \
-    opam pin add tree-sitter . --kind=path --yes
+    opam exec -- bash -c "opam pin add tree-sitter . --kind=path --yes"
 
 ENV TREESITTER_INCDIR="/home/opam/r-parser/core/tree-sitter/include"
 ENV TREESITTER_LIBDIR="/home/opam/r-parser/core/tree-sitter/lib"
