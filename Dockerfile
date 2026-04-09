@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     build-essential curl bc git \
     libgmp-dev pkg-config \
     libssl-dev \
+    nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 USER opam
