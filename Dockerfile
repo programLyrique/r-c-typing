@@ -59,6 +59,8 @@ COPY --chown=opam:opam . /home/opam/r-c-typing/
 WORKDIR /home/opam/r-c-typing
 RUN eval $(opam env) && \
     opam install . --deps-only --yes && \
+    echo "=== Installed opam packages ===" && opam list | grep tree-sitter && \
+    echo "=== ocamlfind libraries ===" && ocamlfind list | grep tree-sitter && \
     dune build
 
 # ─── Stage 2: Runtime ────────────────────────────────────────────────────────
