@@ -29,7 +29,10 @@ RUN eval $(opam env) && \
     for pkg in mlsem-types mlsem-common mlsem-system mlsem-lang \
                mlsem mlsem-app mlsem-bin; do \
       opam pin add "$pkg" "git+https://github.com/E-Sh4rk/MLsem.git" --yes; \
-    done
+    done && \
+    opam pin add rstt      "git+https://github.com/E-Sh4rk/rstt.git" --yes && \
+    opam pin add rstt-repl "git+https://github.com/E-Sh4rk/rstt.git" --yes && \
+    opam pin add rstt-bin  "git+https://github.com/E-Sh4rk/rstt.git" --yes
 
 # r-parser is private. The PAT is injected via a BuildKit secret:
 #   • --mount=type=secret means it is never written to any image layer.
