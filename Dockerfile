@@ -5,6 +5,8 @@ FROM ocaml/opam:ubuntu-22.04-ocaml-5.3 AS builder
 USER root
 RUN apt-get update && apt-get install -y \
     build-essential curl bc git \
+    libgmp-dev pkg-config \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 USER opam
