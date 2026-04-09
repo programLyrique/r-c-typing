@@ -890,6 +890,22 @@ and aux_if_statement (if_stmt: if_statement) =
 
   (Position.lex_join (conv_pos l1.start) l2,A.If (ast_cond, ast_then, ast_else)) 
 
+let rec body_has_trailing_return ((_, expr) : A.e) =
+  match expr with
+  | A.Return _ -> true
+  | A.Seq [] -> false
+  | A.Seq exprs -> body_has_trailing_return (List.hd (List.rev exprs))
+  | _ -> false
+
+let ensure_void_return body =
+  if body_has_trailing_return body then body
+  else
+    let pos, expr = body in
+    let trailing_return = (pos, A.Return None) in
+    match expr with
+    | A.Seq exprs -> (pos, A.Seq (exprs @ [trailing_return]))
+    | _ -> (pos, A.Seq [body; trailing_return])
+
 and aux_prep_func_def (func_def: preproc_function_def) = 
   let ((loc1, _), name, params, body, (loc2,_)) = func_def in
   let name = token_to_string name in
@@ -994,7 +1010,12 @@ let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
      let level, params = aux_params decl in
      let return_type = Ast.build_ptr level (aux_decl_spec decl_spec) in 
 
-     let body = aux_body body in 
+      let body = aux_body body in
+      let body =
+       match return_type with
+       | Ast.Void -> ensure_void_return body
+       | _ -> body
+      in
      Some (Mlsem.Common.Position.dummy, Fundef (return_type, name, params, body))
      ) 
   | `Prep_func_def func_def -> aux_prep_func_def func_def
@@ -1045,4 +1066,16 @@ let%test "preproc define with literal creates PAst.Define" =
   let res = parse_string "#define ONE 1L\nint f() { return ONE; }" in
   match to_ast res with
   | (_, A.Define ("ONE", A.CInt 1)) :: _ -> true
+  | _ -> false
+
+let%test "void function gets trailing return on fallthrough" =
+  let res = parse_string "void f() { 1; }" in
+  match to_ast res with
+  | [(_, A.Fundef (Ast.Void, "f", [], (_, A.Seq [(_, A.Const (A.CInt 1)); (_, A.Return None)])))] -> true
+  | _ -> false
+
+let%test "void function does not duplicate explicit return" =
+  let res = parse_string "void f() { return; }" in
+  match to_ast res with
+  | [(_, A.Fundef (Ast.Void, "f", [], (_, A.Return None)))] -> true
   | _ -> false
