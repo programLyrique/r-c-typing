@@ -4,10 +4,25 @@ open CST
 module A = PAst
 open Mlsem.Common
 
+module StrSet = Set.Make(String)
+
 let warn_unsupported = ref true
 
 let set_warn_unsupported value =
   warn_unsupported := value
+
+let default_predefined_defines =
+  match Sys.os_type with
+  | "Win32" ->
+      StrSet.of_list ["_WIN32"; "WIN32"; "__WIN32"; "__WINDOWS__"]
+  | _ ->
+      StrSet.of_list
+        ["__linux__"; "__linux"; "linux"; "__gnu_linux__"; "__unix__"; "__unix"; "unix"]
+
+let predefined_defines = ref default_predefined_defines
+
+let set_predefined_defines defines =
+  predefined_defines := StrSet.of_list defines
 
 let print_res (res: (CST.translation_unit, CST.extra) Tree_sitter_run.Parsing_result.t) = 
   Printf.printf "Errors: %d. Lines with errors: %d / %d\n" res.stat.error_count
@@ -1001,38 +1016,123 @@ let aux_preproc_define (prepoc : preproc_def) : A.top_level_unit option =
           None
       end
 
+let preproc_define_name ((_, name_tok, _, _) : preproc_def) =
+  token_to_string name_tok
 
-let aux_top_level_item (item : top_level_item) : A.top_level_unit option =
+let preproc_ifdef_is_ifndef = function
+  | `Pat_25b90ba _ -> false
+  | `Pat_9d92f6a _ -> true
+
+let preproc_elifdef_is_ifndef = function
+  | `Pat_0307ca2 _ -> false
+  | `Pat_a6d4183 _ -> true
+
+let fold_top_level_items aux_item defines items =
+  let defines, rev_items =
+    List.fold_left
+      (fun (defines, rev_items) item ->
+        let defines, current = aux_item defines item in
+        (defines, List.rev_append (List.rev current) rev_items))
+      (defines, []) items
+  in
+  (defines, List.rev rev_items)
+
+let rec aux_top_level_items defines items =
+  fold_top_level_items aux_top_level_item defines items
+
+and aux_top_level_block_items defines items =
+  fold_top_level_items aux_top_level_block_item defines items
+
+and aux_top_level_else_branch defines else_branch =
+  match else_branch with
+  | `Prep_else (_else_tok, body) -> aux_top_level_block_items defines body
+  | `Prep_elif_5b2d46e _ ->
+      if !warn_unsupported then
+        Printf.printf "Not supported yet: top level #elif with expression\n";
+      (defines, [])
+  | `Prep_elif_b56056c (directive, name_tok, body, else_opt) ->
+      let name = token_to_string name_tok in
+      let is_defined = StrSet.mem name defines in
+      let take_body =
+        if preproc_elifdef_is_ifndef directive then not is_defined else is_defined
+      in
+      if take_body then aux_top_level_block_items defines body
+      else (
+        match else_opt with
+        | None -> (defines, [])
+        | Some else_branch -> aux_top_level_else_branch defines else_branch)
+
+and aux_top_level_item defines (item : top_level_item) =
   match item with
-  | `Func_defi (_, decl_spec, _, decl, body) -> (
-     let _,name = aux_decl_name decl in 
-     (* the part with the parameters can also carry the information about pointers for the return type! *)
-     let level, params = aux_params decl in
-     let return_type = Ast.build_ptr level (aux_decl_spec decl_spec) in 
-
+  | `Func_defi (_, decl_spec, _, decl, body) ->
+      let _,name = aux_decl_name decl in
+      (* the part with the parameters can also carry the information about pointers for the return type! *)
+      let level, params = aux_params decl in
+      let return_type = Ast.build_ptr level (aux_decl_spec decl_spec) in
       let body = aux_body body in
       let body =
-       match return_type with
-       | Ast.Void -> ensure_void_return body
-       | _ -> body
+        match return_type with
+        | Ast.Void -> ensure_void_return body
+        | _ -> body
       in
-     Some (Mlsem.Common.Position.dummy, Fundef (return_type, name, params, body))
-     ) 
-  | `Prep_func_def func_def -> aux_prep_func_def func_def
-  | `Prep_def prepoc_def -> aux_preproc_define prepoc_def
+      (defines, [Mlsem.Common.Position.dummy, A.Fundef (return_type, name, params, body)])
+  | `Prep_ifdef (directive, name_tok, body, else_opt, _endif_tok) ->
+      let name = token_to_string name_tok in
+      let is_defined = StrSet.mem name defines in
+      let take_body =
+        if preproc_ifdef_is_ifndef directive then not is_defined else is_defined
+      in
+      if take_body then aux_top_level_block_items defines body
+      else (
+        match else_opt with
+        | None -> (defines, [])
+        | Some else_branch -> aux_top_level_else_branch defines else_branch)
+  | `Prep_def prepoc_def ->
+      let defines = StrSet.add (preproc_define_name prepoc_def) defines in
+      (defines,
+       match aux_preproc_define prepoc_def with
+       | None -> []
+       | Some item -> [item])
+  | `Prep_func_def func_def ->
+      (defines,
+       match aux_prep_func_def func_def with
+       | None -> []
+       | Some item -> [item])
   | `Empty_decl (type_spec, _tok) ->
-   let s = aux_type_spec type_spec in
-    Some( Mlsem.Common.Position.dummy, Struct s)
+      let s = aux_type_spec type_spec in
+      (defines, [Mlsem.Common.Position.dummy, A.Struct s])
   | _ ->
       if !warn_unsupported then begin
         Printf.printf "Not supported yet: top level item\n";
         print_top_level_item item
       end;
-      None
+      (defines, [])
+
+and aux_top_level_block_item defines (item : block_item) =
+  match item with
+  | `Func_defi func_def -> aux_top_level_item defines (`Func_defi func_def)
+  | `Old_style_func_defi old_func_def -> aux_top_level_item defines (`Old_style_func_defi old_func_def)
+  | `Link_spec link_spec -> aux_top_level_item defines (`Link_spec link_spec)
+  | `Decl decl -> aux_top_level_item defines (`Decl decl)
+  | `Attr_stmt attr_stmt -> aux_top_level_item defines (`Attr_stmt attr_stmt)
+  | `Type_defi type_def -> aux_top_level_item defines (`Type_defi type_def)
+  | `Empty_decl empty_decl -> aux_top_level_item defines (`Empty_decl empty_decl)
+  | `Prep_if prep_if -> aux_top_level_item defines (`Prep_if prep_if)
+  | `Prep_ifdef prep_ifdef -> aux_top_level_item defines (`Prep_ifdef prep_ifdef)
+  | `Prep_incl prep_include -> aux_top_level_item defines (`Prep_incl prep_include)
+  | `Prep_def prep_def -> aux_top_level_item defines (`Prep_def prep_def)
+  | `Prep_func_def prep_func_def -> aux_top_level_item defines (`Prep_func_def prep_func_def)
+  | `Prep_call prep_call -> aux_top_level_item defines (`Prep_call prep_call)
+  | `Stmt _ ->
+      if !warn_unsupported then begin
+        Printf.printf "Not supported yet: statement inside top level preprocessor branch\n";
+        Boilerplate.map_block_item () item |> Tree_sitter_run.Raw_tree.to_channel stderr
+      end;
+      (defines, [])
 
 
 let aux_translation_unit tree =
-  List.filter_map aux_top_level_item tree 
+  snd (aux_top_level_items !predefined_defines tree)
 
 let to_ast (res: (CST.translation_unit, CST.extra) Tree_sitter_run.Parsing_result.t) =
   match res.program with
@@ -1066,6 +1166,42 @@ let%test "preproc define with literal creates PAst.Define" =
   let res = parse_string "#define ONE 1L\nint f() { return ONE; }" in
   match to_ast res with
   | (_, A.Define ("ONE", A.CInt 1)) :: _ -> true
+  | _ -> false
+
+let%test "valueless define still enables subsequent ifdef" =
+  let res =
+    parse_string
+      "#define FLAG\n#ifdef FLAG\nint f() { return 1; }\n#else\nint g() { return 2; }\n#endif\n"
+  in
+  match to_ast res with
+  | [(_, A.Fundef (_, "f", _, _))] -> true
+  | _ -> false
+
+let%test "ifndef keeps else branch skipped for undefined macro" =
+  let res =
+    parse_string
+      "#ifndef FLAG\nint f() { return 1; }\n#else\nint g() { return 2; }\n#endif\n"
+  in
+  match to_ast res with
+  | [(_, A.Fundef (_, "f", _, _))] -> true
+  | _ -> false
+
+let%test "elifndef branch is selected when prior branches fail" =
+  let res =
+    parse_string
+      "#ifdef FIRST\nint a() { return 1; }\n#elifndef SECOND\nint b() { return 2; }\n#else\nint c() { return 3; }\n#endif\n"
+  in
+  match to_ast res with
+  | [(_, A.Fundef (_, "b", _, _))] -> true
+  | _ -> false
+
+let%test "linux predefined macros are enabled by default" =
+  let res =
+    parse_string
+      "#ifdef __linux__\nint f() { return 1; }\n#else\nint g() { return 2; }\n#endif\n"
+  in
+  match to_ast res with
+  | [(_, A.Fundef (_, "f", _, _))] -> true
   | _ -> false
 
 let%test "void function gets trailing return on fallthrough" =

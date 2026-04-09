@@ -1,0 +1,14 @@
+Not supported yet: top level item
+Prep_incl (
+  (
+    "#include"
+    System_lib_str "<Rinternals.h>"
+    "\n"
+  )
+)
+selected_by_ifdef: ∀'a. ('a & (chr | any)) -> 'a & (chr | any)
+
+selected_by_ifndef: ∀'a. ('a & (chr | any)) -> 'a & (chr | any)
+
+selected_by_linux_define: ∀'a. ('a & (chr | any)) -> 'a & (chr | any)
+

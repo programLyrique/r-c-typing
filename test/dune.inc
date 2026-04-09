@@ -215,3 +215,14 @@
  (deps    cprogs/preproc-define.c cprogs/preproc-define.expected)
  (action  (diff cprogs/preproc-define.expected preproc-define.output)))
 
+(rule
+ (alias   runtest)
+ (deps    cprogs/preproc-ifdef.c)
+ (action  (with-stdout-to preproc-ifdef.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/preproc-ifdef.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/preproc-ifdef.c cprogs/preproc-ifdef.expected)
+ (action  (diff cprogs/preproc-ifdef.expected preproc-ifdef.output)))
+
