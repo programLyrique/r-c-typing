@@ -368,52 +368,49 @@ let map f e =
     f (pos, e)
   in aux e
 
-(** Extract function call names from an expression *)
-let rec extract_calls_from_expr (_pos, e') =
+(** Extract function call names from an expression.
+    [fun_names] is the set of known function names; bare Id references
+    matching a function name in call arguments are treated as function
+    pointer dependencies. *)
+let rec extract_calls_from_expr ?(fun_names=StrSet.empty) (_pos, e') =
+  let extract = extract_calls_from_expr ~fun_names in
+  let extract_arg (_pos, e') =
+    match e' with
+    | Id name when StrSet.mem name fun_names -> [name]
+    | _ -> extract (_pos, e')
+  in
   match e' with
   | Const _ | Id _ | Break | Next -> []
-  | Unop (_, e) -> extract_calls_from_expr e
-  | Binop (_, (e1, e2)) ->
-      extract_calls_from_expr e1 @ extract_calls_from_expr e2
-  | FieldAccess (e, _) -> extract_calls_from_expr e
-  | VarDeclare (_, e) -> extract_calls_from_expr e
-  | VarAssign (e1, e2) ->
-      extract_calls_from_expr e1 @ extract_calls_from_expr e2
+  | Unop (_, e) -> extract e
+  | Binop (_, (e1, e2)) -> extract e1 @ extract e2
+  | FieldAccess (e, _) -> extract e
+  | VarDeclare (_, e) -> extract e
+  | VarAssign (e1, e2) -> extract e1 @ extract e2
   | Call ((_, Id fname), args) ->
-      fname :: List.concat_map extract_calls_from_expr args
+      fname :: List.concat_map extract_arg args
   | Call (f, args) ->
-      extract_calls_from_expr f @ List.concat_map extract_calls_from_expr args
+      extract f @ List.concat_map extract_arg args
   | If (cond, then_, else_opt) ->
-      let acc = extract_calls_from_expr cond @ extract_calls_from_expr then_ in
+      let acc = extract cond @ extract then_ in
       (match else_opt with
        | None -> acc
-       | Some e -> acc @ extract_calls_from_expr e)
+       | Some e -> acc @ extract e)
   | Ite (cond, then_, else_) ->
-      extract_calls_from_expr cond
-      @ extract_calls_from_expr then_
-      @ extract_calls_from_expr else_
-  | While (cond, body) ->
-      extract_calls_from_expr cond @ extract_calls_from_expr body
+      extract cond @ extract then_ @ extract else_
+  | While (cond, body) -> extract cond @ extract body
   | For (init, cond_opt, incr_opt, body) ->
-      let acc = extract_calls_from_expr init in
-      let acc =
-        match cond_opt with None -> acc | Some e -> acc @ extract_calls_from_expr e
-      in
-      let acc =
-        match incr_opt with None -> acc | Some e -> acc @ extract_calls_from_expr e
-      in
-      acc @ extract_calls_from_expr body
+      let acc = extract init in
+      let acc = match cond_opt with None -> acc | Some e -> acc @ extract e in
+      let acc = match incr_opt with None -> acc | Some e -> acc @ extract e in
+      acc @ extract body
   | Return e_opt ->
-      (match e_opt with None -> [] | Some e -> extract_calls_from_expr e)
-  | Case (e1, e2) ->
-      extract_calls_from_expr e1 @ extract_calls_from_expr e2
-  | Default e -> extract_calls_from_expr e
-  | Switch (e, cases) ->
-      extract_calls_from_expr e @ List.concat_map extract_calls_from_expr cases
-  | Seq exprs -> List.concat_map extract_calls_from_expr exprs
-  | Comma (e1, e2) ->
-      extract_calls_from_expr e1 @ extract_calls_from_expr e2
-  | Cast (_, e) -> extract_calls_from_expr e
+      (match e_opt with None -> [] | Some e -> extract e)
+  | Case (e1, e2) -> extract e1 @ extract e2
+  | Default e -> extract e
+  | Switch (e, cases) -> extract e @ List.concat_map extract cases
+  | Seq exprs -> List.concat_map extract exprs
+  | Comma (e1, e2) -> extract e1 @ extract e2
+  | Cast (_, e) -> extract e
 
 (* Inline tests for extract_calls_from_expr *)
 let%test "simple function call" =
@@ -428,6 +425,23 @@ let%test "function call with arguments" =
   let mk_e e' = (pos, e') in
   let expr = mk_e (Call (mk_e (Id "bar"), [mk_e (Const (CInt 42)); mk_e (Id "x")])) in
   let calls = extract_calls_from_expr expr in
+  calls = ["bar"]
+
+let%test "function pointer passed as argument" =
+  let pos = Mlsem.Common.Position.dummy in
+  let mk_e e' = (pos, e') in
+  let fun_names = StrSet.of_list ["R_ToplevelExec"; "check_interrupt_fn"] in
+  let expr = mk_e (Call (mk_e (Id "R_ToplevelExec"),
+    [mk_e (Id "check_interrupt_fn"); mk_e (Const CNull)])) in
+  let calls = extract_calls_from_expr ~fun_names expr in
+  calls = ["R_ToplevelExec"; "check_interrupt_fn"]
+
+let%test "non-function id argument not extracted" =
+  let pos = Mlsem.Common.Position.dummy in
+  let mk_e e' = (pos, e') in
+  let fun_names = StrSet.of_list ["bar"] in
+  let expr = mk_e (Call (mk_e (Id "bar"), [mk_e (Const (CInt 42)); mk_e (Id "x")])) in
+  let calls = extract_calls_from_expr ~fun_names expr in
   calls = ["bar"]
 
 let%test "nested function calls" =

@@ -249,26 +249,38 @@ module Callgraph = struct
 end
 
 
+(** Collect all defined function names from a list of PAst definitions *)
+let collect_fun_names defs_list =
+  List.fold_left (fun acc defs ->
+    List.fold_left (fun acc (_pos, unit') ->
+      match unit' with
+      | PAst.Fundef (_, fname, _, _) -> PAst.StrSet.add fname acc
+      | _ -> acc
+    ) acc defs
+  ) PAst.StrSet.empty defs_list
+
 (** Build a call graph from a single PAst top-level unit *)
-let of_past_unit _t (_pos, unit') =
+let of_past_unit ~fun_names _t (_pos, unit') =
   match unit' with
   | PAst.Fundef (_, fname, _params, body) ->
-      let callees = PAst.extract_calls_from_expr body in
-  List.iter (fun callee -> Callgraph.add_edge _t ~caller:fname ~callee) callees
+      let callees = PAst.extract_calls_from_expr ~fun_names body in
+      List.iter (fun callee -> Callgraph.add_edge _t ~caller:fname ~callee) callees
   | PAst.Struct _ -> ()
   | PAst.Define _ -> ()
 
 (** Build a call graph from a PAst definition (list of top-level units) *)
 let of_past defs =
+  let fun_names = collect_fun_names [defs] in
   let t = Callgraph.create ~capacity:(List.length defs) () in
-  List.iter (of_past_unit t) defs;
+  List.iter (of_past_unit ~fun_names t) defs;
   t
 
 (** Build a call graph from multiple PAst definitions *)
 let of_past_list defs_list =
+  let fun_names = collect_fun_names defs_list in
   let total = List.fold_left (fun acc defs -> acc + List.length defs) 0 defs_list in
   let t = Callgraph.create ~capacity:total () in
-  List.iter (List.iter (of_past_unit t)) defs_list;
+  List.iter (List.iter (of_past_unit ~fun_names t)) defs_list;
   t
 
 let keep_reachable t entry_points =
