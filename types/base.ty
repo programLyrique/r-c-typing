@@ -29,7 +29,7 @@ SET_VECTOR_ELT: t(list, c_int, any) -> list
 
 
 ScalarReal: t(c_double | c_int) -> dbl1
-ScalarInteger: t(c_int('a)) -> v[1](int('a))
+ScalarInteger: (t(c_int('a)) -> v[1](int('a))) & (t(c_na) -> v[1](int \ ^int))
 
 // Strings 
 na_string = p(chr \ ^chr)
@@ -152,7 +152,7 @@ isFunction: (t(any -> any) -> c_true) & (t(~(any -> any)) -> c_false)
 // R API: evaluation
 R_ToplevelExec: t(any, any) -> c_bool
 R_tryEval: t(any, env, *c_int) -> any
-R_CheckUserInterrupt: () -> c_void
+R_CheckUserInterrupt: t() -> c_void
 
 // R API: pairlists
 LCONS: t(any, lang | null) -> lang

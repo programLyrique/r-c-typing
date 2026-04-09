@@ -253,9 +253,11 @@ let aux_param (p: anon_choice_param_decl_4ac2852) =
     failwith "Not supported yet: parameter declaration"
 
 let rec aux_params (decl: declarator) : int * A.param list =
-  match decl with 
-  | `Func_decl (_, (_loc1, `Opt_choice_param_decl_rep_COMMA_choice_param_decl (Some (p1, params)), _loc2), _,_) -> 
-     0,(aux_param p1) :: (List.map (fun (_, p) -> aux_param p) params)
+  match decl with
+  | `Func_decl (_, (_loc1, `Opt_choice_param_decl_rep_COMMA_choice_param_decl (Some (p1, params)), _loc2), _,_) ->
+     let all = (aux_param p1) :: (List.map (fun (_, p) -> aux_param p) params) in
+     (* In C, f(void) means no parameters — filter out void params *)
+     0, List.filter (fun (ty, _) -> ty <> Ast.Void) all
   | `Poin_decl (_,_,_,_,decl) -> let level, params = aux_params decl in (level + 1, params)
   | _ -> (0, [])
 
