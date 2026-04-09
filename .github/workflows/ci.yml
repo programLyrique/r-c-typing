@@ -81,6 +81,10 @@ jobs:
             opam pin add $pkg git+https://${PRIVATE_REPO_PAT}@github.com/E-Sh4rk/MLsem.git --yes
           done
 
+          opam pin add rstt      git+https://github.com/E-Sh4rk/rstt.git --yes
+          opam pin add rstt-repl git+https://github.com/E-Sh4rk/rstt.git --yes
+          opam pin add rstt-bin  git+https://github.com/E-Sh4rk/rstt.git --yes
+
       # FIX: Pin cmdliner to 1.0.4 to fix "Unbound value Term.info" error
       - name: Pin cmdliner version
         run: opam install cmdliner.1.0.4 --yes
