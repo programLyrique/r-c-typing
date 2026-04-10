@@ -4,6 +4,10 @@ Entry points for .Call convention:
   get_type
   reverse_strings
 
+Entry points for .C convention:
+  add_ints
+  sum_doubles
+
 .C(add_ints): (int | lgl, int | lgl, lgl | int) -> c_void
 
 .C(sum_doubles): (dbl, int | lgl, dbl) -> c_void

@@ -229,11 +229,11 @@ let run_on_package opts path idenv env =
   end;
 
   (* Infer types for  entrypoints *)
-  let call_entry_points = entry_points |> List.filter_map (fun (func_name, convention) ->
-    match convention with
-    | Package.Call -> Some func_name
-    | _ -> None
+  let entry_points_for conv = entry_points |> List.filter_map (fun (func_name, convention) ->
+    if convention = conv then Some func_name else None
   ) in
+  let call_entry_points = entry_points_for Package.Call in
+  let c_entry_points    = entry_points_for Package.C in
   (* Count entry points by calling convention *)
   let count_convention conv =
     List.length (List.filter (fun (_, c) -> c = conv) entry_points)
@@ -247,6 +247,9 @@ let run_on_package opts path idenv env =
     n_call n_c n_fortran n_external;
   Format.printf "Entry points for .Call convention:@.";
   List.iter (fun entry -> Format.printf "  %s@." entry) call_entry_points;
+  Format.printf "@.";
+  Format.printf "Entry points for .C convention:@.";
+  List.iter (fun entry -> Format.printf "  %s@." entry) c_entry_points;
   Format.printf "@.";
   run_on_files opts c_files ~entry_points idenv env
   

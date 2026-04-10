@@ -102,12 +102,12 @@ let%test "infer_dotC infers supported .C parameters from a PAst function" =
     Arrow.mk
       (Tuple.mk
          [ Ty.cup
-             (Vec.AnyLength Prim.Int.any |> Vec.mk |> Attr.mk_anyclass)
-             (Vec.AnyLength Prim.Lgl.any |> Vec.mk |> Attr.mk_anyclass);
-           Vec.AnyLength Prim.Dbl.any |> Vec.mk |> Attr.mk_anyclass;
-           Vec.AnyLength Prim.Chr.any |> Vec.mk |> Attr.mk_anyclass;
-           Vec.AnyLength Prim.Raw.any |> Vec.mk |> Attr.mk_anyclass ])
-      Null.any
+             (Vec.AnyLength (Prim.mk Prim.Int.any) |> Vec.mk |> Attr.mk_anyclass)
+             (Vec.AnyLength (Prim.mk Prim.Lgl.any) |> Vec.mk |> Attr.mk_anyclass);
+           Vec.AnyLength (Prim.mk Prim.Dbl.any) |> Vec.mk |> Attr.mk_anyclass;
+           Vec.AnyLength (Prim.mk Prim.Chr.any) |> Vec.mk |> Attr.mk_anyclass;
+           Vec.AnyLength (Prim.mk Prim.Raw.any) |> Vec.mk |> Attr.mk_anyclass ])
+      Cenums.void
   in
   Ty.equiv (infer_dotC_from_past past) expected
 
