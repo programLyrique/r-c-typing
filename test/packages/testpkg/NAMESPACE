@@ -1,0 +1,1 @@
+useDynLib(testpkg, .registration = TRUE, .fixes = "testpkg_")

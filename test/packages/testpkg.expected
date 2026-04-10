@@ -1,14 +1,14 @@
 Entry points detected: Call=3, C=2, Fortran=0, External=0
 Entry points for .Call convention:
-  testpkg_make_pair
-  testpkg_get_type
-  testpkg_reverse_strings
+  make_pair
+  get_type
+  reverse_strings
 
-.C function testpkg_add_ints: (int | lgl, int | lgl, lgl | int) -> c_void
+.C(add_ints): (int | lgl, int | lgl, lgl | int) -> c_void
 
-.C function testpkg_sum_doubles: (dbl, int | lgl, dbl) -> c_void
+.C(sum_doubles): (dbl, int | lgl, dbl) -> c_void
 
-testpkg_make_pair: (chr | any, chr | any) -> lang
+make_pair: (chr | any, chr | any) -> lang
 
-testpkg_reverse_strings: ∀'a. ((chr1) -> chr1) & ((chr[int(i('a & int & ~1))]) -> chr['a])
+reverse_strings: ∀'a. ((chr1) -> chr1) & ((chr[int(i('a & int & ~1))]) -> chr['a])
 

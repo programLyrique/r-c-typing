@@ -1,14 +1,15 @@
-(** Analyze a R package to get the list of entry points and their calling conventions. 
-We look through the R source code to find .C, .Call, .Fortran, and .External 
+(** Analyze a R package to get the list of entry points and their calling conventions.
+We look through the R source code to find .C, .Call, .Fortran, and .External
 
 .Call(PREFIX_funa_name, arg1, arg2, arg3)
 
-Just with regexes, which is quite fragile. 
-We also detect the prefix that is automatically added with:
+Just with regexes, which is quite fragile.
+We detect the native symbol prefix from the package root NAMESPACE file.
+When `.fixes = "PREFIX_"` is present, the R variables exposed for registered
+native routines are prefixed, while the underlying native symbol names remain
+unprefixed.
 
-## usethis namespace: start
-#' @useDynLib libName, .registration = TRUE, .fixes = "PREFIX_"
-## usethis namespace: end
+useDynLib(libName, .registration = TRUE, .fixes = "PREFIX_")
 
 TODO: use tree_sitter with the R grammar to extract the calls to these functions in a more robust way.
 *)
@@ -23,45 +24,29 @@ let calling_convention_to_string = function
   | External -> "External"
 
 let find_native_calls path =
-  (* Extract prefix from @useDynLib annotation *)
+  (* Extract prefix from the package root NAMESPACE file. *)
   let find_prefix () =
-    let r_dir = Filename.concat path "R" in
-    if not (Sys.file_exists r_dir && Sys.is_directory r_dir) then ""
+    let namespace_file = Filename.concat path "NAMESPACE" in
+    if not (Sys.file_exists namespace_file) then ""
     else
       try
-        let files = Sys.readdir r_dir in
-        let rec search_files idx =
-          if idx >= Array.length files then ""
-          else
-            let filename = files.(idx) in
-            let filepath = Filename.concat r_dir filename in
-            if Sys.is_directory filepath then
-              search_files (idx + 1)
-            else
-              (try
-                let lines = In_channel.with_open_text filepath In_channel.input_lines in
-                let content = String.concat "\n" lines in
-                (* Look for @useDynLib with .fixes parameter *)
-                let pattern = Str.regexp "useDynLib.*\\.fixes[ \t]*=[ \t]*\"\\([^\"]+\\)\"" in
-                try
-                  ignore (Str.search_forward pattern content 0);
-                  Str.matched_group 1 content
-                with Not_found ->
-                  search_files (idx + 1)
-              with _ ->
-                search_files (idx + 1))
-        in
-        search_files 0
+        let lines = In_channel.with_open_text namespace_file In_channel.input_lines in
+        let content = String.concat "\n" lines in
+        let pattern = Str.regexp "useDynLib.*\\.fixes[ \t]*=[ \t]*\"\\([^\"]+\\)\"" in
+        try
+          ignore (Str.search_forward pattern content 0);
+          Str.matched_group 1 content
+        with Not_found -> ""
       with _ -> ""
   in
 
-  (* Ensure function name uses the detected prefix when needed *)
-  let apply_prefix prefix func_name =
+  (* Convert prefixed R variables back to the underlying native symbol name. *)
+  let strip_prefix prefix func_name =
     if prefix = "" then func_name
     else if String.starts_with ~prefix func_name then
-      func_name
+      String.sub func_name (String.length prefix) (String.length func_name - String.length prefix)
     else
-      prefix ^ func_name
+      func_name
   in
 
   (* Find native calls in R source files *)
@@ -88,8 +73,8 @@ let find_native_calls path =
                     ignore (Str.search_forward pattern content pos);
                     let func_name = Str.matched_group 1 content in
                     let next_pos = Str.match_end () in
-                    let full_name = apply_prefix prefix func_name in
-                    find_all next_pos ((full_name, convention) :: acc)
+                    let native_name = strip_prefix prefix func_name in
+                    find_all next_pos ((native_name, convention) :: acc)
                   with Not_found -> List.rev acc
                 in
                 find_all 0 []

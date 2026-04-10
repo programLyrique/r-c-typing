@@ -90,13 +90,13 @@ let infer_def ?(simple_c_fun=false) ?(convention=None) visible_name opts (idenv,
     let ty = C_interface.infer_dotC ret_ty params |> GTy.mk |>  TyScheme.mk_mono in
     let v = MVariable.create Immut (Some name) in
     if visible then
-      Format.printf ".C function %a: @[<h>%a@]@.@." Variable.pp v TyScheme.pp_short ty;
+      Format.printf ".C(%a): @[<h>%a@]@.@." Variable.pp v TyScheme.pp_short ty;
     (StrMap.add name v idenv, Env.add v ty env, decl)
   | _, (PAst.Fundef (ret_ty, name, params, _) as e) when simple_c_fun && C_interface.is_simple_c_function e -> 
     let ty = C_interface.infer_cfun ret_ty params |> GTy.mk |>  TyScheme.mk_mono in
     let v = MVariable.create Immut (Some name) in
     if visible then
-      Format.printf "C function %a: @[<h>%a@]@.@." Variable.pp v TyScheme.pp_short ty;
+      Format.printf "c(%a): @[<h>%a@]@.@." Variable.pp v TyScheme.pp_short ty;
     (StrMap.add name v idenv, Env.add v ty env, decl)
   | _ ->
 
@@ -220,7 +220,7 @@ let run_on_package opts path idenv env =
     Printf.printf "\n"
   end;
 
-  (* Infer types for .Call entrypoints *)
+  (* Infer types for  entrypoints *)
   let call_entry_points = entry_points |> List.filter_map (fun (func_name, convention) ->
     match convention with
     | Package.Call -> Some func_name
