@@ -49,7 +49,8 @@ RUN --mount=type=secret,id=pat,mode=0444 \
     opam exec -- bash -c "make update && make setup" && \
     opam exec -- bash -c "make" && \
     cd core && \
-    opam exec -- bash -c "opam pin add tree-sitter . --kind=path --yes"
+    opam exec -- bash -c "opam pin add tree-sitter . --kind=path --yes" && \
+    opam exec -- dune install --prefix=$(opam var prefix)
 
 ENV TREESITTER_INCDIR="/home/opam/r-parser/core/tree-sitter/include"
 ENV TREESITTER_LIBDIR="/home/opam/r-parser/core/tree-sitter/lib"
@@ -59,8 +60,6 @@ COPY --chown=opam:opam . /home/opam/r-c-typing/
 WORKDIR /home/opam/r-c-typing
 RUN eval $(opam env) && \
     opam install . --deps-only --yes && \
-    echo "=== Installed opam packages ===" && opam list | grep tree-sitter && \
-    echo "=== ocamlfind libraries ===" && ocamlfind list | grep tree-sitter && \
     dune build
 
 # ─── Stage 2: Runtime ────────────────────────────────────────────────────────
