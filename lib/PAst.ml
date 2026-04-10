@@ -23,10 +23,11 @@ type const =
  [@@deriving show]
 
 
- type top_level_unit' = 
+ type top_level_unit' =
   | Fundef of Ast.ctype * string * param list * e
   | Struct of Ast.ctype (* struct name, list of fields with their types *)
   | Define of string * const
+  | Typedef of string * Ast.ctype
   [@@deriving show]
  and top_level_unit = Position.t * top_level_unit'
   [@@deriving show]
@@ -58,11 +59,12 @@ type const =
  and e = Position.t * e'
   [@@deriving show]
 
-let top_level_unit_name top = 
-  match top with 
+let top_level_unit_name top =
+  match top with
   | _, Fundef (_, name, _, _) -> name
   | _, Struct (Ast.Struct (name, _)) -> name
   | _, Define (name, _) -> name
+  | _, Typedef (name, _) -> name
   | _ -> failwith "Expected a function definition, struct declaration, or define at the top level."
 
 
@@ -130,6 +132,11 @@ type env = {
 
 let rec resolve_ctype decl ty =
   match ty with
+  | Ast.Typeref name -> (
+      match Ast.DeclMap.find_opt name decl with
+      | Some t -> resolve_ctype decl t
+      | None -> ty
+    )
   | Ast.Struct (name, []) -> (
       match Ast.DeclMap.find_opt name decl with
       | Some (Ast.Struct (_, fields)) ->
@@ -341,8 +348,9 @@ and transform env (pos, topl_unit) =
     let params = List.map (fun (ty,name) -> resolve_ctype env.decl ty, var env name) params in
     let ret_ty = resolve_ctype env.decl ret_ty in
     (env.decl, Ast.Function (name, ret_ty, params, e)) 
-  | Struct (Ast.Struct (name,_) as s) -> (Ast.DeclMap.add name s env.decl, Ast.Noop) 
+  | Struct (Ast.Struct (name,_) as s) -> (Ast.DeclMap.add name s env.decl, Ast.Noop)
   | Define (_name, _value) -> (env.decl, Ast.Noop)
+  | Typedef (name, ty) -> (Ast.DeclMap.add name ty env.decl, Ast.Noop)
   | _ -> failwith "Unexpected top-level unit. Expected a function definition, struct declaration, or define."
   in
   (eid, decl, Ast.VarMap.empty, e)

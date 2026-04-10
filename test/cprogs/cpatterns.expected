@@ -14,3 +14,5 @@ sized_decl_pattern: ((c_int) -> c_int) & ((c_int_na) -> c_int_na)
 
 mixed_pattern: (c_int_na, c_int_na) -> c_int_na
 
+sint_to_sexp: ∀'a. ((cint(cint_na | 'a & (cint_na | int))) -> v1(int \ ^int) | v1(int(i('a & int)))) & ((cint('a & int)) -> v1(int(i('a & int))))
+

@@ -37,30 +37,39 @@ let infer_cfun return_ty params =
   Arrow.mk arg_tuple ret_ty
 
 
-let dotC_typeof ct = 
-  let open Ast in 
-  let open Rstt in 
-  match  ct with 
+let dotC_typeof typedef_map ct =
+  let rec resolve ty =
+    match ty with
+    | Ast.Typeref name ->
+        (match Ast.DeclMap.find_opt name typedef_map with
+         | Some t -> resolve t
+         | None -> ty)
+    | Ast.Ptr inner -> Ast.Ptr (resolve inner)
+    | _ -> ty
+  in
+  let ct = resolve ct in
+  let open Ast in
+  let open Rstt in
+  match ct with
   (* TODO: add also Rcomplex* *)
-  | Ptr Int -> Ty.cup (Vec.AnyLength (Prim.mk Prim.Int.any) |> Vec.mk |> Attr.mk_anyclass) 
+  | Ptr Int -> Ty.cup (Vec.AnyLength (Prim.mk Prim.Int.any) |> Vec.mk |> Attr.mk_anyclass)
     (Vec.AnyLength (Prim.mk Prim.Lgl.any) |> Vec.mk |> Attr.mk_anyclass) (* We allow logical vectors as well since they can be coerced to int *)
   | Ptr Float -> Vec.AnyLength (Prim.mk Prim.Dbl.any) |> Vec.mk |> Attr.mk_anyclass
   | Ptr Ptr Char -> Vec.AnyLength (Prim.mk Prim.Chr.any) |> Vec.mk |> Attr.mk_anyclass
-  | Ptr Char -> Vec.AnyLength (Prim.mk Prim.Raw.any) |> Vec.mk |> Attr.mk_anyclass (* Actually unsigned char*  *)
+  | Ptr Char -> Vec.AnyLength (Prim.mk Prim.Raw.any) |> Vec.mk |> Attr.mk_anyclass (* Actually unsigned char* *)
   | _ -> failwith (Printf.sprintf "Unsupported type for .C interface: %s. Only init*, double*, char** and unsigned char* are supported." (Ast.show_ctype ct))
 
 
-
-let infer_dotC ret_ty params = 
-  let arg_types = List.map (fun (ty, _) -> dotC_typeof ty) params in
+let infer_dotC ?(typedef_map = Ast.DeclMap.empty) ret_ty params =
+  let arg_types = List.map (fun (ty, _) -> dotC_typeof typedef_map ty) params in
   let arg_tuple = Tuple.mk arg_types in
   if ret_ty != Ast.Void then
     failwith "Return type of .C functions must be void.";
   Arrow.mk arg_tuple Rstt.Cenums.void
 
 
-let infer_dotC_from_past = function
-  | _, Fundef (ret_ty, _, params, _) -> infer_dotC ret_ty params
+let infer_dotC_from_past ?(typedef_map = Ast.DeclMap.empty) = function
+  | _, Fundef (ret_ty, _, params, _) -> infer_dotC ~typedef_map ret_ty params
   | _ -> failwith "Expected a function definition."
 
 

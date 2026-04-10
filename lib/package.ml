@@ -101,7 +101,8 @@ let get_c_files path =
       let files = Sys.readdir src_dir in
       Array.fold_left (fun acc filename ->
         let filepath = Filename.concat src_dir filename in
-        if not (Sys.is_directory filepath) && Filename.check_suffix filename ".c" then
+        if not (Sys.is_directory filepath) &&
+           (Filename.check_suffix filename ".c" || Filename.check_suffix filename ".h") then
           filepath :: acc
         else acc
       ) [] files

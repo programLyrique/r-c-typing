@@ -144,6 +144,7 @@ let rec typeof_ctype ct =
   | Ptr ty -> Cptr.mk (typeof_ctype ty)
   | SEXP -> Defs.any_sexp
   | Any -> Ty.any
+  | Typeref _ -> Ty.any  (* unresolved typedef: fall back to any *)
   | Struct (name, fields) -> record_of_struct name fields
   | _ -> failwith ("Type not supported yet in typeof_ctype: " ^ show_ctype ct)
 and record_of_struct _name fields = 

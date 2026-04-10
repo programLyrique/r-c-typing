@@ -200,7 +200,7 @@ and aux_sized_type_spec (_sized : sized_type_specifier) : Ast.ctype =
   let aux_choice_type = function
     | `Prim_type (_loc, s) -> aux_primitive_type s
     | `Id (_loc, s) when s = "SEXP" -> Ast.SEXP
-    | `Id _ -> Ast.Any
+    | `Id (_, s) -> Ast.Typeref s
   in
   match _sized with
   | `Rep_choice_signed_opt_choice_id_rep1_choice_signed (_, Some t, _)
@@ -215,10 +215,10 @@ and aux_type_spec (type_spec : type_specifier)  =
   match type_spec with
   | `Prim_type tok -> let (_loc, s) = tok in aux_primitive_type s
   | `Id (_loc, s) when s = "SEXP" -> Ast.SEXP
-  | `Id _ -> Ast.Any
+  | `Id (_, s) -> Ast.Typeref s
   | `Struct_spec (_,_, _,struc, _) -> aux_struct struc
-  (* We don't handle enums for now, we just give them the int type *)
-  | `Enum_spec (_,`Id_opt_COLON_prim_type_opt_enum_list (_,None, None), _) -> Ast.Int
+  (* Treat all enum forms as int *)
+  | `Enum_spec _ -> Ast.Int
   | `Sized_type_spec sized -> aux_sized_type_spec sized
   | _ -> (let tree = Boilerplate.map_type_specifier () type_spec in
     Raw_tree.to_channel stderr tree ;
@@ -253,6 +253,29 @@ let rec aux_decl_name (decl : declarator) : int * string =
   | `Array_decl (decl,_,_,_,_) -> let (level, name) = aux_decl_name decl in (level + 1, name)
   | _ -> Boilerplate.map_declarator () decl |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: function name"
+
+let rec aux_type_declarator (td : type_declarator) : int * string =
+  match td with
+  | `Id tok -> (0, token_to_string tok)
+  | `Poin_type_decl (_, _, _, _, inner) ->
+      let (level, name) = aux_type_declarator inner in (level + 1, name)
+  | `Array_type_decl (inner, _, _, _, _) ->
+      let (level, name) = aux_type_declarator inner in (level + 1, name)
+  | `Paren_type_decl (_, _, inner, _) -> aux_type_declarator inner
+  | `Attr_type_decl (inner, _) -> aux_type_declarator inner
+  | `Func_type_decl _ ->
+      Printf.eprintf "Not supported yet: function pointer typedef\n"; (0, "__func_ptr__")
+  | `Choice_signed _ | `Prim_type _ ->
+      Printf.eprintf "Not supported yet: primitive in type declarator\n"; (0, "__prim__")
+
+let aux_type_definition ((_, _, type_def_ty, (first_decl, rest_decls), _, _) : type_definition) =
+  let (_, type_spec, _) = type_def_ty in
+  let base_ty = aux_type_spec type_spec in
+  let aux_one td =
+    let (ptr_level, name) = aux_type_declarator td in
+    (Mlsem.Common.Position.dummy, A.Typedef (name, Ast.build_ptr ptr_level base_ty))
+  in
+  aux_one first_decl :: List.map (fun (_, td) -> aux_one td) rest_decls
 
 let aux_param (p: anon_choice_param_decl_4ac2852) = 
   match p with 
@@ -1101,6 +1124,8 @@ and aux_top_level_item defines (item : top_level_item) =
   | `Empty_decl (type_spec, _tok) ->
       let s = aux_type_spec type_spec in
       (defines, [Mlsem.Common.Position.dummy, A.Struct s])
+  | `Type_defi type_def ->
+      (defines, aux_type_definition type_def)
   | _ ->
       if !warn_unsupported then begin
         Printf.printf "Not supported yet: top level item\n";

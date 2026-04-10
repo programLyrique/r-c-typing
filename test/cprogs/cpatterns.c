@@ -18,3 +18,9 @@ int mixed_pattern(unsigned long a, unsigned int b) {
     unsigned long tmp = a + b;
     return (int)(tmp + sizeof(tmp));
 }
+
+typedef int Sint;
+
+SEXP sint_to_sexp(Sint x) {
+    return ScalarInteger(x);
+}

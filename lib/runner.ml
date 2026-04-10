@@ -86,12 +86,19 @@ let infer_def ?(simple_c_fun=false) ?(convention=None) visible_name opts (idenv,
       if opts.debug && visible then
         Format.printf "define %a: @[<h>%a@]@.@." Variable.pp v TyScheme.pp_short ty;
       (StrMap.add name v idenv, Env.add v ty env, decl)
-  | _,PAst.Fundef (ret_ty, name, params, _) when convention=Some(Package.C) -> 
-    let ty = C_interface.infer_dotC ret_ty params |> GTy.mk |>  TyScheme.mk_mono in
-    let v = MVariable.create Immut (Some name) in
-    if visible then
-      Format.printf ".C(%a): @[<h>%a@]@.@." Variable.pp v TyScheme.pp_short ty;
-    (StrMap.add name v idenv, Env.add v ty env, decl)
+  | _, PAst.Typedef (name, ty) ->
+      (idenv, env, Ast.DeclMap.add name ty decl)
+  | _,PAst.Fundef (ret_ty, name, params, _) when convention=Some(Package.C) ->
+    (try
+      let ty = C_interface.infer_dotC ~typedef_map:decl ret_ty params |> GTy.mk |> TyScheme.mk_mono in
+      let v = MVariable.create Immut (Some name) in
+      if visible then
+        Format.printf ".C(%a): @[<h>%a@]@.@." Variable.pp v TyScheme.pp_short ty;
+      (StrMap.add name v idenv, Env.add v ty env, decl)
+    with Failure msg ->
+      if visible then
+        Format.printf "%s:@.untypeable: %s@." name msg;
+      (idenv, env, decl))
   | _, (PAst.Fundef (ret_ty, name, params, _) as e) when simple_c_fun && C_interface.is_simple_c_function e -> 
     let ty = C_interface.infer_cfun ret_ty params |> GTy.mk |>  TyScheme.mk_mono in
     let v = MVariable.create Immut (Some name) in
@@ -123,7 +130,8 @@ let run_on_file opts filename idenv env =
             (function
               | _, PAst.Fundef (_, name, _, _) -> visible_name name
               | _, PAst.Struct _ -> false
-              | _, PAst.Define _ -> false)
+              | _, PAst.Define _ -> false
+              | _, PAst.Typedef _ -> false)
             past
     in
     Printf.printf "%s\n" (PAst.show_definitions visible_past)
