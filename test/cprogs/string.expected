@@ -6,5 +6,5 @@ get_c_string_from_str: ((chr[^(int \ 0)]) -> c_string) & ((v0(clx | dbl | int | 
 
 is_blank_string: (("" | null) -> c_true) & ((^(chr \ "")) -> c_false)
 
-to_char: ∀'a,'b. (('a & (sym | vec[^(1..)])) -> chr1) & (('a & (vec0 | env | null | (any -> any) | {  ... } | lang)) -> chr \ ^chr) & (('a & (v[^(1..)]('b) | sym) | 'b & 'a & (chr | (v[^(1..)]('b) | sym))) -> chr1 | 'b) & (('a & chr) -> 'a) & (('a & (v0('b) | env | null | (any -> any) | {  ... } | lang) | 'b & 'a & (chr | (v0('b) | env | null | (any -> any) | {  ... } | lang))) -> chr \ ^chr | 'b)
+to_char: ∀'a,'b. (('a & (sym | vec[^(1..)])) -> chr1) & (('a & (env | null | {  ... } | (any -> any) | vec0 | lang)) -> chr \ ^chr) & (('a & (v[^(1..)]('b) | sym) | 'b & 'a & (chr | (v[^(1..)]('b) | sym))) -> chr1 | 'b) & (('a & chr) -> 'a) & (('a & (v0('b) | env | null | {  ... } | (any -> any) | lang) | 'b & 'a & (chr | (v0('b) | env | null | {  ... } | (any -> any) | lang))) -> chr \ ^chr | 'b)
 

@@ -58,6 +58,13 @@ type const =
  and e = Position.t * e'
   [@@deriving show]
 
+let top_level_unit_name top = 
+  match top with 
+  | _, Fundef (_, name, _, _) -> name
+  | _, Struct (Ast.Struct (name, _)) -> name
+  | _, Define (name, _) -> name
+  | _ -> failwith "Expected a function definition, struct declaration, or define at the top level."
+
 
 type definitions = top_level_unit list
 [@@deriving show]

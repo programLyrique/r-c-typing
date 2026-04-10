@@ -75,14 +75,8 @@ let infer_ast visible opts (idenv, env, decl) (ast : Ast.e) =
     idenv, env, decl
 
 (** past: the parsed AST *)
-let infer_fun_def visible_name opts (idenv, env, decl) past = 
-  let name =
-    match past with
-    | _, PAst.Fundef (_, name, _, _) -> name
-    | _, PAst.Struct (Ast.Struct (name, _)) -> name
-    | _, PAst.Define (name, _) -> name
-    | _ -> failwith "Expected a function definition, struct declaration, or define at the top level."
-  in
+let infer_def ?(simple_c_fun=false) ?(convention=None) visible_name opts (idenv, env, decl)  past = 
+  let name = PAst.top_level_unit_name past in
   let visible = visible_name name in 
 
   match past with
@@ -92,6 +86,18 @@ let infer_fun_def visible_name opts (idenv, env, decl) past =
       if opts.debug && visible then
         Format.printf "define %a: @[<h>%a@]@.@." Variable.pp v TyScheme.pp_short ty;
       (StrMap.add name v idenv, Env.add v ty env, decl)
+  | _,PAst.Fundef (ret_ty, name, params, _) when convention=Some(Package.C) -> 
+    let ty = C_interface.infer_dotC ret_ty params |> GTy.mk |>  TyScheme.mk_mono in
+    let v = MVariable.create Immut (Some name) in
+    if visible then
+      Format.printf ".C function %a: @[<h>%a@]@.@." Variable.pp v TyScheme.pp_short ty;
+    (StrMap.add name v idenv, Env.add v ty env, decl)
+  | _, (PAst.Fundef (ret_ty, name, params, _) as e) when simple_c_fun && C_interface.is_simple_c_function e -> 
+    let ty = C_interface.infer_cfun ret_ty params |> GTy.mk |>  TyScheme.mk_mono in
+    let v = MVariable.create Immut (Some name) in
+    if visible then
+      Format.printf "C function %a: @[<h>%a@]@.@." Variable.pp v TyScheme.pp_short ty;
+    (StrMap.add name v idenv, Env.add v ty env, decl)
   | _ ->
 
       let e = PAst.transform {PAst.id = idenv; decl} past in
@@ -122,7 +128,7 @@ let run_on_file opts filename idenv env =
     in
     Printf.printf "%s\n" (PAst.show_definitions visible_past)
   end;
-  let idenv, env, _ = List.fold_left (infer_fun_def visible_name opts) (idenv, env, Ast.DeclMap.empty) past in
+  let idenv, env, _ = List.fold_left (infer_def visible_name opts) (idenv, env, Ast.DeclMap.empty) past in
   (idenv, env)
 
 let run_on_files opts filenames ?entry_points idenv env =
@@ -140,7 +146,12 @@ let run_on_files opts filenames ?entry_points idenv env =
   let call_graph = Call_graph.of_past_list (List.map snd pasts) in
   let call_graph = match entry_points with
     | None -> call_graph
-    | Some entries -> Call_graph.keep_reachable call_graph entries in
+    | Some entries -> 
+      let entries = entries |> List.filter_map (fun (func_name, convention) -> 
+        match convention with 
+        | Package.Call | Package.C | Package.External -> Some func_name
+        | _ -> None) in
+      Call_graph.keep_reachable call_graph entries in
   (* Only keep the transitive closure of the entry points *)
   let filtered_pasts = List.concat_map (fun (filename, past) ->
       List.filter_map (fun item ->
@@ -158,7 +169,7 @@ let run_on_files opts filenames ?entry_points idenv env =
          (fun acc item ->
            match item with
            | _, PAst.Fundef _ -> acc
-           | _ -> infer_fun_def visible_name opts acc item)
+           | _ -> infer_def visible_name opts acc item)
          (idenv, env, Ast.DeclMap.empty)
   in
 
@@ -177,9 +188,12 @@ let run_on_files opts filenames ?entry_points idenv env =
     in
     Printf.printf "%s\n" (PAst.show_definitions visible_past)
   end;
+  let entry_points = StrMap.of_list (Option.value ~default:[] entry_points) in
   let idenv, env, _ =
     List.fold_left
-      (fun acc (_, item) -> infer_fun_def visible_name opts acc item)
+      (fun acc (_, item) -> 
+        let convention = StrMap.find_opt (PAst.top_level_unit_name item) entry_points in
+        infer_def ~convention visible_name opts acc item)
       (idenv, env, decl)
       sorted_pasts
   in
@@ -187,12 +201,12 @@ let run_on_files opts filenames ?entry_points idenv env =
 
 
 let run_on_package opts path idenv env =
-  let native_calls = Package.find_native_calls path in
+  let entry_points = Package.find_native_calls path in
   if opts.debug then begin
     Printf.printf "Native calls found in package %s:\n" path;
     List.iter (fun (func_name, convention) ->
       Printf.printf "  %s: %s\n" func_name (Package.calling_convention_to_string convention)
-    ) native_calls;
+    ) entry_points;
     Printf.printf "\n"
   end;
 
@@ -205,16 +219,16 @@ let run_on_package opts path idenv env =
     ) c_files;
     Printf.printf "\n"
   end;
-  
+
   (* Infer types for .Call entrypoints *)
-  let entry_points = native_calls |> List.filter_map (fun (func_name, convention) ->
+  let call_entry_points = entry_points |> List.filter_map (fun (func_name, convention) ->
     match convention with
     | Package.Call -> Some func_name
     | _ -> None
   ) in
   (* Count entry points by calling convention *)
   let count_convention conv =
-    List.length (List.filter (fun (_, c) -> c = conv) native_calls)
+    List.length (List.filter (fun (_, c) -> c = conv) entry_points)
   in
   let n_call = count_convention Package.Call in
   let n_c = count_convention Package.C in
@@ -224,7 +238,7 @@ let run_on_package opts path idenv env =
     "Entry points detected: Call=%d, C=%d, Fortran=%d, External=%d@."
     n_call n_c n_fortran n_external;
   Format.printf "Entry points for .Call convention:@.";
-  List.iter (fun entry -> Format.printf "  %s@." entry) entry_points;
+  List.iter (fun entry -> Format.printf "  %s@." entry) call_entry_points;
   Format.printf "@.";
   run_on_files opts c_files ~entry_points idenv env
   

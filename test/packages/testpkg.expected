@@ -4,6 +4,10 @@ Entry points for .Call convention:
   testpkg_get_type
   testpkg_reverse_strings
 
+.C function testpkg_add_ints: (int | lgl, int | lgl, lgl | int) -> c_void
+
+.C function testpkg_sum_doubles: (dbl, int | lgl, dbl) -> c_void
+
 testpkg_make_pair: (chr | any, chr | any) -> lang
 
 testpkg_reverse_strings: ∀'a. ((chr1) -> chr1) & ((chr[int(i('a & int & ~1))]) -> chr['a])
