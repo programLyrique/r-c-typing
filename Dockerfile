@@ -67,8 +67,12 @@ RUN eval $(opam env) && \
 # no git history, no PAT can reach this stage.
 FROM ubuntu:22.04
 
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Etc/UTC
+
 RUN apt-get update && apt-get install -y \
     libstdc++6 bc git \
+    r-base parallel \
     && rm -rf /var/lib/apt/lists/*
 
 # Keep the _build/default/bin/main.exe path that run_one_package.sh expects.
