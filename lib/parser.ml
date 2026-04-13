@@ -1144,14 +1144,15 @@ and aux_top_level_item defines (item : top_level_item) =
         | Ast.Struct (n, _) | Ast.Union (n, _) | Ast.Enum (n, _) -> n
         | _ ->
             if !warn_unsupported then
-              Printf.printf "Empty declaration is not a struct/union/enum; ignoring\n";
+              Printf.printf "Empty declaration is not a struct/union/enum; ignoring (ctype=%s)\n"
+                (Ast.show_ctype s);
             ""
       in
       (defines, [Mlsem.Common.Position.dummy, A.TypeDecl (name, s)])
   | `Type_defi type_def ->
       (defines, aux_type_definition type_def)
-  (* | `Prep_incl (_, `System_lib_str path, _) -> 
-      (defines, aux_system_lib_include path) *)
+  | `Prep_incl (_, `System_lib_str path, _) ->
+      (defines, aux_system_lib_include path)
   | _ ->
       if !warn_unsupported then begin
         Printf.printf "Not supported yet: top level item\n";
