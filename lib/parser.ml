@@ -290,7 +290,7 @@ let aux_type_definition ((_, _, type_def_ty, (first_decl, rest_decls), _, _) : t
   let base_ty = aux_type_spec type_spec in
   let aux_one td =
     let (ptr_level, name) = aux_type_declarator td in
-    (Mlsem.Common.Position.dummy, A.Typedef (name, Ast.build_ptr ptr_level base_ty))
+    (Mlsem.Common.Position.dummy, A.TypeDecl (name, Ast.build_ptr ptr_level base_ty))
   in
   aux_one first_decl :: List.map (fun (_, td) -> aux_one td) rest_decls
 
@@ -1140,7 +1140,14 @@ and aux_top_level_item defines (item : top_level_item) =
        | Some item -> [item])
   | `Empty_decl (type_spec, _tok) ->
       let s = aux_type_spec type_spec in
-      (defines, [Mlsem.Common.Position.dummy, A.Struct s])
+      let name = match s with
+        | Ast.Struct (n, _) | Ast.Union (n, _) | Ast.Enum (n, _) -> n
+        | _ ->
+            if !warn_unsupported then
+              Printf.printf "Empty declaration is not a struct/union/enum; ignoring\n";
+            ""
+      in
+      (defines, [Mlsem.Common.Position.dummy, A.TypeDecl (name, s)])
   | `Type_defi type_def ->
       (defines, aux_type_definition type_def)
   (* | `Prep_incl (_, `System_lib_str path, _) -> 

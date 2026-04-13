@@ -25,9 +25,13 @@ type const =
 
  type top_level_unit' =
   | Fundef of Ast.ctype * string * param list * e
-  | Struct of Ast.ctype (* struct name, list of fields with their types *)
+  | TypeDecl of string * Ast.ctype
+    (** Binds a named type in the decl map. Covers struct/union/enum
+        declarations (payload is the corresponding [Ast.Struct]/[Ast.Union]/
+        [Ast.Enum] ctype) as well as typedef aliases (payload is the aliased
+        ctype). Both flow through a single arm downstream because they behave
+        identically: add [name -> ctype] to [DeclMap]. *)
   | Define of string * const
-  | Typedef of string * Ast.ctype
   | Include of top_level_unit list (* items parsed from an included external header *)
   [@@deriving show]
  and top_level_unit = Position.t * top_level_unit'
@@ -63,12 +67,9 @@ type const =
 let top_level_unit_name top =
   match top with
   | _, Fundef (_, name, _, _) -> name
-  | _, Struct (Ast.Struct (name, _)) -> name
-  (* | _, Struct _ -> "" (*placeholder for insts*) *)
+  | _, TypeDecl (name, _) -> name
   | _, Define (name, _) -> name
-  | _, Typedef (name, _) -> name
   | _, Include _ -> ""
-  | _ -> failwith "Expected a function definition, struct declaration, or define at the top level."
 
 
 type definitions = top_level_unit list
@@ -351,11 +352,9 @@ and transform env (pos, topl_unit) =
     let params = List.map (fun (ty,name) -> resolve_ctype env.decl ty, var env name) params in
     let ret_ty = resolve_ctype env.decl ret_ty in
     (env.decl, Ast.Function (name, ret_ty, params, e)) 
-  | Struct (Ast.Struct (name,_) as s) -> (Ast.DeclMap.add name s env.decl, Ast.Noop)
+  | TypeDecl (name, ty) -> (Ast.DeclMap.add name ty env.decl, Ast.Noop)
   | Define (_name, _value) -> (env.decl, Ast.Noop)
-  | Typedef (name, ty) -> (Ast.DeclMap.add name ty env.decl, Ast.Noop)
   | Include _ -> (env.decl, Ast.Noop) (* handled by infer_def directly *)
-  | _ -> failwith "Unexpected top-level unit. Expected a function definition, struct declaration, or define."
   in
   (eid, decl, Ast.VarMap.empty, e)
 

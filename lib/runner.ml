@@ -101,7 +101,7 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
       if skip_if_defined then
         Defs.BuiltinVar.register_dynamic name (Ast.typeof_const (PAst.aux_const value));
       (StrMap.add name v idenv, Env.add v ty env, decl)
-  | _, PAst.Typedef (name, ty) ->
+  | _, PAst.TypeDecl (name, ty) ->
       (idenv, env, Ast.DeclMap.add name ty decl)
   | _,PAst.Fundef (ret_ty, name, params, _) when convention=Some(Package.C) ->
     (try
@@ -144,9 +144,8 @@ let run_on_file opts filename idenv env =
           List.filter
             (function
               | _, PAst.Fundef (_, name, _, _) -> visible_name name
-              | _, PAst.Struct _ -> false
+              | _, PAst.TypeDecl _ -> false
               | _, PAst.Define _ -> false
-              | _, PAst.Typedef _ -> false
               | _, PAst.Include _ -> false)
             past
     in
