@@ -50,12 +50,23 @@ SEXP create_named_list_set_only_one() {
     return l;
 }
 
-int nested_initializer_list() {
-    int m[2][2] = {{1, 2}, {3, 4}};
-    return m[0][0] + m[1][1];
+SEXP set_noname_list(SEXP val) {
+    SEXP l = allocVector(VECSXP, 3);
+    SET_VECTOR_ELT(l, 0, val);
+    SET_VECTOR_ELT(l, 1, val);
+    return l;
 }
 
-int non_constant_initializer_list(int x) {
-    int a[2] = {x, x + 1};
-    return a[0] + a[1];
+SEXP set_protected_noname_list(SEXP val) {
+    SEXP l = PROTECT(allocVector(VECSXP, 3));
+    SET_VECTOR_ELT(l, 0, val);
+    UNPROTECT(1);
+    return l;
+}
+
+SEXP read_in_list() {
+    SEXP l = PROTECT(allocVector(VECSXP, 2));
+    SET_VECTOR_ELT(l, 0, ScalarInteger(3));
+    return VECTOR_ELT(l, 0);
+    //return l;
 }

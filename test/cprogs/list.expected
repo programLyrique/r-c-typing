@@ -22,7 +22,8 @@ create_named_list_with_int: () -> { a: 3, b: 6 }
 
 create_named_list_set_only_one: () -> { a: 3, b: any }
 
-nested_initializer_list: () -> c_int
+set_untracked_list: (chr | any) -> {  ... }
 
-non_constant_initializer_list: (c_int_na) -> c_int_na
+set_protected_untracked_list: (chr | any) -> {  ... }
+
 

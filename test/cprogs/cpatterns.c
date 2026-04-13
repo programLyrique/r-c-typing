@@ -24,3 +24,13 @@ typedef int Sint;
 SEXP sint_to_sexp(Sint x) {
     return ScalarInteger(x);
 }
+
+int nested_initializer_list() {
+    int m[2][2] = {{1, 2}, {3, 4}};
+    return m[0][0] + m[1][1];
+}
+
+int non_constant_initializer_list(int x) {
+    int a[2] = {x, x + 1};
+    return a[0] + a[1];
+}

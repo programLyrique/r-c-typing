@@ -69,3 +69,18 @@ errno: c_int
 gettimeofday: t(any, any) -> c_int
 setpgid: t(any, any) -> c_int
 prctl: t(any, any) -> c_int
+
+// C stdlib memory management
+malloc: t(c_int) -> *any
+calloc: t(c_int, c_int) -> *any
+realloc: t(*any, c_int) -> *any
+free: t(*any) -> c_void
+
+// C stdlib time
+time: t(any) -> c_int
+
+// C stdlib limits/float constants
+INT_MAX: c_int
+INT_MIN: c_int
+DBL_MAX: c_double
+DBL_MIN: c_double

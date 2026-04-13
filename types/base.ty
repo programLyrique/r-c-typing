@@ -25,7 +25,8 @@ allocVector: (t('a & any_prim, c_true) -> v[1]('a)) & (t('a & any_prim, c_int('b
 // when the names are statically known, we can return a more precise type (handled on the OCaml side)
 mkNamed: (t('a & any_prim, *c_string) -> v('a)) & (t(list, *c_string) -> list)
 
-SET_VECTOR_ELT: t(list, c_int, any) -> list
+VECTOR_ELT: t({; 'r}, c_int) -> 'r
+SET_VECTOR_ELT: t({; 'r}, c_int, 'a) -> {; 'r | 'a}
 
 
 ScalarReal: t(c_double | c_int) -> dbl1
@@ -167,6 +168,8 @@ RAW: t(v(raw)) -> *c_int
 Rf_length: t(v[int('a)](any)) -> c_int('a)
 asReal: t(any) -> c_double
 memcpy: t(any, any, c_int) -> any
+R_alloc: t(c_int, c_int) -> *any
+R_isort: t(*c_int_na, c_int) -> c_void
 
 // C functions
 

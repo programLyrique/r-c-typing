@@ -187,6 +187,15 @@ let build_call f args =
   GTy is used for gradual types, Ty for "normal" types
 *)
 let rec aux_e (eid, _decl, vars, e) =
+  let int_const_of_expr expr =
+    match expr with
+    | (_, _, _, Const (CInt n)) -> Some n
+    | (_, _, _, Id v) ->
+        (match VarMap.find_opt v vars with
+        | Some (C (CInt n)) -> Some n
+        | _ -> None)
+    | _ -> None
+  in
   let rec aux e = 
     match e with 
     | Const c -> A.Value (typeof_const c |> GTy.mk )
@@ -200,9 +209,15 @@ let rec aux_e (eid, _decl, vars, e) =
     | FieldUpdate (e, field, value) -> 
         A.Operation (SA.RecUpd field, (Eid.unique (), A.Constructor (SA.Tuple 2, [aux_e e; aux_e value])))
     (* Some special cases for some calls*)
-    | Call ((_,_,_, Id v), [(_, _,_,Id vty); ( _ ,_,_, Const (CInt n)) ]) 
+    | Call ((_,_,_, Id v), [(_, _,_,Id vty); n_expr ]) 
       when (Variable.get_name v = Some "allocVector") && 
-           (Variable.get_name vty = Some "VECSXP") ->
+           (Variable.get_name vty = Some "VECSXP") &&
+           Option.is_some (int_const_of_expr n_expr) ->
+        let n =
+          match int_const_of_expr n_expr with
+          | Some n -> n
+          | None -> assert false
+        in
         let ty = Defs.allocVector_vecsxp_ty n in
         A.Value (GTy.mk ty)
     | Call ((_,_,_,Id v1), [(_, _,_,Id vty); ( _ ,_,_, Id v2) ]) 
@@ -218,20 +233,20 @@ let rec aux_e (eid, _decl, vars, e) =
            in
         let ty = Defs.mkNamed_vecsxp_ty names in
         A.Value (GTy.mk ty)
-    | Call ((eid,_,_,Id v1), [(_, _,_,Id v2) as id2; ( _ ,_,_, idx); value]) 
-      when (Variable.get_name v1 = Some "SET_VECTOR_ELT") ->
-        let kind = VarMap.find_opt v2 vars in 
-        let idx = match idx with 
+    (* Named lists*)
+    | Call ((eid,_,_,Id v1), [(_, _,_,Id v2) as id2; ( _ ,_,_, idx); value])
+      when (Variable.get_name v1 = Some "SET_VECTOR_ELT") &&
+           (match VarMap.find_opt v2 vars with Some (L _) -> true | _ -> false) ->
+        let idx = match idx with
           | Const (CInt n) -> n
-          | Id v -> (match VarMap.find_opt v vars with 
+          | Id v -> (match VarMap.find_opt v vars with
               | Some (C (CInt n)) -> n
-              | _ -> failwith "Expected an integer constant for the index in SET_VECTOR_ELT") 
+              | _ -> failwith "Expected an integer constant for the index in SET_VECTOR_ELT")
           | _ -> failwith "Expected an integer constant for the index in SET_VECTOR_ELT"
         in
-        let name = match kind with 
+        let name = match VarMap.find_opt v2 vars with
             | Some (L names) -> List.nth names idx
-            | Some _ -> failwith (Format.asprintf "%a should be a list" Variable.pp v2)
-            | None -> failwith (Format.asprintf "No variable %a for the 1st parameter of SET_VECTOR_ELT" Variable.pp v2)
+            | _ -> assert false (* guaranteed by the when guard *)
            in
         let f = Defs.set_vector_elt_ty name in
        build_call (eid, A.Value (GTy.mk f)) [aux_e id2; aux_e value]

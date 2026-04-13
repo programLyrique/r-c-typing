@@ -5,7 +5,6 @@ module MVariable = Mlsem.Lang.MVariable
 
 (* Add here any known type definitions, for instance, from the R C API *)
 
-
 let any_sexp =
    Ty.disj [Rstt.Prim.any ; Rstt.Env.any; Rstt.Vec.any ]
 
@@ -18,7 +17,7 @@ let exprsxp = Rstt.Builder.(
 (* Special type constructors for lists*)
 let allocVector_vecsxp_ty n =
   let open Rstt.Builder in 
-  let builder = TList ({ pos = List.init n (fun _ -> TAny) ; named = [] ; sym = [] ; tl = TOption TEmpty }) in
+  let builder = TList ({ pos = List.init n (fun _ -> TNull) ; named = [] ; sym = [] ; tl = TOption TEmpty }) in
   build TIdMap.empty builder
 
 let mkNamed_vecsxp_ty names = 
@@ -31,6 +30,7 @@ let mkNamed_vecsxp_ty names =
         tl = TOption TEmpty }
   in 
   build TIdMap.empty builder
+
 
 let set_vector_elt_ty name = 
   let open Rstt.Builder in 
