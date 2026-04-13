@@ -6,15 +6,15 @@ Prep_incl (
     "\n"
   )
 )
-create_pos_list: () -> { any, any, any }
+create_pos_list: () -> { null, null, null }
 
-create_list: () -> {  ... }
+create_list: () -> { null, null, null }
 
 create_named_list: () -> { a: any, b: any }
 
-create_list_const_prop: () -> { any, any, any, any, any, any, any }
+create_list_const_prop: () -> { null, null, null, null, null, null, null }
 
-create_list_const_prop2: () -> { any, any, any, any, any, any, any }
+create_list_const_prop2: () -> { null, null, null, null, null, null, null }
 
 create_named_list_with_elems: () -> { a: dbl1, b: dbl1 }
 
@@ -22,8 +22,9 @@ create_named_list_with_int: () -> { a: 3, b: 6 }
 
 create_named_list_set_only_one: () -> { a: 3, b: any }
 
-set_untracked_list: (chr | any) -> {  ... }
+set_noname_list: ∀'a. ('a & (chr | any)) -> {  ; null | 'a }
 
-set_protected_untracked_list: (chr | any) -> {  ... }
+set_protected_noname_list: ∀'a. ('a & (chr | any)) -> {  ; null | 'a }
 
+read_in_list: () -> 3 | null
 
