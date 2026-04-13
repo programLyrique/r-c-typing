@@ -28,6 +28,7 @@ type const =
   | Struct of Ast.ctype (* struct name, list of fields with their types *)
   | Define of string * const
   | Typedef of string * Ast.ctype
+  | Include of top_level_unit list (* items parsed from an included external header *)
   [@@deriving show]
  and top_level_unit = Position.t * top_level_unit'
   [@@deriving show]
@@ -63,8 +64,10 @@ let top_level_unit_name top =
   match top with
   | _, Fundef (_, name, _, _) -> name
   | _, Struct (Ast.Struct (name, _)) -> name
+  (* | _, Struct _ -> "" (*placeholder for insts*) *)
   | _, Define (name, _) -> name
   | _, Typedef (name, _) -> name
+  | _, Include _ -> ""
   | _ -> failwith "Expected a function definition, struct declaration, or define at the top level."
 
 
@@ -351,6 +354,7 @@ and transform env (pos, topl_unit) =
   | Struct (Ast.Struct (name,_) as s) -> (Ast.DeclMap.add name s env.decl, Ast.Noop)
   | Define (_name, _value) -> (env.decl, Ast.Noop)
   | Typedef (name, ty) -> (Ast.DeclMap.add name ty env.decl, Ast.Noop)
+  | Include _ -> (env.decl, Ast.Noop) (* handled by infer_def directly *)
   | _ -> failwith "Unexpected top-level unit. Expected a function definition, struct declaration, or define."
   in
   (eid, decl, Ast.VarMap.empty, e)

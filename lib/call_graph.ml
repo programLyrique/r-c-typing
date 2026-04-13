@@ -251,16 +251,18 @@ end
 
 (** Collect all defined function names from a list of PAst definitions *)
 let collect_fun_names defs_list =
+  let rec collect_unit acc (_pos, unit') =
+    match unit' with
+    | PAst.Fundef (_, fname, _, _) -> PAst.StrSet.add fname acc
+    | PAst.Include items -> List.fold_left collect_unit acc items
+    | _ -> acc
+  in
   List.fold_left (fun acc defs ->
-    List.fold_left (fun acc (_pos, unit') ->
-      match unit' with
-      | PAst.Fundef (_, fname, _, _) -> PAst.StrSet.add fname acc
-      | _ -> acc
-    ) acc defs
+    List.fold_left collect_unit acc defs
   ) PAst.StrSet.empty defs_list
 
 (** Build a call graph from a single PAst top-level unit *)
-let of_past_unit ~fun_names _t (_pos, unit') =
+let rec of_past_unit ~fun_names _t (_pos, unit') =
   match unit' with
   | PAst.Fundef (_, fname, _params, body) ->
       let callees = PAst.extract_calls_from_expr ~fun_names body in
@@ -268,6 +270,7 @@ let of_past_unit ~fun_names _t (_pos, unit') =
   | PAst.Struct _ -> ()
   | PAst.Define _ -> ()
   | PAst.Typedef _ -> ()
+  | PAst.Include items -> List.iter (of_past_unit ~fun_names _t) items
 
 (** Build a call graph from a PAst definition (list of top-level units) *)
 let of_past defs =
@@ -307,6 +310,7 @@ let topo_sort pasts call_graph =
       | _, PAst.Struct _ -> ()
       | _, PAst.Define _ -> ()
       | _, PAst.Typedef _ -> ()
+      | _, PAst.Include _ -> ()
   ) pasts;
   let sorted_names = Callgraph.topo_sort_names call_graph in
   List.filter_map (fun name -> Hashtbl.find_opt past_map name) sorted_names

@@ -307,9 +307,9 @@ let rec aux_e (eid, _decl, vars, e) =
         let make_pattern_case acc (case_e, body_e, has_break) =
           let case_ty = match case_e with 
             | _,_,_,Const c -> typeof_const c 
-            | _,_,_,Id v -> (match Defs.BuiltinVar.find_builtin v with 
+            | _,_,_,Id v -> (match Defs.BuiltinVar.find_builtin v with
                 | Some ty -> ty
-                | None -> failwith ("Invalid switch case expression: unknown define " ^ (Variable.get_unique_name v)))
+                | None -> Rstt.Cint.any_na) (* unknown constant: fall back, don't crash *)
             | _,_,_,Noop -> Ty.any (* Default case *)
             | _ -> failwith "Invalid switch case expression"
           in

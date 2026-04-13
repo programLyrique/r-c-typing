@@ -75,16 +75,31 @@ let infer_ast visible opts (idenv, env, decl) (ast : Ast.e) =
     idenv, env, decl
 
 (** past: the parsed AST *)
-let infer_def ?(simple_c_fun=false) ?(convention=None) visible_name opts (idenv, env, decl)  past = 
+let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=false) visible_name opts (idenv, env, decl)  past =
   let name = PAst.top_level_unit_name past in
-  let visible = visible_name name in 
+  let visible = visible_name name in
 
+  (* When processing items from external headers, don't override an existing
+     definition (e.g. from a .ty file or a previous header). *)
+  if skip_if_defined && name <> "" && StrMap.mem name idenv then
+    (idenv, env, decl)
+  else
   match past with
+  | _, PAst.Include items ->
+      (* Items come from an external system header. Process them with
+         simple C-function inference and priority to already-defined symbols. *)
+      List.fold_left
+        (fun acc item ->
+          infer_def ~simple_c_fun:true ~skip_if_defined:true (fun _ -> false) opts acc item)
+        (idenv, env, decl)
+        items
   | _, PAst.Define (name, value) ->
       let v = MVariable.create Immut (Some name) in
       let ty = Ast.typeof_const (PAst.aux_const value) |> GTy.mk |> TyScheme.mk_mono in
       if opts.debug && visible then
         Format.printf "define %a: @[<h>%a@]@.@." Variable.pp v TyScheme.pp_short ty;
+      if skip_if_defined then
+        Defs.BuiltinVar.register_dynamic name (Ast.typeof_const (PAst.aux_const value));
       (StrMap.add name v idenv, Env.add v ty env, decl)
   | _, PAst.Typedef (name, ty) ->
       (idenv, env, Ast.DeclMap.add name ty decl)
@@ -99,7 +114,7 @@ let infer_def ?(simple_c_fun=false) ?(convention=None) visible_name opts (idenv,
       if visible then
         Format.printf "%s:@.untypeable: %s@." name msg;
       (idenv, env, decl))
-  | _, (PAst.Fundef (ret_ty, name, params, _) as e) when simple_c_fun && C_interface.is_simple_c_function e -> 
+  | _, (PAst.Fundef (ret_ty, name, params, _) as e) when simple_c_fun && C_interface.is_simple_c_function e ->
     let ty = C_interface.infer_cfun ret_ty params |> GTy.mk |>  TyScheme.mk_mono in
     let v = MVariable.create Immut (Some name) in
     if visible then
@@ -131,7 +146,8 @@ let run_on_file opts filename idenv env =
               | _, PAst.Fundef (_, name, _, _) -> visible_name name
               | _, PAst.Struct _ -> false
               | _, PAst.Define _ -> false
-              | _, PAst.Typedef _ -> false)
+              | _, PAst.Typedef _ -> false
+              | _, PAst.Include _ -> false)
             past
     in
     Printf.printf "%s\n" (PAst.show_definitions visible_past)

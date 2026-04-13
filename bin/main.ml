@@ -4,9 +4,15 @@ open Mlsem.Types
 module System = Mlsem.System
 
 
-let main opts path =
+let main opts include_dirs path =
   System.Config.infer_overload := true;
   Mlsem.Types.Recording.start_recording ();
+  let env_dirs = match Sys.getenv_opt "C_INCLUDE_PATH" with
+    | None | Some "" -> []
+    | Some s -> String.split_on_char ':' s |> List.filter (fun x -> x <> "")
+  in
+  R_c_typing.Parser.set_include_dirs
+    (include_dirs @ env_dirs @ R_c_typing.Parser.default_include_dirs);
   let idenv = Runner.StrMap.empty in
   let env = Defs.initial_env in
   if not (Sys.file_exists path) then
@@ -50,6 +56,10 @@ let filter_opt =
   let doc = "Filter output to only *show* variables matching the given substring" in
   Arg.(value & opt (some string) None & info ["f";"filter"] ~docv:"SUBSTRING" ~doc)
 
+let include_dir_opt =
+  let doc = "Add a system include search directory (repeatable). Also honors C_INCLUDE_PATH env var." in
+  Arg.(value & opt_all string [] & info ["I"; "include-dir"] ~docv:"DIR" ~doc)
+
 let path_arg =
   let doc = "C source file to parse or package directory to analyze" in
   Arg.(required & pos 0 (some string) None & info [] ~docv:"PATH" ~doc)
@@ -66,8 +76,9 @@ let cmd =
      and+ no_typing = no_typing_opt
      and+ debug = debug_opt
      and+ filter = filter_opt
+     and+ include_dirs = include_dir_opt
     and+ path = path_arg in
-    PEnv.sequential_handler PEnv.empty (fun path -> main {cst; past; ast; mlsem ; typing = not no_typing ; debug ; filter} path) path |> fst)
+    PEnv.sequential_handler PEnv.empty (fun path -> main {cst; past; ast; mlsem ; typing = not no_typing ; debug ; filter} include_dirs path) path |> fst)
      
 
 let () = exit (Cmd.eval cmd)

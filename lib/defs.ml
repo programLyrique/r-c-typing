@@ -107,18 +107,40 @@ module BuiltinVar = struct
     ]
 
 
-let find_builtin str =
-  List.assoc_opt str all
+let dynamic : (string, Ty.t) Hashtbl.t = Hashtbl.create 64
 
-let find_builtin_var str = 
-  List.find_opt (fun (v, _) -> 
+let register_dynamic name ty =
+  if not (Hashtbl.mem dynamic name) then
+    Hashtbl.add dynamic name ty
+
+let find_builtin (v : Variable.t) =
+  let name = Variable.get_name v in
+  let from_all = List.find_opt (fun (v2, _) ->
+    match Variable.get_name v2 with
+    | None -> false
+    | Some n -> Some n = name
+  ) all |> Option.map snd
+  in
+  match from_all with
+  | Some _ -> from_all
+  | None ->
+      (match name with
+       | None -> None
+       | Some n -> Hashtbl.find_opt dynamic n)
+
+let find_builtin_var str =
+  List.find_opt (fun (v, _) ->
     match Variable.get_name v with
     | None -> false
     | Some name -> String.equal name str
   ) all |> Option.map fst
 
 let has_builtin str =
-  List.mem_assoc str all
+  (List.exists (fun (v, _) ->
+    match Variable.get_name v with
+    | None -> false
+    | Some name -> String.equal name str
+  ) all) || Hashtbl.mem dynamic str
 end
 
 

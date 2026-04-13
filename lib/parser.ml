@@ -24,6 +24,18 @@ let predefined_defines = ref default_predefined_defines
 let set_predefined_defines defines =
   predefined_defines := StrSet.of_list defines
 
+let default_include_dirs = ["/usr/include"; "/usr/local/include"]
+
+let include_dirs : string list ref = ref default_include_dirs
+
+let set_include_dirs dirs = include_dirs := dirs
+
+let resolve_header relative_path =
+  List.find_map (fun dir ->
+    let full = Filename.concat dir relative_path in
+    if Sys.file_exists full then Some full else None
+  ) !include_dirs
+
 let print_res (res: (CST.translation_unit, CST.extra) Tree_sitter_run.Parsing_result.t) = 
   Printf.printf "Errors: %d. Lines with errors: %d / %d\n" res.stat.error_count
     res.stat.error_line_count res.stat.total_line_count ;
@@ -93,11 +105,16 @@ let exprs_to_pos (expr1: A.e) (expr2: A.e) : Position.t =
   Position.join pos1 pos2
 
 
-let aux_primitive_type t = 
-  match t with 
+let aux_primitive_type t =
+  match t with
   | "void" -> Ast.Void
   | "char" -> Ast.Char
-  | "short" | "int" | "long" | "size_t" | "uint8_t" | "ssize_t" -> Ast.Int
+  | "short" | "int" | "long"
+  | "size_t" | "ssize_t" | "ptrdiff_t" | "intptr_t" | "uintptr_t"
+  | "int8_t" | "int16_t" | "int32_t" | "int64_t"
+  | "uint8_t" | "uint16_t" | "uint32_t" | "uint64_t"
+  | "off_t" | "pid_t" | "mode_t" | "time_t" | "clock_t"
+    -> Ast.Int
   | "float" | "double" -> Ast.Float
   | "bool" -> Ast.Bool
   | _ -> failwith ("Unknown primitive type: " ^ t)
@@ -1126,6 +1143,8 @@ and aux_top_level_item defines (item : top_level_item) =
       (defines, [Mlsem.Common.Position.dummy, A.Struct s])
   | `Type_defi type_def ->
       (defines, aux_type_definition type_def)
+  (* | `Prep_incl (_, `System_lib_str path, _) -> 
+      (defines, aux_system_lib_include path) *)
   | _ ->
       if !warn_unsupported then begin
         Printf.printf "Not supported yet: top level item\n";
@@ -1155,13 +1174,25 @@ and aux_top_level_block_item defines (item : block_item) =
       end;
       (defines, [])
 
+and aux_system_lib_include (_loc, path) =
+  (* Strip surrounding < > from the system lib string token *)
+  let relative = String.sub path 1 (String.length path - 2) in
+  match resolve_header relative with
+  | None -> []
+  | Some full_path ->
+      let cst = parse_file full_path in
+      match cst.program with
+      | None -> []
+      | Some tree ->
+          let items = snd (aux_top_level_items !predefined_defines tree) in
+          [Mlsem.Common.Position.dummy, A.Include items]
 
 let aux_translation_unit tree =
   snd (aux_top_level_items !predefined_defines tree)
 
 let to_ast (res: (CST.translation_unit, CST.extra) Tree_sitter_run.Parsing_result.t) =
   match res.program with
-  | None -> [] 
+  | None -> []
   | Some translation_unit ->
     aux_translation_unit translation_unit
 
