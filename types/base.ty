@@ -28,6 +28,8 @@ mkNamed: (t('a & any_prim, *c_string) -> v('a)) & (t(list, *c_string) -> list)
 VECTOR_ELT: t({; 'r}, c_int) -> 'r
 SET_VECTOR_ELT: t({; 'r}, c_int, 'a) -> {; 'r | 'a}
 
+isVector: (t(v('a) | expr | list) -> c_true) & (t(any_r_not_vec \ (list & expr)) -> c_false)
+
 
 ScalarReal: t(c_double | c_int) -> dbl1
 ScalarInteger: (t(c_int('a)) -> v[1](int('a))) & (t(c_na) -> v[1](int \ ^int))
@@ -49,6 +51,7 @@ NA_STRING: na_string
 asChar: (t(v[(1..)]('a)) -> chr1) & (t(p(chr) & 'a) -> 'a) & (t(sym) -> chr1) & (t(any_r_not_vec \ sym | v0('a)) -> na_string)
 type2char:  (t(p(int)) -> c("integer")) & (t(p(dbl)) -> c("double")) & (t(p(lgl)) -> c("logical")) & (t(p(chr)) -> c("character")) & (t(p(clx)) -> c("complex")) & (t(p(raw)) -> c("raw")) & (t(list) -> c("list")) & (t(null) -> c("NULL")) & (t(env) -> c("environment")) & (t(sym) -> c("symbol")) & (t(lang) -> c("language")) & (t(expr) -> c("expression")) & (t(any -> any) -> c("closure"))
 isString: (t(v(chr)) -> c_true) & (t(any \ v(chr)) -> c_false)
+getCharCE: t(p(chr)) -> c_int
 
 // Environments 
 R_GlobalEnv: env
@@ -62,8 +65,14 @@ R_GetCurrentEnv: () -> env
 asLogical: t(any) -> c_true | c_false
 asInteger: t(any) -> c_int
 
-// Pairlists
+// Pairlists and language
 list2: t(any, any) -> lang
+isPairList: (t(lang) -> c_true) & (t(~lang) -> c_false)
+lang1: t(any) -> lang
+
+// Attributes 
+// TODO: we also support attributes in the type algebra, so add it!
+getAttrib: t(any, sym) -> any
 
 []<-: t(*'a, c_int, 'a) -> *'a
 []: t(*'a, c_int) -> 'a
@@ -141,6 +150,7 @@ LANGSXP: lang
 ENVSXP: env
 ANYSXP: any_r_not_vec | vec
 DOTSXP: any
+EXPTRSXP: any // we should have a specific type for it
 
 // R API: error/warning
 Rf_error: any -> empty // redundant with error but like fail. The best would be to generate 2 versions of the function and pick the one which type checks?
@@ -170,6 +180,14 @@ asReal: t(any) -> c_double
 memcpy: t(any, any, c_int) -> any
 R_alloc: t(c_int, c_int) -> *any
 R_isort: t(*c_int_na, c_int) -> c_void
+
+// classes 
+inherits: t(any, c_string) -> c_bool // to improve when supporting classes
+
+// Extermal pointers 
+// TODO: add a specific type 
+ExternalPtrAddr: t(any) -> *any
+MakeExternalPtr: t(*any, any, any) -> any
 
 // C functions
 
