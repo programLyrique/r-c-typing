@@ -26,9 +26,22 @@ let set_predefined_defines defines =
 
 let default_include_dirs = ["/usr/include"; "/usr/local/include"]
 
+(** Memoization cache: each resolved header path is parsed and processed at
+    most once per run. Without this, every [#include <stdio.h>] across a
+    package's translation units would reparse glibc's header closure, causing
+    combinatorial blow-up. Also breaks include cycles since we mark a path as
+    processed before recursing into it. *)
+let processed_headers : (string, unit) Hashtbl.t = Hashtbl.create 64
+
+let reset_processed_headers () = Hashtbl.clear processed_headers
+
 let include_dirs : string list ref = ref default_include_dirs
 
-let set_include_dirs dirs = include_dirs := dirs
+let set_include_dirs dirs =
+  include_dirs := dirs;
+  (* Different search paths can resolve the same relative header to a
+     different file, so invalidate the cache when paths change. *)
+  reset_processed_headers ()
 
 let resolve_header relative_path =
   List.find_map (fun dir ->
@@ -237,9 +250,20 @@ and aux_type_spec (type_spec : type_specifier)  =
   (* Treat all enum forms as int *)
   | `Enum_spec _ -> Ast.Int
   | `Sized_type_spec sized -> aux_sized_type_spec sized
-  | _ -> (let tree = Boilerplate.map_type_specifier () type_spec in
-    Raw_tree.to_channel stderr tree ;
-    failwith "Not supported yet: type specifier")
+  | _ ->
+      (* Unknown type specifier (e.g. tree-sitter [Macro_type_spec] for
+         [__typeof__(...)], [decltype(...)], [__attribute_nonnull__(...)]),
+         common in glibc multiarch headers. Previously failwith'd; that
+         crashed the whole package as soon as any header pulled one of these
+         in via a struct field. Degrade to [Ast.Any] — downstream treats it
+         as opaque, which is the right behavior for specifiers we cannot
+         interpret. *)
+      if !warn_unsupported then begin
+        Printf.printf "Not supported yet: type specifier; using Ast.Any\n";
+        let tree = Boilerplate.map_type_specifier () type_spec in
+        Raw_tree.to_channel stderr tree
+      end;
+      Ast.Any
 
 and aux_decl_spec decl_spec = 
   let (_, type_spec, _) = decl_spec in
@@ -1140,15 +1164,22 @@ and aux_top_level_item defines (item : top_level_item) =
        | Some item -> [item])
   | `Empty_decl (type_spec, _tok) ->
       let s = aux_type_spec type_spec in
-      let name = match s with
-        | Ast.Struct (n, _) | Ast.Union (n, _) | Ast.Enum (n, _) -> n
-        | _ ->
-            if !warn_unsupported then
-              Printf.printf "Empty declaration is not a struct/union/enum; ignoring (ctype=%s)\n"
-                (Ast.show_ctype s);
-            ""
-      in
-      (defines, [Mlsem.Common.Position.dummy, A.TypeDecl (name, s)])
+      (match s with
+       | Ast.Struct (name, _) | Ast.Union (name, _) | Ast.Enum (name, _) ->
+           (defines, [Mlsem.Common.Position.dummy, A.TypeDecl (name, s)])
+       | Ast.Typeref _ ->
+           (* Bare identifier as an empty declaration. In system headers this
+              is overwhelmingly glibc linkage/attribute macros that expand to
+              nothing under C (__BEGIN_DECLS, __END_DECLS, __THROW, …). Since
+              we don't run a macro expander, tree-sitter sees them as
+              identifiers and classifies them as empty declarations. They
+              carry no binding, so drop silently. *)
+           (defines, [])
+       | _ ->
+           if !warn_unsupported then
+             Printf.printf "Empty declaration is not a struct/union/enum; ignoring (ctype=%s)\n"
+               (Ast.show_ctype s);
+           (defines, [Mlsem.Common.Position.dummy, A.TypeDecl ("", s)]))
   | `Type_defi type_def ->
       (defines, aux_type_definition type_def)
   | `Prep_incl (_, `System_lib_str path, _) ->
@@ -1188,12 +1219,21 @@ and aux_system_lib_include (_loc, path) =
   match resolve_header relative with
   | None -> []
   | Some full_path ->
-      let cst = parse_file full_path in
-      match cst.program with
-      | None -> []
-      | Some tree ->
-          let items = snd (aux_top_level_items !predefined_defines tree) in
-          [Mlsem.Common.Position.dummy, A.Include items]
+      if Hashtbl.mem processed_headers full_path then
+        (* Already processed once in this run; its declarations are already
+           in the typing state. Return empty to avoid redundant work (and to
+           break cycles — see [processed_headers] docstring). *)
+        []
+      else begin
+        (* Mark before recursing so a cycle A -> B -> A terminates. *)
+        Hashtbl.add processed_headers full_path ();
+        let cst = parse_file full_path in
+        match cst.program with
+        | None -> []
+        | Some tree ->
+            let items = snd (aux_top_level_items !predefined_defines tree) in
+            [Mlsem.Common.Position.dummy, A.Include items]
+      end
 
 let aux_translation_unit tree =
   snd (aux_top_level_items !predefined_defines tree)

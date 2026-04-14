@@ -11,8 +11,13 @@ let main opts include_dirs path =
     | None | Some "" -> []
     | Some s -> String.split_on_char ':' s |> List.filter (fun x -> x <> "")
   in
+  (* Ask the system compiler where it looks for headers. On Debian this
+     picks up /usr/include/x86_64-linux-gnu (multiarch), where most libs'
+     headers now actually live. Falls back to the hardcoded list if no
+     compiler is available. *)
+  let gcc_dirs = R_c_typing.Utils.detect_gcc_include_dirs () in
   R_c_typing.Parser.set_include_dirs
-    (include_dirs @ env_dirs @ R_c_typing.Parser.default_include_dirs);
+    (include_dirs @ env_dirs @ gcc_dirs @ R_c_typing.Parser.default_include_dirs);
   let idenv = Runner.StrMap.empty in
   let env = Defs.initial_env in
   if not (Sys.file_exists path) then
