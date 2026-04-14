@@ -1116,6 +1116,79 @@ let preproc_elifdef_is_ifndef = function
   | `Pat_0307ca2 _ -> false
   | `Pat_a6d4183 _ -> true
 
+(* Evaluate a preprocessor expression to an integer, following C semantics.
+   Undefined identifiers evaluate to 0 (per the C standard for #if). *)
+let rec eval_preproc_expression defines (expr : preproc_expression) : int =
+  match expr with
+  | `Id (_loc, name) ->
+      (* In C preprocessor, undefined identifiers evaluate to 0 *)
+      if StrSet.mem name defines then 1 else 0
+  | `Num_lit (_loc, s) ->
+      (* Strip integer suffixes (u/U/l/L) then parse *)
+      let strip_suffix s =
+        let i = ref (String.length s - 1) in
+        while !i >= 0 && (match s.[!i] with 'u' | 'U' | 'l' | 'L' -> true | _ -> false) do
+          decr i
+        done;
+        String.sub s 0 (!i + 1)
+      in
+      let core = strip_suffix s in
+      (try int_of_string core with Failure _ -> 0)
+  | `Char_lit char_lit ->
+      (* Reuse the existing char literal parser, extract the int value *)
+      let (_, expr) = aux_char_lit char_lit in
+      (match expr with
+       | A.Const (A.CChar c) -> Char.code c
+       | A.Const (A.CInt n) -> n
+       | _ -> 0)
+  | `Prep_defi defined ->
+      (* defined(X) or defined X *)
+      let name = match defined with
+        | `Defi_LPAR_id_RPAR (_, _, (_loc, name), _) -> name
+        | `Defi_id (_, (_loc, name)) -> name
+      in
+      if StrSet.mem name defines then 1 else 0
+  | `Prep_un_exp (op, sub_expr) ->
+      let v = eval_preproc_expression defines sub_expr in
+      (match op with
+       | `BANG _ -> if v = 0 then 1 else 0
+       | `TILDE _ -> lnot v
+       | `DASH _ -> -v
+       | `PLUS _ -> v)
+  | `Prep_bin_exp bin_expr ->
+      eval_preproc_binary defines bin_expr
+  | `Prep_paren_exp (_, sub_expr, _) ->
+      eval_preproc_expression defines sub_expr
+  | `Prep_call_exp ((_loc, _name), _args) ->
+      (* Unknown macro calls in #if context evaluate to 0 *)
+      0
+
+and eval_preproc_binary defines (bin_expr : preproc_binary_expression) : int =
+  let eval = eval_preproc_expression defines in
+  match bin_expr with
+  | `Prep_exp_PLUS_prep_exp (l, _, r) -> eval l + eval r
+  | `Prep_exp_DASH_prep_exp (l, _, r) -> eval l - eval r
+  | `Prep_exp_STAR_prep_exp (l, _, r) -> eval l * eval r
+  | `Prep_exp_SLASH_prep_exp (l, _, r) ->
+      let rv = eval r in if rv = 0 then 0 else eval l / rv
+  | `Prep_exp_PERC_prep_exp (l, _, r) ->
+      let rv = eval r in if rv = 0 then 0 else eval l mod rv
+  | `Prep_exp_BARBAR_prep_exp (l, _, r) ->
+      if eval l <> 0 then 1 else if eval r <> 0 then 1 else 0
+  | `Prep_exp_AMPAMP_prep_exp (l, _, r) ->
+      if eval l = 0 then 0 else if eval r <> 0 then 1 else 0
+  | `Prep_exp_BAR_prep_exp (l, _, r) -> eval l lor eval r
+  | `Prep_exp_HAT_prep_exp (l, _, r) -> eval l lxor eval r
+  | `Prep_exp_AMP_prep_exp (l, _, r) -> eval l land eval r
+  | `Prep_exp_EQEQ_prep_exp (l, _, r) -> if eval l = eval r then 1 else 0
+  | `Prep_exp_BANGEQ_prep_exp (l, _, r) -> if eval l <> eval r then 1 else 0
+  | `Prep_exp_GT_prep_exp (l, _, r) -> if eval l > eval r then 1 else 0
+  | `Prep_exp_GTEQ_prep_exp (l, _, r) -> if eval l >= eval r then 1 else 0
+  | `Prep_exp_LTEQ_prep_exp (l, _, r) -> if eval l <= eval r then 1 else 0
+  | `Prep_exp_LT_prep_exp (l, _, r) -> if eval l < eval r then 1 else 0
+  | `Prep_exp_LTLT_prep_exp (l, _, r) -> eval l lsl eval r
+  | `Prep_exp_GTGT_prep_exp (l, _, r) -> eval l asr eval r
+
 let fold_top_level_items aux_item defines items =
   let defines, rev_items =
     List.fold_left
@@ -1135,10 +1208,13 @@ and aux_top_level_block_items defines items =
 and aux_top_level_else_branch defines else_branch =
   match else_branch with
   | `Prep_else (_else_tok, body) -> aux_top_level_block_items defines body
-  | `Prep_elif_5b2d46e _ ->
-      if !warn_unsupported then
-        Printf.printf "Not supported yet: top level #elif with expression\n";
-      (defines, [])
+  | `Prep_elif_5b2d46e (_elif_tok, condition, _newline, body, else_opt) ->
+      let value = eval_preproc_expression defines condition in
+      if value <> 0 then aux_top_level_block_items defines body
+      else (
+        match else_opt with
+        | None -> (defines, [])
+        | Some else_branch -> aux_top_level_else_branch defines else_branch)
   | `Prep_elif_b56056c (directive, name_tok, body, else_opt) ->
       let name = token_to_string name_tok in
       let is_defined = StrSet.mem name defines in
@@ -1172,6 +1248,13 @@ and aux_top_level_item defines (item : top_level_item) =
         if preproc_ifdef_is_ifndef directive then not is_defined else is_defined
       in
       if take_body then aux_top_level_block_items defines body
+      else (
+        match else_opt with
+        | None -> (defines, [])
+        | Some else_branch -> aux_top_level_else_branch defines else_branch)
+  | `Prep_if (_if_tok, condition, _newline, body, else_opt, _endif_tok) ->
+      let value = eval_preproc_expression defines condition in
+      if value <> 0 then aux_top_level_block_items defines body
       else (
         match else_opt with
         | None -> (defines, [])
