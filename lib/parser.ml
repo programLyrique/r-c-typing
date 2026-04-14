@@ -158,6 +158,77 @@ let top_level_initializer_count ((_, initializers, _, _) : initializer_list) =
   | None -> 0
   | Some (_, inits) -> 1 + List.length inits
 
+let strip_int_suffix s =
+  let i = ref (String.length s - 1) in
+  while
+    !i >= 0
+    && match s.[!i] with 'u' | 'U' | 'l' | 'L' -> true | _ -> false
+  do
+    decr i
+  done;
+  String.sub s 0 (!i + 1)
+
+let normalize_int_literal s =
+  let len = String.length s in
+  if len >= 2 && s.[0] = '0' && (s.[1] = 'x' || s.[1] = 'X' || s.[1] = 'b' || s.[1] = 'B') then s
+  else if len > 1 && s.[0] = '0' then
+    let rec all_octal i =
+      i >= len || ((s.[i] >= '0' && s.[i] <= '7') && all_octal (i + 1))
+    in
+    if all_octal 1 then "0o" ^ String.sub s 1 (len - 1) else s
+  else s
+
+let parse_c_int_literal s =
+  let core = s |> strip_int_suffix |> normalize_int_literal in
+  int_of_string core
+
+let decode_c_escape_sequence s =
+  let fail () = failwith ("Invalid C escape sequence: " ^ s) in
+  if String.length s < 2 || s.[0] <> '\\' then fail ()
+  else
+    let parse_int base digits =
+      if String.length digits = 0 then fail () else int_of_string (base ^ digits)
+    in
+    match s.[1] with
+    | 'a' when String.length s = 2 -> 7
+    | 'b' when String.length s = 2 -> 8
+    | 'f' when String.length s = 2 -> 12
+    | 'n' when String.length s = 2 -> 10
+    | 'r' when String.length s = 2 -> 13
+    | 't' when String.length s = 2 -> 9
+    | 'v' when String.length s = 2 -> 11
+    | '\\' when String.length s = 2 -> Char.code '\\'
+    | '\'' when String.length s = 2 -> Char.code '\''
+    | '"' when String.length s = 2 -> Char.code '"'
+    | '?' when String.length s = 2 -> Char.code '?'
+    | 'x' -> parse_int "0x" (String.sub s 2 (String.length s - 2))
+    | 'u' when String.length s = 6 -> parse_int "0x" (String.sub s 2 4)
+    | 'U' when String.length s = 10 -> parse_int "0x" (String.sub s 2 8)
+    | c2 when '0' <= c2 && c2 <= '7' -> parse_int "0o" (String.sub s 1 (String.length s - 1))
+    | c2 when String.length s = 2 -> Char.code c2
+    | _ -> fail ()
+
+let decode_c_char_literal_values chars =
+  List.map
+    (function
+      | `Imm_tok_pat_36637e2 (_, s) ->
+          assert (String.length s = 1);
+          Char.code s.[0]
+      | `Esc_seq (_, s) -> decode_c_escape_sequence s)
+    chars
+
+let int_of_char_literal (char_lit : char_literal) =
+  let _, chars, _ = char_lit in
+  let values = decode_c_char_literal_values chars in
+  match values with
+  | [value] -> value
+  | _ -> List.fold_left (fun acc value -> (acc lsl 8) lor (value land 0xFF)) 0 values
+
+type enum_counter =
+  | EnumInit
+  | EnumKnown of int
+  | EnumUnknown
+
 let rec aux_struct_fields name fields =
   let rec aux_field_decl_name (decl : field_declarator) : int * string =
     match decl with
@@ -226,6 +297,96 @@ and aux_struct struc =
      We keep the struct tag and resolve it later through DeclMap. *)
   | `Id_opt_field_decl_list ((_loc, name), None) -> Ast.Struct (name, [])
 
+and eval_enum_constant_expression (expr : expression) : int option =
+  match expr with
+  | `Choice_cond_exp expr -> eval_enum_constant_not_binary expr
+  | `Bin_exp _ -> None
+
+and eval_enum_constant_not_binary (expr : expression_not_binary) : int option =
+  match expr with
+  | `Num_lit (_, s) ->
+      (try Some (parse_c_int_literal s) with Failure _ -> None)
+  | `Char_lit char_lit -> Some (int_of_char_literal char_lit)
+  | `True _ -> Some 1
+  | `False _ -> Some 0
+  | `Null _ -> Some 0
+  | `Paren_exp ((_lp, _), `Exp sub_expr, (_rp, _)) ->
+      eval_enum_constant_expression sub_expr
+  | `Paren_exp _ -> None
+  | `Un_exp (`PLUS _, sub_expr) -> eval_enum_constant_expression sub_expr
+  | `Un_exp (`DASH _, sub_expr) ->
+      eval_enum_constant_expression sub_expr |> Option.map Int.neg
+  | `Cast_exp ((_lp, _), _ty, _rp, sub_expr) ->
+      eval_enum_constant_expression sub_expr
+  | _ -> None
+
+and aux_enum_enumerator counter ((name_tok, explicit_value) : enumerator) =
+  let name = token_to_string name_tok in
+  let computed_value, next_counter =
+    match explicit_value with
+    | Some (_, expr) ->
+        begin match eval_enum_constant_expression expr with
+        | Some value -> (Some value, EnumKnown value)
+        | None ->
+            if !warn_unsupported then
+              Printf.eprintf
+                "Warning: enum enumerator %s has a non-constant initializer; value left unknown\n"
+                name;
+            (None, EnumUnknown)
+        end
+    | None ->
+        begin match counter with
+        | EnumInit -> (Some 0, EnumKnown 0)
+        | EnumKnown previous ->
+            let value = previous + 1 in
+            (Some value, EnumKnown value)
+        | EnumUnknown -> (None, EnumUnknown)
+        end
+  in
+  ((name, computed_value), next_counter)
+
+and aux_enum_collect counter acc = function
+  | [] -> (List.rev acc, counter)
+  | item :: rest ->
+      begin match item with
+      | `Enum_COMMA (enumerator, _) ->
+          let enumerator, counter = aux_enum_enumerator counter enumerator in
+          aux_enum_collect counter (enumerator :: acc) rest
+      | `Prep_if_in_enum_list _ | `Prep_ifdef_in_enum_list _ | `Prep_call_COMMA _ ->
+          if !warn_unsupported then
+            Printf.printf
+              "Not supported yet: preprocessor directives inside enum declarations\n";
+          aux_enum_collect counter acc rest
+      end
+
+and aux_enum_fields name enum_list =
+  let _, leading_items, trailing_item, _ = enum_list in
+  let enumerators, counter = aux_enum_collect EnumInit [] leading_items in
+  let enumerators =
+    match trailing_item with
+    | Some (`Enum enumerator) ->
+        let enumerator, _ = aux_enum_enumerator counter enumerator in
+        enumerators @ [enumerator]
+    | Some (`Prep_if_in_enum_list_no_comma _)
+    | Some (`Prep_ifdef_in_enum_list_no_comma _)
+    | Some (`Prep_call _) ->
+        if !warn_unsupported then
+          Printf.printf
+            "Not supported yet: preprocessor directives inside enum declarations\n";
+        enumerators
+    | None -> enumerators
+  in
+  Ast.Enum (name, enumerators)
+
+and aux_enum enum_spec =
+  match enum_spec with
+  | `Id_opt_COLON_prim_type_opt_enum_list ((_, name), _, Some enum_list) ->
+      aux_enum_fields name enum_list
+  | `Id_opt_COLON_prim_type_opt_enum_list ((_, name), _, None) ->
+      Ast.Enum (name, [])
+  | `Enum_list enum_list ->
+      aux_enum_fields "" enum_list
+
 and aux_sized_type_spec (_sized : sized_type_specifier) : Ast.ctype =
   let aux_choice_type = function
     | `Prim_type (_loc, s) -> aux_primitive_type s
@@ -247,8 +408,7 @@ and aux_type_spec (type_spec : type_specifier)  =
   | `Id (_loc, s) when s = "SEXP" -> Ast.SEXP
   | `Id (_, s) -> Ast.Typeref s
   | `Struct_spec (_,_, _,struc, _) -> aux_struct struc
-  (* Treat all enum forms as int *)
-  | `Enum_spec _ -> Ast.Int
+  | `Enum_spec (_, enum_spec, _) -> aux_enum enum_spec
   | `Sized_type_spec sized -> aux_sized_type_spec sized
   | _ ->
       (* Unknown type specifier (e.g. tree-sitter [Macro_type_spec] for
@@ -416,16 +576,6 @@ and aux_num_lit  s =
     in
     loop 0
   in
-  let strip_int_suffix s =
-    let i = ref (String.length s - 1) in
-    while
-      !i >= 0
-      && match s.[!i] with 'u' | 'U' | 'l' | 'L' -> true | _ -> false
-    do
-      decr i
-    done;
-    String.sub s 0 (!i + 1)
-  in
   let strip_float_suffix s =
     if String.length s = 0 then s
     else
@@ -433,19 +583,8 @@ and aux_num_lit  s =
       | 'f' | 'F' | 'l' | 'L' -> String.sub s 0 (String.length s - 1)
       | _ -> s
   in
-  let normalize_int_literal s =
-    let len = String.length s in
-    if len >= 2 && s.[0] = '0' && (s.[1] = 'x' || s.[1] = 'X' || s.[1] = 'b' || s.[1] = 'B') then s
-    else if len > 1 && s.[0] = '0' then
-      let rec all_octal i =
-        i >= len || ((s.[i] >= '0' && s.[i] <= '7') && all_octal (i + 1))
-      in
-      if all_octal 1 then "0o" ^ String.sub s 1 (len - 1) else s
-    else s
-  in
   let parse_int s =
-    let core = s |> strip_int_suffix |> normalize_int_literal in
-    int_of_string core
+    parse_c_int_literal s
   in
   let parse_float s =
     let core = strip_float_suffix s in
@@ -459,32 +598,6 @@ and aux_num_lit  s =
        with Failure _ -> A.CFloat (parse_float s))
 
 and aux_char_lit (c: char_literal) =
-  let decode_escape_sequence s =
-    let fail () = failwith ("Invalid C escape sequence: " ^ s) in
-    if String.length s < 2 || s.[0] <> '\\' then fail ()
-    else
-      let parse_int base digits =
-        if String.length digits = 0 then fail () else int_of_string (base ^ digits)
-      in
-      match s.[1] with
-      | 'a' when String.length s = 2 -> 7
-      | 'b' when String.length s = 2 -> 8
-      | 'f' when String.length s = 2 -> 12
-      | 'n' when String.length s = 2 -> 10
-      | 'r' when String.length s = 2 -> 13
-      | 't' when String.length s = 2 -> 9
-      | 'v' when String.length s = 2 -> 11
-      | '\\' when String.length s = 2 -> Char.code '\\'
-      | '\'' when String.length s = 2 -> Char.code '\''
-      | '"' when String.length s = 2 -> Char.code '"'
-      | '?' when String.length s = 2 -> Char.code '?'
-      | 'x' -> parse_int "0x" (String.sub s 2 (String.length s - 2))
-      | 'u' when String.length s = 6 -> parse_int "0x" (String.sub s 2 4)
-      | 'U' when String.length s = 10 -> parse_int "0x" (String.sub s 2 8)
-      | c2 when '0' <= c2 && c2 <= '7' -> parse_int "0o" (String.sub s 1 (String.length s - 1))
-      | c2 when String.length s = 2 -> Char.code c2
-      | _ -> fail ()
-  in
   let (start, chars, (loc2, _)) = c in
   let loc1 =
     match start with
@@ -494,15 +607,7 @@ and aux_char_lit (c: char_literal) =
     | `U8SQUOT (loc, _)
     | `SQUOT (loc, _) -> loc
   in
-  let values =
-    List.map
-      (function
-        | `Imm_tok_pat_36637e2 (_, s) ->
-            assert (String.length s = 1);
-            Char.code s.[0]
-        | `Esc_seq (_, s) -> decode_escape_sequence s)
-      chars
-  in
+  let values = decode_c_char_literal_values chars in
   let is_plain_char =
     match (start, values) with
     | (`SQUOT _, [v]) when v >= 0 && v <= 255 -> true

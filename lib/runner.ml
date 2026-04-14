@@ -59,6 +59,25 @@ let find_existing_binding name idenv env =
 let has_existing_binding name idenv =
   StrMap.mem name idenv || has_ty_binding name
 
+let register_enum_constants ty : (Variable.t * Ty.t) list =
+  let rec aux ty =
+    match ty with
+    | Ast.Enum (_, enumerators) ->
+        List.filter_map
+          (fun (name, value) ->
+            match value with
+            | Some value ->
+                let ty = Rstt.Cint.singl value in
+                let v = Defs.BuiltinVar.register_dynamic name ty in
+                Some (v, ty)
+            | None -> None)
+          enumerators
+    | Ast.Ptr inner -> aux inner
+    | Ast.Array (inner, _) -> aux inner
+    | _ -> []
+  in
+  aux ty
+
 let print_visible kind visible v tys =
   if visible then
     (match kind with
@@ -128,14 +147,21 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
         (idenv, env, decl)
         items
   | _, PAst.Define (name, value) ->
-      let v = MVariable.create Immut (Some name) in
       let ty = Ast.typeof_const (PAst.aux_const value) |> GTy.mk |> TyScheme.mk_mono in
+      let v =
+        if skip_if_defined && not (Defs.StrMap.mem name Defs.defs_map) then
+          Defs.BuiltinVar.register_dynamic name (Ast.typeof_const (PAst.aux_const value))
+        else
+          MVariable.create Immut (Some name)
+      in
       if opts.debug && visible then
         print_visible `Define visible v ty;
-      if skip_if_defined && not (Defs.StrMap.mem name Defs.defs_map) then
-        Defs.BuiltinVar.register_dynamic name (Ast.typeof_const (PAst.aux_const value));
       (StrMap.add name v idenv, Env.add v ty env, decl)
   | _, PAst.TypeDecl (name, ty) ->
+      let env =
+        register_enum_constants ty
+        |> List.fold_left (fun env (v, ty) -> Env.add v (TyScheme.mk_mono (GTy.mk ty)) env) env
+      in
       (idenv, env, Ast.DeclMap.add name ty decl)
   | _,PAst.Fundef (ret_ty, name, params, _) when convention=Some(Package.C) ->
     (try

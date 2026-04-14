@@ -146,6 +146,13 @@ let rec typeof_ctype ct =
   | Any -> Ty.any
   | Typeref _ -> Ty.any  (* unresolved typedef: fall back to any *)
   | Struct (name, fields) -> record_of_struct name fields
+  | Enum (_, enumerators) ->
+      if List.for_all (fun (_, value) -> Option.is_some value) enumerators && enumerators <> [] then
+        enumerators
+        |> List.filter_map (fun (_, value) -> Option.map Cint.singl value)
+        |> Ty.disj
+      else
+        Cint.any_na
   | _ -> failwith ("Type not supported yet in typeof_ctype: " ^ show_ctype ct)
 and record_of_struct _name fields = 
   Record.mk_closed (List.map (fun (field_ty, field_name) -> (field_name, (typeof_ctype field_ty, false))) fields)

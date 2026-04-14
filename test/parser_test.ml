@@ -1,5 +1,16 @@
 open R_c_typing
 
+let expect_type_decl name expected_ty defs =
+  match List.find_opt (function _, PAst.TypeDecl (decl_name, _) -> decl_name = name | _ -> false) defs with
+  | Some (_, PAst.TypeDecl (_, ty)) when ty = expected_ty -> ()
+  | Some (_, PAst.TypeDecl (_, ty)) ->
+      failwith
+        (Printf.sprintf
+           "Unexpected type declaration for %s: %s"
+           name
+           (Ast.show_ctype ty))
+  | _ -> failwith (Printf.sprintf "Missing type declaration for %s" name)
+
 let () =
   let _ast = Parser.parse_string "int main() { return 0; }" in
   (*Format.printf "%a@." (Pp.to_format ast)*)
@@ -47,3 +58,22 @@ let () =
       "int main() { int x = 1; int a[2] = {x, x + 1}; return a[0]; }"
   in
   print_endline "Non-constant initializer list parsed successfully";
+
+  let enum_defs =
+    Parser.parse_string
+      "enum Color { RED, GREEN = 4, BLUE, CYAN = BLUE + 2 }; typedef enum { DIR_LEFT = -1, DIR_NONE = 0, DIR_RIGHT = 1 } Direction; enum Mask { MASK_READ = 1, MASK_WRITE = 1 << 1, MASK_RW = MASK_READ | MASK_WRITE };"
+    |> Parser.to_ast
+  in
+  expect_type_decl
+    "Color"
+    (Ast.Enum ("Color", [("RED", Some 0); ("GREEN", Some 4); ("BLUE", Some 5); ("CYAN", None)]))
+    enum_defs;
+  expect_type_decl
+    "Direction"
+    (Ast.Enum ("", [("DIR_LEFT", Some (-1)); ("DIR_NONE", Some 0); ("DIR_RIGHT", Some 1)]))
+    enum_defs;
+  expect_type_decl
+    "Mask"
+    (Ast.Enum ("Mask", [("MASK_READ", Some 1); ("MASK_WRITE", None); ("MASK_RW", None)]))
+    enum_defs;
+  print_endline "Enum declarations parsed successfully";

@@ -149,6 +149,12 @@ let rec resolve_ctype decl ty =
     )
   | Ast.Struct (name, fields) ->
       Ast.Struct (name, List.map (fun (fty, fname) -> (resolve_ctype decl fty, fname)) fields)
+  | Ast.Enum (name, []) -> (
+      match Ast.DeclMap.find_opt name decl with
+      | Some (Ast.Enum (_, enumerators)) -> Ast.Enum (name, enumerators)
+      | _ -> ty
+    )
+  | Ast.Enum (name, enumerators) -> Ast.Enum (name, enumerators)
   | Ast.Ptr t -> Ast.Ptr (resolve_ctype decl t)
   | Ast.Array (t, len) -> Ast.Array (resolve_ctype decl t, len)
   | Ast.Union (name, fields) ->
@@ -167,9 +173,12 @@ let var env str =
  | None ->
     begin match Defs.BuiltinOp.find_builtin str with
     | None -> (
-      match Defs.StrMap.find_opt str Defs.defs_map with 
-      | None -> (Printf.printf "Creating fresh variable: %s\n" str; MVariable.create Immut (Some str))
+      match Defs.BuiltinVar.find_builtin_var str with
       | Some v -> v
+      | None ->
+          match Defs.StrMap.find_opt str Defs.defs_map with 
+          | None -> (Printf.printf "Creating fresh variable: %s\n" str; MVariable.create Immut (Some str))
+          | Some v -> v
     )
     | Some v -> v
     end

@@ -226,3 +226,14 @@
  (deps    cprogs/preproc-ifdef.c cprogs/preproc-ifdef.expected)
  (action  (diff cprogs/preproc-ifdef.expected preproc-ifdef.output)))
 
+(rule
+ (alias   runtest)
+ (deps    cprogs/enum.c)
+ (action  (with-stdout-to enum.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/enum.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/enum.c cprogs/enum.expected)
+ (action  (diff cprogs/enum.expected enum.output)))
+
