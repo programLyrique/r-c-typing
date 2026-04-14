@@ -732,6 +732,16 @@ and aux_switch_statement (switch_stmt: switch_statement) =
   | pos, A.Seq lst -> (Position.join (loc_to_pos loc1) pos, A.Switch (expr, lst))
   | _ -> failwith "Unexpected body in switch statement"
 
+and aux_labeled_statement (((loc_label, label), (loc_colon, _), _body) as labeled_stmt : labeled_statement) =
+  if !warn_unsupported then begin
+    Printf.eprintf
+      "Not supported yet: labeled statement `%s`; ignoring labeled block/declarations and emitting Noop\n"
+      label;
+    let tree = Boilerplate.map_labeled_statement () labeled_stmt in
+    Raw_tree.to_channel stderr tree
+  end;
+  (locs_to_pos loc_label loc_colon, A.Const A.CNull)
+
 and aux_non_case_statement (stmt: non_case_statement) =
   match stmt with
   | `Ret_stmt ret -> aux_return_statement ret
@@ -744,7 +754,7 @@ and aux_non_case_statement (stmt: non_case_statement) =
   | `Brk_stmt ((l1, _), (l2, _)) -> (locs_to_pos l1 l2, A.Break)
   | `Cont_stmt ((l1, _), (l2, _)) -> (locs_to_pos l1 l2, A.Next)
   | `Goto_stmt ((l1, _),_, (l2, _)) -> (locs_to_pos l1 l2, Return None)
-  | `Labe_stmt _ -> failwith "Not supported yet: labeled statements"
+  | `Labe_stmt labeled_stmt -> aux_labeled_statement labeled_stmt
   | `Switch_stmt st -> aux_switch_statement st
   | `Attr_stmt _ -> failwith "Not supported yet: attribute statements"
   | _ -> failwith "Not supported yet: Seh_try and Seh_leave statements"
@@ -1366,3 +1376,14 @@ let%test "void function does not duplicate explicit return" =
   match to_ast res with
   | [(_, A.Fundef (Ast.Void, "f", [], (_, A.Return None)))] -> true
   | _ -> false
+
+let%test "labeled statements are ignored as Noop" =
+  let prev = !warn_unsupported in
+  Fun.protect
+    ~finally:(fun () -> set_warn_unsupported prev)
+    (fun () ->
+      set_warn_unsupported false;
+      let res = parse_string "int f() { label: { int x = 1; } return 0; }" in
+      match to_ast res with
+      | [(_, A.Fundef (Ast.Int, "f", [], (_, A.Seq [(_, A.Const A.CNull); (_, A.Return (Some (_, A.Const (A.CInt 0))))])))] -> true
+      | _ -> false)

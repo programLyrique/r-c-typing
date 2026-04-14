@@ -86,7 +86,7 @@ let bv_params params =
 (** Extract variables from an expression*)
 let rec bv_e in_lhs_assign (_,e) = 
   match e with 
-  | Break | Next  | Const _ -> StrSet.empty
+  | Break | Next | Const _ -> StrSet.empty
   | Id s when in_lhs_assign -> StrSet.singleton s
   | Id _ -> StrSet.empty
   | Unop (_, e) -> bv_e in_lhs_assign e
