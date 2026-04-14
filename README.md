@@ -11,11 +11,12 @@ Type functions written in C using the R C API to R types.
 - dune
 - mlsem
 - sstt
+- rstt
 - cmdliner
 
 You can install the OCaml libraries using `opam`. 
 
-`mlsem` and `sstt` are only on GitHub so far but can be installed with `opam pin`.
+`mlsem`, `sstt`, and `rstt` are only on GitHub so far but can be installed with `opam pin`.
 
 
 ## Tree sitter 
@@ -49,6 +50,8 @@ Avoid editing `test/dune.inc` manually. Re-run `add_test.sh` if you need to refr
 
 The positional argument is a `PATH`: either a C source file or an R package directory.
 
+Header lookup can also be extended with repeated `-I/--include-dir` flags or with the `C_INCLUDE_PATH` environment variable.
+
 Show the parsed AST for functions whose name contains "from":
 
 ```bash
@@ -66,3 +69,27 @@ Run inference for an R package directory:
 ```bash
 dune exec r-c-typing -- test/packages/testpkg
 ```
+
+## Type definitions
+
+Builtin and external signatures are currently described in both `types/base.ty` and `types/posix.ty`.
+
+The rstt syntax supports, among others:
+
+- Vectors: `v[length](element_type)`
+- Lists with typed tails: `{label:type; tail}`
+- Intersections and unions: `t1 & t2`, `t1 | t2`
+
+## Type precedence
+
+When several type sources exist for the same symbol, the runner keeps the following precedence:
+
+1. Types loaded from `.ty` files.
+2. Types inferred from a full function definition with a body.
+3. Types inferred from a declaration or signature-only C function.
+
+In practice, this means:
+
+- A symbol already defined in `types/*.ty` is never overridden by inferred C information.
+- A later full function definition overrides a previously inferred declaration for the same symbol.
+- If no body is available, the declaration or simple C signature is kept and used as the symbol type.

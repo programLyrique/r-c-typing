@@ -20,7 +20,7 @@ C file → CST (Parse.ml) → PAst (parser.ml:to_ast)
       → Ast (PAst.transform) → MLsem (Ast.to_mlsem) → Type Inference
 ```
 
-See [lib/runner.ml](lib/runner.ml) `infer_fun_def` for the complete pipeline execution.
+See [lib/runner.ml](lib/runner.ml) `run_on_file`, `run_on_files`, and `infer_def` for the complete pipeline execution.
 
 ## Critical Module Responsibilities
 
@@ -50,7 +50,7 @@ Project dependencies are also specified in:
 
 ## Type System Integration
 
-**External type definitions** live in `types/base.ty` using rstt syntax:
+**External type definitions** live in `types/base.ty` and `types/posix.ty` using rstt syntax:
 
 - Format: `function_name: t(arg_types) -> return_type`
 - Aliases: `name = type_expression`
@@ -60,6 +60,7 @@ Project dependencies are also specified in:
 The rstt library provides R-specific type constructors:
 
 - Vectors: `v[length](element_type)` e.g., `dbl1` = double vector of length 1
+- Lists: `{label:type; tail}` for record-like list shapes with a typed tail, e.g. `{foo:int; chr | v[2](dbl)}`
 - Primitives: `p(element_type)` for R primitive values
 - C types: `c_int`, `c_double`, `c_string`, `c_bool` (with refinements like `c_true`)
 - Set-theoretic operators: `&` (intersection), `|` (union), `~` (negation)
@@ -73,17 +74,21 @@ The rstt library provides R-specific type constructors:
 
 **Initial environment**: [lib/defs.ml](lib/defs.ml) loads base types and R C API function signatures into `Defs.initial_env`
 
+**Type precedence for one symbol**:
+
+- First: types loaded from `.ty` files
+- Second: types inferred from a full function definition with a body
+- Third: types inferred from a declaration or other signature-only/simple C inference
+
+Operational rule: `.ty` definitions must never be overridden by inferred C types; a full function body may replace an earlier declaration-derived type; a declaration-derived type is only a fallback when no `.ty` definition or body-based type is available.
+
 ## Development Workflows
 
 ### Environment Setup
 
 **Required before building:**
 
-```bash
-source setup-env.sh  # Sets TREESITTER_INCDIR, TREESITTER_LIBDIR
-```
-
-These env vars point to the r-parser tree-sitter installation (required dependency).
+Set the tree-sitter environment variables so they point to the `r-parser` installation used by this checkout.
 
 Alternatively, set the variables manually:
 
@@ -158,7 +163,7 @@ Combine flags to trace transformations: `--past --ast --mlsem`
 
 Additional debugging tips:
 
-- Check `mlsen_recording.json` (generated after runs) for MLsem type system call traces
+- Check `mlsem_recording.json` (generated after runs) for MLsem type system call traces
 - Tree-sitter parse errors appear in CST output - use `--cst` to diagnose parsing issues
 
 ## Inference Pipeline ([lib/runner.ml](lib/runner.ml))
@@ -195,7 +200,7 @@ The typing environment (`Env.t`) maps `Variable.t -> TyScheme.ty`:
 
 - Initialize with `Defs.initial_env` containing R C API builtins
 - `Runner.extend_env` adds `dyn` type for missing free variables
-- Upper bound extraction: `TyScheme.get` then `GTy.ub` (see [lib/runner.ml](lib/runner.ml) line 58-62)
+- Upper bound extraction: `TyScheme.get` then `GTy.ub` in the body-inference path in [lib/runner.ml](lib/runner.ml)
 
 ### Test File Structure
 
@@ -254,7 +259,7 @@ Configuration: `System.Config.infer_overload := true` enables overload resolutio
 
 - **Private dependencies** - Don't assume public opam packages; MLsem/SSTT require authenticated GitHub access
 - **cmdliner version** - Don't use newer cmdliner APIs; the project is locked to 1.0.4
-- **Missing tree-sitter env vars** - Build fails without sourcing `setup-env.sh`
+- **Missing tree-sitter env vars** - Build fails if `TREESITTER_INCDIR` and `TREESITTER_LIBDIR` are not set correctly
 - **PAst vs Ast confusion** - PAst has strings, Ast has Variables; use appropriate type
 - **Type parser inline comments** - Use `//` not `/* */` in `.ty` files
 - **dune.inc out of sync** - Regenerate with `add_test.sh` rather than manual edits
