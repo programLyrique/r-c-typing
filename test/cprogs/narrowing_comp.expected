@@ -2,3 +2,5 @@ larger_than_3: ∀'a,'b. ('a & int1) -> 'a & int1
 
 size_bound: ∀'a,'b. ('a & vec[int(i('b & (..10)))]) -> 'a & vec[int(i('b & (..10)))]
 
+bail_if: (c_int_na, c_string) -> ()
+

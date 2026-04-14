@@ -360,8 +360,12 @@ let%test ".ty bindings have highest precedence" =
        Env.add v tys Defs.initial_env,
        Ast.DeclMap.empty)
   in
-  not (StrMap.mem "strerror" idenv)
-  && find_existing_binding "strerror" idenv env = find_existing_binding "strerror" StrMap.empty Defs.initial_env
+      match find_existing_binding "strerror" idenv env, find_existing_binding "strerror" StrMap.empty Defs.initial_env with
+      | Some (actual_v, actual_tys), Some (expected_v, expected_tys) ->
+        not (StrMap.mem "strerror" idenv)
+        && Variable.equal actual_v expected_v
+        && actual_tys == expected_tys
+      | _ -> false
 
 let%test "full function overrides declaration" =
   let decl_v = MVariable.create Immut (Some "foo") in
@@ -375,8 +379,8 @@ let%test "full function overrides declaration" =
      Env.add full_v full_ty env,
      Ast.DeclMap.empty)
   in
-  StrMap.find "foo" idenv = full_v
-  && Env.find full_v env = full_ty
+  Variable.equal (StrMap.find "foo" idenv) full_v
+  && Env.find full_v env == full_ty
 
 let%test "declaration does not override existing full function" =
   let full_v = MVariable.create Immut (Some "foo") in
@@ -395,5 +399,5 @@ let%test "declaration does not override existing full function" =
        Env.add v (TyScheme.mk_mono (GTy.mk Rstt.Cenums.void)) env,
        Ast.DeclMap.empty)
   in
-  StrMap.find "foo" idenv = full_v
-  && Env.find full_v env = full_ty
+  Variable.equal (StrMap.find "foo" idenv) full_v
+  && Env.find full_v env == full_ty
