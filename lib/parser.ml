@@ -1106,6 +1106,8 @@ let rec body_has_trailing_return ((_, expr) : A.e) =
   | A.Seq exprs -> body_has_trailing_return (List.hd (List.rev exprs))
   | _ -> false
 
+exception VariadicParameter of string
+
 let ensure_void_return body =
   if body_has_trailing_return body then body
   else
@@ -1122,14 +1124,14 @@ and aux_prep_func_def (func_def: preproc_function_def) =
   let aux_prep_param (p: anon_choice_stmt_id_d3c4b5f) = 
     match p with 
     | `Id (_,s) -> s
-    | `DOTDOTDOT (loc, _) -> failwith ("Not supported yet: variadic parameter in preprocessor function at " ^ (Position.string_of_lex_pos (conv_pos loc.start)))
-  in
-  let params = Option.fold ~none:[] ~some:(fun (p1, others) -> 
-    aux_prep_param p1 :: List.map (fun (_, p) -> aux_prep_param p) others
-  ) params |> 
-    List.map (fun p -> (Ast.Any, p)) 
+    | `DOTDOTDOT (loc, _) -> raise (VariadicParameter ("Not supported yet: variadic parameter in preprocessor function at " ^ (Position.string_of_lex_pos (conv_pos loc.start))))
   in
   try
+    let params = Option.fold ~none:[] ~some:(fun (p1, others) -> 
+      aux_prep_param p1 :: List.map (fun (_, p) -> aux_prep_param p) others
+    ) params |> 
+      List.map (fun p -> (Ast.Any, p)) 
+    in
     let body = match body with 
       | None -> (locs_to_pos end_param loc2, A.Return None)
       | Some (_loc3,comp) -> 
@@ -1154,6 +1156,10 @@ and aux_prep_func_def (func_def: preproc_function_def) =
   with Failure msg ->
     if !warn_unsupported then
       Printf.printf "Not supported yet: failed to parse preprocessor function body for %s: %s\n" name msg;
+    None
+  | VariadicParameter msg ->
+    if !warn_unsupported then
+      Printf.printf "%s\n" msg;
     None
 
 let aux_preproc_define (prepoc : preproc_def) : A.top_level_unit option =
