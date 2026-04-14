@@ -1,11 +1,3 @@
-Not supported yet: top level item
-Prep_incl (
-  (
-    "#include"
-    System_lib_str "<Rinternals.h>"
-    "\n"
-  )
-)
 f: ({ x : c_int_na ; y : c_int_na }) -> ()
 
 g: () -> { x : c_int_na ; y : c_int_na }

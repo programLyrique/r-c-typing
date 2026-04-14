@@ -331,6 +331,21 @@ let aux_param (p: anon_choice_param_decl_4ac2852) =
   | _ -> Boilerplate.map_anon_choice_param_decl_4ac2852 () p |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: parameter declaration"
 
+(** Extract parameter list from a [parameter_list] CST node. *)
+let aux_extract_params ((_loc1, content, _loc2) : parameter_list) : A.param list =
+  match content with
+  | `Opt_choice_param_decl_rep_COMMA_choice_param_decl (Some (p1, params)) ->
+      let all = (aux_param p1) :: (List.map (fun (_, p) -> aux_param p) params) in
+      List.filter (fun (ty, _) -> ty <> Ast.Void) all
+  | _ -> []
+
+(** Check whether a [declarator] contains a function declarator. *)
+let rec has_func_decl (decl: declarator) =
+  match decl with
+  | `Func_decl _ -> true
+  | `Poin_decl (_, _, _, _, inner) -> has_func_decl inner
+  | _ -> false
+
 let rec aux_params (decl: declarator) : int * A.param list =
   match decl with
   | `Func_decl (_, (_loc1, `Opt_choice_param_decl_rep_COMMA_choice_param_decl (Some (p1, params)), _loc2), _,_) ->
@@ -1184,6 +1199,37 @@ and aux_top_level_item defines (item : top_level_item) =
       (defines, aux_type_definition type_def)
   | `Prep_incl (_, `System_lib_str path, _) ->
       (defines, aux_system_lib_include path)
+  | `Decl (decl_spec, first_decl, more_decls, _semi) ->
+      let base_ty = aux_decl_spec decl_spec in
+      let try_func_of_decl (decl: anon_choice_opt_ms_call_modi_decl_decl_opt_gnu_asm_exp_2fa2f9e) =
+        match decl with
+        | `Opt_ms_call_modi_decl_decl_opt_gnu_asm_exp (_, declr, _) ->
+            begin match declr with
+            | `Func_decl_decl (name_decl, param_list, _, _) ->
+                (try
+                  let level, name = aux_decl_name name_decl in
+                  let params = aux_extract_params param_list in
+                  let ret_ty = Ast.build_ptr level base_ty in
+                  Some (Mlsem.Common.Position.dummy,
+                        A.Fundef (ret_ty, name, params,
+                                  (Mlsem.Common.Position.dummy, A.Seq [])))
+                with _ -> None)
+            | `Poin_decl (_, _, _, _, inner_decl) when has_func_decl inner_decl ->
+                (try
+                  let _, name = aux_decl_name inner_decl in
+                  let level, params = aux_params inner_decl in
+                  let ret_ty = Ast.build_ptr (level + 1) base_ty in
+                  Some (Mlsem.Common.Position.dummy,
+                        A.Fundef (ret_ty, name, params,
+                                  (Mlsem.Common.Position.dummy, A.Seq [])))
+                with _ -> None)
+            | _ -> None
+            end
+        | _ -> None
+      in
+      let all_decls = first_decl :: List.map snd more_decls in
+      let items = List.filter_map try_func_of_decl all_decls in
+      (defines, items)
   | _ ->
       if !warn_unsupported then begin
         Printf.printf "Not supported yet: top level item\n";

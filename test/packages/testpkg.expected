@@ -8,9 +8,9 @@ Entry points for .C convention:
   add_ints
   sum_doubles
 
-.C(add_ints): (lgl | int, lgl | int, int | lgl) -> c_void
+.C(add_ints): (lgl | int, lgl | int, lgl | int) -> c_void
 
-.C(sum_doubles): (dbl, int | lgl, dbl) -> c_void
+.C(sum_doubles): (dbl, lgl | int, dbl) -> c_void
 
 make_pair: (chr | any, chr | any) -> lang
 

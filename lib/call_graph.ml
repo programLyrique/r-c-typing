@@ -305,7 +305,13 @@ let topo_sort pasts call_graph =
   let past_map = Hashtbl.create (List.length pasts) in
   List.iter (fun (filename, past) ->
     match past with
-      | _, PAst.Fundef (_, name, _, _) -> Hashtbl.add past_map name (filename, past)
+      | _, PAst.Fundef (_, name, _, (_, PAst.Seq [])) ->
+          (* Declaration (empty body) — only register if no entry exists yet *)
+          if not (Hashtbl.mem past_map name) then
+            Hashtbl.replace past_map name (filename, past)
+      | _, PAst.Fundef (_, name, _, _) ->
+          (* Definition (has body) — always takes priority *)
+          Hashtbl.replace past_map name (filename, past)
       | _, PAst.TypeDecl _ -> ()
       | _, PAst.Define _ -> ()
       | _, PAst.Include _ -> ()

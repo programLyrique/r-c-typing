@@ -150,7 +150,7 @@ LANGSXP: lang
 ENVSXP: env
 ANYSXP: any_r_not_vec | vec
 DOTSXP: any
-EXPTRSXP: any // we should have a specific type for it
+EXTPTRSXP: any // we should have a specific type for it
 
 // R API: error/warning
 Rf_error: any -> empty // redundant with error but like fail. The best would be to generate 2 versions of the function and pick the one which type checks?
@@ -186,8 +186,8 @@ inherits: t(any, c_string) -> c_bool // to improve when supporting classes
 
 // Extermal pointers 
 // TODO: add a specific type 
-ExternalPtrAddr: t(any) -> *any
-MakeExternalPtr: t(*any, any, any) -> any
+R_ExternalPtrAddr: t(any) -> *any
+R_MakeExternalPtr: t(*any, any, any) -> any
 
 // C functions
 

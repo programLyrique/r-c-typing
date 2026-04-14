@@ -1,10 +1,2 @@
-Not supported yet: top level item
-Prep_incl (
-  (
-    "#include"
-    System_lib_str "<Rinternals.h>"
-    "\n"
-  )
-)
 mk_value: (env) | (int) -> int1
 

@@ -1,10 +1,2 @@
-Not supported yet: top level item
-Prep_incl (
-  (
-    "#include"
-    System_lib_str "<Rinternals.h>"
-    "\n"
-  )
-)
 sum_all: (dbl) -> dbl1
 

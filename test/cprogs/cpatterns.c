@@ -34,3 +34,18 @@ int non_constant_initializer_list(int x) {
     int a[2] = {x, x + 1};
     return a[0] + a[1];
 }
+
+/* --- Top-level function declarations (Decl CST nodes) --- */
+
+/* Func_decl_decl: non-pointer return */
+int declared_func(int a, int b);
+
+/* Poin_decl wrapping Func_decl: pointer return */
+int *declared_ptr_func(int n);
+
+/* Declaration followed by definition: both are processed in single-file mode */
+int declared_then_defined(int x);
+
+int declared_then_defined(int x) {
+    return x + 1;
+}

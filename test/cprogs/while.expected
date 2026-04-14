@@ -1,11 +1,3 @@
-Not supported yet: top level item
-Prep_incl (
-  (
-    "#include"
-    System_lib_str "<Rinternals.h>"
-    "\n"
-  )
-)
 test_while: ∀'a. ('a & int) -> 'a & int
 
 sum_while: (dbl) -> dbl1

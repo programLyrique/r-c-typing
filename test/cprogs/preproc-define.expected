@@ -1,11 +1,3 @@
-Not supported yet: top level item
-Prep_incl (
-  (
-    "#include"
-    System_lib_str "<Rinternals.h>"
-    "\n"
-  )
-)
 add_one: (int) -> int1
 
 add_magic: (int) -> int1
