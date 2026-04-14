@@ -2,9 +2,11 @@ create_str_from_c_string: () -> "hello"
 
 create_str_from_chr: () -> "world"
 
+create_str_from_concat: () -> "hello world"
+
 get_c_string_from_str: ((chr[^(int \ 0)]) -> c_string) & ((v0(clx | dbl | int | lgl | raw)) | (v[^(int \ 0)](clx | dbl | int | lgl | raw)) | (chr0) -> null)
 
 is_blank_string: (("" | null) -> c_true) & ((^(chr \ "")) -> c_false)
 
-to_char: ∀'a,'b. (('a & (vec[^(1..)] | sym)) -> chr1) & (('a & ({  ... } | null | lang | vec0 | env | (any -> any))) -> chr \ ^chr) & (('a & (v[^(1..)]('b) | sym) | 'b & 'a & (chr | (v[^(1..)]('b) | sym))) -> chr1 | 'b) & (('a & chr) -> 'a) & (('a & (v0('b) | {  ... } | null | lang | env | (any -> any)) | 'b & 'a & (chr | (v0('b) | {  ... } | null | lang | env | (any -> any)))) -> chr \ ^chr | 'b)
+to_char: ∀'a,'b. (('a & (vec[^(1..)] | sym)) -> chr1) & (('a & (null | env | {  ... } | (any -> any) | lang | vec0)) -> chr \ ^chr) & (('a & (sym | v[^(1..)]('b)) | 'b & 'a & (chr | (sym | v[^(1..)]('b)))) -> chr1 | 'b) & (('a & chr) -> 'a) & (('a & (null | env | {  ... } | (any -> any) | lang | v0('b)) | 'b & 'a & (chr | (null | env | {  ... } | (any -> any) | lang | v0('b)))) -> chr \ ^chr | 'b)
 

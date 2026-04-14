@@ -5,6 +5,7 @@ module A = PAst
 open Mlsem.Common
 
 module StrSet = Set.Make(String)
+module StrMap = Map.Make(String)
 
 let warn_unsupported = ref true
 
@@ -32,6 +33,21 @@ let default_include_dirs = ["/usr/include"; "/usr/local/include"]
     combinatorial blow-up. Also breaks include cycles since we mark a path as
     processed before recursing into it. *)
 let processed_headers : (string, unit) Hashtbl.t = Hashtbl.create 64
+
+let define_constants : A.const StrMap.t ref = ref StrMap.empty
+
+let reset_define_constants () = define_constants := StrMap.empty
+
+let remove_define_constant name =
+  define_constants := StrMap.remove name !define_constants
+
+let remember_define_constant name value =
+  define_constants := StrMap.add name value !define_constants
+
+let resolve_defined_string name =
+  match StrMap.find_opt name !define_constants with
+  | Some (A.CStr s) -> Some s
+  | _ -> None
 
 let reset_processed_headers () = Hashtbl.clear processed_headers
 
@@ -452,6 +468,7 @@ let rec aux_decl_name (decl : declarator) : int * string =
   | `Poin_decl (_,_,_,_,decl) -> let (level, name) = aux_decl_name decl in (level + 1, name)
   (* Array just adds a pointer indirection currently. We could also create an array type for the C side*)
   | `Array_decl (decl,_,_,_,_) -> let (level, name) = aux_decl_name decl in (level + 1, name)
+  | `Paren_decl (_, _, decl, _) -> aux_decl_name decl
   | _ -> Boilerplate.map_declarator () decl |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: function name"
 
@@ -551,8 +568,7 @@ and aux_string (s: string_) =
     | `Imm_tok_prec_p1_pat_c7f65b4 (loc, s) -> (loc,s)
     | `Esc_seq (loc, s) -> (loc,s)
   in
-  match s with 
-  | `Str_lit (prefix,escaped,(end_loc,_)) -> 
+  let string_literal_parts ((prefix, escaped, (end_loc, _)) : string_literal) =
     let pos_str = List.map unescape escaped in
     let str = String.concat "" (List.map snd pos_str) in
     let start_loc =
@@ -563,8 +579,50 @@ and aux_string (s: string_) =
       | `U8DQUOT (loc, _) -> loc
       | `DQUOT (loc, _) -> loc
     in
+    (start_loc, end_loc, str)
+  in
+  let identifier_parts ((loc, name) as identifier) =
+    match resolve_defined_string name with
+    | Some str -> (loc, loc, str)
+    | None ->
+        failwith
+          ("Not supported yet: concatenated strings containing unresolved identifiers: "
+          ^ token_to_string identifier)
+  in
+  match s with 
+  | `Str_lit str_lit ->
+    let start_loc, end_loc, str = string_literal_parts str_lit in
     (locs_to_pos start_loc end_loc, A.Const (A.CStr str))
-  | _ -> failwith "Not supported yet: strings with escaped characters or concatenated strings"
+  | `Conc_str (head, tail) ->
+    let start_loc, end_loc, str =
+      match head with
+      | `Id_str_lit (identifier, str_lit) ->
+        let start_loc, _, first = identifier_parts identifier in
+        let _, end_loc, second = string_literal_parts str_lit in
+        (start_loc, end_loc, first ^ second)
+      | `Str_lit_str_lit (str1, str2) ->
+        let start_loc, _, first = string_literal_parts str1 in
+        let _, end_loc, second = string_literal_parts str2 in
+        (start_loc, end_loc, first ^ second)
+      | `Str_lit_id (str_lit, identifier) ->
+        let start_loc, _, first = string_literal_parts str_lit in
+        let _, end_loc, second = identifier_parts identifier in
+        (start_loc, end_loc, first ^ second)
+    in
+    let end_loc, str =
+      List.fold_left
+        (fun (_current_end, acc) fragment ->
+          match fragment with
+          | `Str_lit str_lit ->
+            let _, end_loc, fragment = string_literal_parts str_lit in
+            (end_loc, acc ^ fragment)
+          | `Id identifier ->
+            let _, end_loc, fragment = identifier_parts identifier in
+            (end_loc, acc ^ fragment))
+        (end_loc, str)
+        tail
+    in
+    (locs_to_pos start_loc end_loc, A.Const (A.CStr str))
 and aux_num_lit  s = 
   let has_float_syntax s =
     let rec loop i =
@@ -1371,9 +1429,17 @@ and aux_top_level_item defines (item : top_level_item) =
         | None -> (defines, [])
         | Some else_branch -> aux_top_level_else_branch defines else_branch)
   | `Prep_def prepoc_def ->
-      let defines = StrSet.add (preproc_define_name prepoc_def) defines in
+      let name = preproc_define_name prepoc_def in
+      let defines = StrSet.add name defines in
+      remove_define_constant name;
+      let item = aux_preproc_define prepoc_def in
+      begin
+        match item with
+        | Some (_, A.Define (name, value)) -> remember_define_constant name value
+        | _ -> ()
+      end;
       (defines,
-       match aux_preproc_define prepoc_def with
+       match item with
        | None -> []
        | Some item -> [item])
   | `Prep_func_def func_def ->
@@ -1487,6 +1553,7 @@ and aux_system_lib_include (_loc, path) =
       end
 
 let aux_translation_unit tree =
+  reset_define_constants ();
   snd (aux_top_level_items !predefined_defines tree)
 
 let to_ast (res: (CST.translation_unit, CST.extra) Tree_sitter_run.Parsing_result.t) =
@@ -1521,6 +1588,13 @@ let%test "preproc define with literal creates PAst.Define" =
   let res = parse_string "#define ONE 1L\nint f() { return ONE; }" in
   match to_ast res with
   | (_, A.Define ("ONE", A.CInt 1)) :: _ -> true
+  | _ -> false
+
+let%test "concatenated string resolves identifier from literal define" =
+  let res = parse_string "#define HELLO \"hello\"\nchar *f() { return HELLO \" world\"; }" in
+  match to_ast res with
+  | [ (_, A.Define ("HELLO", A.CStr "hello"));
+      (_, A.Fundef (_, "f", _, (_, A.Return (Some (_, A.Const (A.CStr "hello world")))))) ] -> true
   | _ -> false
 
 let%test "valueless define still enables subsequent ifdef" =

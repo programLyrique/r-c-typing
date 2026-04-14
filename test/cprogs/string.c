@@ -10,6 +10,12 @@ SEXP create_str_from_chr()
     return ScalarString(mkChar("world"));
 }
 
+SEXP create_str_from_concat()
+{
+    return mkString("hello"
+                    " world");
+}
+
 const char *get_c_string_from_str(SEXP s)
 {
     if (TYPEOF(s) != STRSXP || LENGTH(s) == 0)
