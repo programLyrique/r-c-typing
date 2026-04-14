@@ -1263,7 +1263,7 @@ and aux_system_lib_include (_loc, path) =
   (* Strip surrounding < > from the system lib string token *)
   let relative = String.sub path 1 (String.length path - 2) in
   match resolve_header relative with
-  | None -> []
+  | None -> Printf.eprintf "Could not find system header: %s\n" relative;  []
   | Some full_path ->
       if Hashtbl.mem processed_headers full_path then
         (* Already processed once in this run; its declarations are already
@@ -1273,6 +1273,7 @@ and aux_system_lib_include (_loc, path) =
       else begin
         (* Mark before recursing so a cycle A -> B -> A terminates. *)
         Hashtbl.add processed_headers full_path ();
+        Printf.printf "Processing system header: %s\n" full_path;
         let cst = parse_file full_path in
         match cst.program with
         | None -> []

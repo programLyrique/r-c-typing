@@ -17,3 +17,8 @@ SEXP size_bound(SEXP v) {
     }
     return v;
 }
+
+void bail_if(int err, const char * what){
+  if(err)
+    Rf_errorcall(R_NilValue, "System failure for: %s (%s)", what, strerror(errno));
+}

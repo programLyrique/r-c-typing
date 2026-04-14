@@ -38,6 +38,40 @@ let extend_env mlast env =
     (fun env v -> (Printf.printf "Missing: %s at %s \n" (Variable.get_unique_name v) (Position.string_of_pos (Variable.get_location v));
      Env.add v (TyScheme.mk_mono GTy.dyn) env)) env
 
+let is_declaration = function
+  | _, PAst.Fundef (_, _, _, (_, PAst.Seq [])) -> true
+  | _ -> false
+
+let has_ty_binding name = Defs.StrMap.mem name Defs.defs_map
+
+let find_existing_binding name idenv env =
+  match StrMap.find_opt name idenv with
+  | Some v ->
+      (try Some (v, Env.find v env)
+       with Not_found -> None)
+  | None ->
+      match Defs.StrMap.find_opt name Defs.defs_map with
+      | Some v ->
+          (try Some (v, Env.find v env)
+           with Not_found -> None)
+      | None -> None
+
+let has_existing_binding name idenv =
+  StrMap.mem name idenv || has_ty_binding name
+
+let print_visible kind visible v tys =
+  if visible then
+    (match kind with
+    | `Default ->
+        Format.printf "%a: @[<h>%a@]@.@." 
+    | `SimpleC ->
+        Format.printf "c(%a): @[<h>%a@]@.@." 
+    | `DotC ->
+        Format.printf ".C(%a): @[<h>%a@]@.@." 
+    | `Define ->
+        Format.printf "define %a: @[<h>%a@]@.@.") 
+      Variable.pp v TyScheme.pp_short tys
+
 let infer_ast visible opts (idenv, env, decl) (ast : Ast.e) =
   let name,v = 
     match ast with 
@@ -57,13 +91,13 @@ let infer_ast visible opts (idenv, env, decl) (ast : Ast.e) =
         let reconstructed = System.Reconstruction.infer env renvs mlsem_ast in
         let typ = System.Checker.typeof_def env reconstructed mlsem_ast in
         let tys = TyScheme.norm_and_simpl typ in
-        if visible then Format.printf "%a: @[<h>%a@]@.@." Variable.pp v TyScheme.pp_short tys ;
         let (vars, typ) = TyScheme.get tys in 
         let typ = GTy.ub typ in 
         (*Format.printf "%a: upper bound= %a@.@." Variable.pp v  Ty.pp typ ;*)
         (* We only keep the upper bound as type for v and add it to the environment *)
         let tys = TyScheme.mk vars (GTy.mk typ) in
-        StrMap.add name v idenv, Env.add v tys env, decl
+        print_visible `Default visible v tys;
+        (StrMap.add name v idenv, Env.add v tys env, decl)
       end
     else 
       idenv, env, decl
@@ -81,7 +115,7 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
 
   (* When processing items from external headers, don't override an existing
      definition (e.g. from a .ty file or a previous header). *)
-  if skip_if_defined && name <> "" && StrMap.mem name idenv then
+  if skip_if_defined && name <> "" && has_existing_binding name idenv then
     (idenv, env, decl)
   else
   match past with
@@ -97,8 +131,8 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
       let v = MVariable.create Immut (Some name) in
       let ty = Ast.typeof_const (PAst.aux_const value) |> GTy.mk |> TyScheme.mk_mono in
       if opts.debug && visible then
-        Format.printf "define %a: @[<h>%a@]@.@." Variable.pp v TyScheme.pp_short ty;
-      if skip_if_defined then
+        print_visible `Define visible v ty;
+      if skip_if_defined && not (Defs.StrMap.mem name Defs.defs_map) then
         Defs.BuiltinVar.register_dynamic name (Ast.typeof_const (PAst.aux_const value));
       (StrMap.add name v idenv, Env.add v ty env, decl)
   | _, PAst.TypeDecl (name, ty) ->
@@ -106,20 +140,52 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
   | _,PAst.Fundef (ret_ty, name, params, _) when convention=Some(Package.C) ->
     (try
       let ty = C_interface.infer_dotC ~typedef_map:decl ret_ty params |> GTy.mk |> TyScheme.mk_mono in
-      let v = MVariable.create Immut (Some name) in
-      if visible then
-        Format.printf ".C(%a): @[<h>%a@]@.@." Variable.pp v TyScheme.pp_short ty;
-      (StrMap.add name v idenv, Env.add v ty env, decl)
+      if has_ty_binding name then begin
+        (match find_existing_binding name idenv env with
+         | Some (v, tys) -> print_visible `DotC visible v tys
+         | None -> ());
+        (idenv, env, decl)
+      end else if is_declaration past && StrMap.mem name idenv then
+        (idenv, env, decl)
+      else
+        let v = MVariable.create Immut (Some name) in
+        print_visible `DotC visible v ty;
+        (StrMap.add name v idenv, Env.add v ty env, decl)
     with Failure msg ->
       if visible then
         Format.printf "%s:@.untypeable: %s@." name msg;
       (idenv, env, decl))
   | _, (PAst.Fundef (ret_ty, name, params, _) as e) when simple_c_fun && C_interface.is_simple_c_function e ->
     let ty = C_interface.infer_cfun ret_ty params |> GTy.mk |>  TyScheme.mk_mono in
-    let v = MVariable.create Immut (Some name) in
-    if visible then
-      Format.printf "c(%a): @[<h>%a@]@.@." Variable.pp v TyScheme.pp_short ty;
-    (StrMap.add name v idenv, Env.add v ty env, decl)
+    if has_ty_binding name then begin
+      (match find_existing_binding name idenv env with
+       | Some (v, tys) -> print_visible `SimpleC visible v tys
+       | None -> ());
+      (idenv, env, decl)
+    end else if is_declaration past && StrMap.mem name idenv then
+      (idenv, env, decl)
+    else
+      let v = MVariable.create Immut (Some name) in
+      print_visible `SimpleC visible v ty;
+      (StrMap.add name v idenv, Env.add v ty env, decl)
+  | _, PAst.Fundef (ret_ty, name, params, _) when is_declaration past ->
+    if has_ty_binding name then begin
+      (match find_existing_binding name idenv env with
+       | Some (v, tys) -> print_visible `Default visible v tys
+       | None -> ());
+      (idenv, env, decl)
+    end else if StrMap.mem name idenv then
+      (idenv, env, decl)
+    else
+      let ty = C_interface.infer_cfun ret_ty params |> GTy.mk |> TyScheme.mk_mono in
+      let v = MVariable.create Immut (Some name) in
+      print_visible `Default visible v ty;
+      (StrMap.add name v idenv, Env.add v ty env, decl)
+  | _, PAst.Fundef (_, name, _, _) when has_ty_binding name ->
+    (match find_existing_binding name idenv env with
+     | Some (v, tys) -> print_visible `Default visible v tys
+     | None -> ());
+    (idenv, env, decl)
   | _ ->
 
       let e = PAst.transform {PAst.id = idenv; decl} past in
@@ -279,3 +345,55 @@ let%test "filter predicate with Some substring" =
 let%test "filter predicate with None accepts all" =
   let pred = make_substring_pred None in
   pred "anything" && pred "everything"
+
+let%test ".ty bindings have highest precedence" =
+  let tys = TyScheme.mk_mono GTy.dyn in
+  let past = (Position.dummy, PAst.Fundef (Ast.Int, "strerror", [], (Position.dummy, PAst.Seq []))) in
+  let idenv, env, _ =
+    if has_ty_binding "strerror" then
+      (StrMap.empty, Defs.initial_env, Ast.DeclMap.empty)
+    else if is_declaration past && StrMap.mem "strerror" StrMap.empty then
+      (StrMap.empty, Defs.initial_env, Ast.DeclMap.empty)
+    else
+      let v = MVariable.create Immut (Some "strerror") in
+      (StrMap.add "strerror" v StrMap.empty,
+       Env.add v tys Defs.initial_env,
+       Ast.DeclMap.empty)
+  in
+  not (StrMap.mem "strerror" idenv)
+  && find_existing_binding "strerror" idenv env = find_existing_binding "strerror" StrMap.empty Defs.initial_env
+
+let%test "full function overrides declaration" =
+  let decl_v = MVariable.create Immut (Some "foo") in
+  let full_v = MVariable.create Immut (Some "foo") in
+  let decl_ty = TyScheme.mk_mono GTy.dyn in
+  let full_ty = TyScheme.mk_mono (GTy.mk Rstt.Cenums.void) in
+  let idenv = StrMap.add "foo" decl_v StrMap.empty in
+  let env = Env.add decl_v decl_ty Env.empty in
+  let idenv, env, _ =
+    (StrMap.add "foo" full_v idenv,
+     Env.add full_v full_ty env,
+     Ast.DeclMap.empty)
+  in
+  StrMap.find "foo" idenv = full_v
+  && Env.find full_v env = full_ty
+
+let%test "declaration does not override existing full function" =
+  let full_v = MVariable.create Immut (Some "foo") in
+  let full_ty = TyScheme.mk_mono GTy.dyn in
+  let idenv = StrMap.add "foo" full_v StrMap.empty in
+  let env = Env.add full_v full_ty Env.empty in
+  let past = (Position.dummy, PAst.Fundef (Ast.Int, "foo", [], (Position.dummy, PAst.Seq []))) in
+  let idenv, env, _ =
+    if has_ty_binding "foo" then
+      (idenv, env, Ast.DeclMap.empty)
+    else if is_declaration past && StrMap.mem "foo" idenv then
+      (idenv, env, Ast.DeclMap.empty)
+    else
+      let v = MVariable.create Immut (Some "foo") in
+      (StrMap.add "foo" v idenv,
+       Env.add v (TyScheme.mk_mono (GTy.mk Rstt.Cenums.void)) env,
+       Ast.DeclMap.empty)
+  in
+  StrMap.find "foo" idenv = full_v
+  && Env.find full_v env = full_ty
