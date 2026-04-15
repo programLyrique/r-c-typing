@@ -97,13 +97,28 @@ let get_c_files path =
   let src_dir = Filename.concat path "src" in
   if not (Sys.file_exists src_dir && Sys.is_directory src_dir) then []
   else
-    try
-      let files = Sys.readdir src_dir in
-      Array.fold_left (fun acc filename ->
-        let filepath = Filename.concat src_dir filename in
-        if not (Sys.is_directory filepath) &&
-           (Filename.check_suffix filename ".c" || Filename.check_suffix filename ".h") then
-          filepath :: acc
-        else acc
-      ) [] files
-    with _ -> []
+    (* Packages commonly vendor helper libraries in subdirectories of [src/]
+       (e.g. vctrs has [src/rlang/], utf8 has [src/utf8lite/src/]). Their
+       [.h] files contain [#define]s used by the top-level sources, so we
+       need to collect the full transitive closure. *)
+    let rec walk dir acc =
+      try
+        let entries = Sys.readdir dir in
+        Array.fold_left (fun acc entry ->
+          let entry_path = Filename.concat dir entry in
+          if Sys.is_directory entry_path then walk entry_path acc
+          else if Filename.check_suffix entry ".c" || Filename.check_suffix entry ".h" then
+            entry_path :: acc
+          else acc
+        ) acc entries
+      with _ -> acc
+    in
+    let all_files = walk src_dir [] in
+    (* Parse headers before source files so that [#define]s are registered
+       in [Parser.define_constants] before any [.c] file that references
+       them (e.g. [#define R_PRI_SSIZE "d"] in [rlang-types.h] must be
+       known before [arg.c] uses [`"%" R_PRI_SSIZE "\n"`]). *)
+    let headers, sources =
+      List.partition (fun f -> Filename.check_suffix f ".h") all_files
+    in
+    headers @ sources
