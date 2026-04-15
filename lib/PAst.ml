@@ -321,7 +321,7 @@ let rec aux_e env (pos,e) =
       in
       let _, _, _, e = seq_e in
       e
-  | Comma _ -> failwith "Comma operator not supported yet"
+  | Comma (e1, e2) -> Ast.Seq (aux_e env e1, aux_e env e2)
   | Cast (ty, e) -> Ast.Cast (resolve_ctype env.decl ty, aux_e env e)
   | VarDeclare (typ, (_,Id s)) ->
       let typ = resolve_ctype env.decl typ in

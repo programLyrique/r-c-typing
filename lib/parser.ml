@@ -540,16 +540,23 @@ let aux_type_definition ((_, _, type_def_ty, (first_decl, rest_decls), _, _) : t
   in
   aux_one first_decl :: List.map (fun (_, td) -> aux_one td) rest_decls
 
-let aux_param (p: anon_choice_param_decl_4ac2852) = 
-  match p with 
-  | `Param_decl (decl_spec, Some (`Decl decl), _) -> 
+(** Raised by [aux_param] when it encounters a variadic parameter ([...]).
+    Callers that process a whole function declaration catch this and drop
+    the function from the output, emitting a warning that names the
+    function — the warning is better attached to the function as a whole
+    than to one anonymous parameter position. *)
+exception Variadic_function
+
+let aux_param (p: anon_choice_param_decl_4ac2852) =
+  match p with
+  | `Param_decl (decl_spec, Some (`Decl decl), _) ->
     let ty = aux_decl_spec decl_spec in
     let level, name = aux_decl_name decl in
     (Ast.build_ptr level ty, name)
   | `Param_decl (decl_spec, None, _) ->
     let ty = aux_decl_spec decl_spec in
     (ty, "anon_param_" ^ string_of_int (gen_id ()))
-  | `Vari_param _ -> failwith "Not supported yet: variable number of parameters (...) in declaration"
+  | `Vari_param _ -> raise Variadic_function
   | _ -> Boilerplate.map_anon_choice_param_decl_4ac2852 () p |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: parameter declaration"
 
@@ -1478,16 +1485,23 @@ and aux_top_level_item defines (item : top_level_item) =
   match item with
   | `Func_defi (_, decl_spec, _, decl, body) ->
       let _,name = aux_decl_name decl in
-      (* the part with the parameters can also carry the information about pointers for the return type! *)
-      let level, params = aux_params decl in
-      let return_type = Ast.build_ptr level (aux_decl_spec decl_spec) in
-      let body = aux_body body in
-      let body =
-        match return_type with
-        | Ast.Void -> ensure_void_return body
-        | _ -> body
-      in
-      (defines, [Mlsem.Common.Position.dummy, A.Fundef (return_type, name, params, body)])
+      (try
+        (* the part with the parameters can also carry the information about pointers for the return type! *)
+        let level, params = aux_params decl in
+        let return_type = Ast.build_ptr level (aux_decl_spec decl_spec) in
+        let body = aux_body body in
+        let body =
+          match return_type with
+          | Ast.Void -> ensure_void_return body
+          | _ -> body
+        in
+        (defines, [Mlsem.Common.Position.dummy, A.Fundef (return_type, name, params, body)])
+      with Variadic_function ->
+        if !warn_unsupported then
+          Printf.eprintf
+            "Not supported yet: variadic parameter (...) in function `%s`; skipping function\n"
+            name;
+        (defines, []))
   | `Prep_ifdef (directive, name_tok, body, else_opt, _endif_tok) ->
       let name = token_to_string name_tok in
       let is_defined = StrSet.mem name defines in
@@ -1508,6 +1522,12 @@ and aux_top_level_item defines (item : top_level_item) =
         | Some else_branch -> aux_top_level_else_branch defines else_branch)
   | `Prep_def prepoc_def ->
       let name = preproc_define_name prepoc_def in
+      (* Predefined constants should not be redefined, as if they are predefined,
+        it is because their definition did not parse correctly so we hard-coded them.
+      Without this, this would basically erase them from the define_constant table. *)
+      if StrMap.mem name default_predefined_define_constants then
+        (defines, [])
+      else (
       let defines = StrSet.add name defines in
       remove_define_constant name;
       let item = aux_preproc_define prepoc_def in
@@ -1519,7 +1539,7 @@ and aux_top_level_item defines (item : top_level_item) =
       (defines,
        match item with
        | None -> []
-       | Some item -> [item])
+       | Some item -> [item]))
   | `Prep_func_def func_def ->
       (defines,
        match aux_prep_func_def func_def with
