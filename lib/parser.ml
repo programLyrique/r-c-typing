@@ -246,18 +246,27 @@ type enum_counter =
   | EnumUnknown
 
 let rec aux_struct_fields name fields =
-  let rec aux_field_decl_name (decl : field_declarator) : int * string =
+  (* The [bool] reports whether a function declarator was seen anywhere in
+     the chain. When true, the caller approximates the field's base type as
+     [Ast.Any] (so the type becomes [Ptr ... (Ptr Any)]), since function
+     pointers are not modelled as value pointers in our type system. *)
+  let rec aux_field_decl_name (decl : field_declarator) : int * string * bool =
     match decl with
-    | `Id (_loc, s) -> (0, s)
+    | `Id (_loc, s) -> (0, s, false)
     | `Poin_field_decl (_, _, _, _, d) ->
-        let level, field_name = aux_field_decl_name d in
-        (level + 1, field_name)
+        let level, field_name, is_fp = aux_field_decl_name d in
+        (level + 1, field_name, is_fp)
     | `Array_field_decl (d, _, _, _, _) ->
-        let level, field_name = aux_field_decl_name d in
-        (level + 1, field_name)
+        let level, field_name, is_fp = aux_field_decl_name d in
+        (level + 1, field_name, is_fp)
     | `Paren_field_decl (_, _, d, _) -> aux_field_decl_name d
     | `Attr_field_decl (d, _) -> aux_field_decl_name d
-    | `Func_field_decl _ -> failwith "Not supported yet: function pointer fields"
+    | `Func_field_decl (inner_decl, _params) ->
+        if !warn_unsupported then
+          Printf.eprintf
+            "Not supported yet: function pointer field; approximating as an opaque pointer\n";
+        let level, field_name, _ = aux_field_decl_name inner_decl in
+        (level, field_name, true)
   in
   let aux_field_decl (field_decl : field_declaration_declarator) =
     let first_decl, first_bits, other_decls = field_decl in
@@ -290,8 +299,9 @@ let rec aux_struct_fields name fields =
                                Printf.printf
                                  "Not supported yet: bitfield width is ignored in struct field declaration\n"
                            | Some _ -> ());
-                           let level, field_name = aux_field_decl_name decl in
-                           (Ast.build_ptr level base_ty, field_name))
+                           let level, field_name, is_fp = aux_field_decl_name decl in
+                           let base = if is_fp then Ast.Any else base_ty in
+                           (Ast.build_ptr level base, field_name))
               in
               collect (List.rev_append fields_from_item acc) rest
           | `Prep_def _ | `Prep_func_def _ | `Prep_call _
@@ -445,11 +455,21 @@ and aux_decl_spec decl_spec =
   let (_, type_spec, _) = decl_spec in
   aux_type_spec type_spec
 
-(* For pointers *)
+(* For pointers, arrays, parenthesized and function-style abstract declarators.
+   Arrays decay to pointers in expression contexts, so they add one pointer
+   level like [Abst_poin_decl]. For function declarators we cannot model the
+   function type itself, so we fall back to [Ast.Any] and rely on surrounding
+   pointer/array wrappers to provide the correct level of indirection. *)
 let rec aux_abstract_declarator (base_type: Ast.ctype) (abs_decl: abstract_declarator option) =
-  let aux = function 
-    `Abst_poin_decl (_,_,_,decl) -> Ast.Ptr (aux_abstract_declarator base_type decl)
-    | _ -> failwith "Not supported yet: abstract declarator"
+  let aux = function
+    | `Abst_poin_decl (_,_,_,decl) -> Ast.Ptr (aux_abstract_declarator base_type decl)
+    | `Abst_array_decl (decl,_,_,_,_) -> Ast.Ptr (aux_abstract_declarator base_type decl)
+    | `Abst_paren_decl (_, _, decl, _) -> aux_abstract_declarator base_type (Some decl)
+    | `Abst_func_decl (decl, _) ->
+        if !warn_unsupported then
+          Printf.eprintf
+            "Not supported yet: function declarator in abstract declarator; approximating as an opaque pointer\n";
+        aux_abstract_declarator Ast.Any decl
   in
   Option.fold ~none:base_type
     ~some:aux abs_decl
@@ -759,6 +779,30 @@ and aux_not_bin_expression (e : expression_not_binary) =
             let cast_zero = (locs_to_pos loc1 loc_rp, A.Cast (ty, zero)) in
             (locs_to_pos loc1 loc_rp, A.Call (sizeof_id, [cast_zero]))
       end
+  | `Comp_lit_exp ((loc_lp, _), ty, (_loc_rp, _), init_list) ->
+      (* C99 compound literal: `(type){ init... }`. Lower to `(type)init` so
+         that the type is preserved for the enclosing expression. For
+         constant initializers we keep the values; for dynamic ones we lose
+         them but preserve the type (consistent with sizeof lowering). *)
+      let ct = aux_type_descriptor ty in
+      let ((l1, _), _, _, (l2, _)) = init_list in
+      let pos_init = locs_to_pos l1 l2 in
+      let init_expr =
+        match aux_initializer_list_plan init_list with
+        | InitConst c -> (pos_init, A.Const c)
+        | InitDynamic _ ->
+            (* Dynamic initializer (e.g., designated fields referencing
+               variables, like `(struct r_lazy){ .x = some_var, ... }`).
+               We drop the initializer values and substitute CInt 0 as a
+               placeholder; the surrounding Cast still carries the type, so
+               consumers see the compound literal's declared type. *)
+            if !warn_unsupported then
+              Printf.eprintf
+                "Not supported yet: compound literal with non-constant initializers; dropping values but preserving type\n";
+            (pos_init, A.Const (A.CInt 0))
+      in
+      let pos = Position.join (loc_to_pos loc_lp) (fst init_expr) in
+      (pos, A.Cast (ct, init_expr))
   | _ ->
     Boilerplate.map_expression_not_binary () e |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: expresion_not_binary"
@@ -1097,21 +1141,30 @@ and aux_declaration typ (decl: anon_choice_opt_ms_call_modi_decl_decl_opt_gnu_as
                   (Mlsem.Common.Position.dummy, A.Seq (var_decl :: init_empty :: assigns))
             end
       end
-  | `Opt_ms_call_modi_decl_decl_opt_gnu_asm_exp (_, declr, _) -> 
-      let (level, name) = aux_decl2_name declr in
-      let typ = Ast.build_ptr level typ in
+  | `Opt_ms_call_modi_decl_decl_opt_gnu_asm_exp (_, declr, _) ->
+      let (level, name, is_fp) = aux_decl2_name declr in
+      let base = if is_fp then Ast.Any else typ in
+      let typ = Ast.build_ptr level base in
       (Mlsem.Common.Position.dummy, A.VarDeclare (typ, (Mlsem.Common.Position.dummy, A.Id name)))
 and aux_declarations ((decl_type, decl1, decls, _loc2): declaration) =
   let typ = aux_decl_spec decl_type in
   (Mlsem.Common.Position.dummy, A.Seq ((aux_declaration typ decl1) :: (List.map (fun (_, d) -> aux_declaration typ d) decls)))
-and aux_decl2_name (decl: declaration_declarator) = 
+(* Returns (pointer_level, name, is_function_pointer). When [is_function_pointer]
+   is true, callers should approximate the base type as [Ast.Any] since function
+   pointers are not modelled as value pointers in our type system. *)
+and aux_decl2_name (decl: declaration_declarator) =
   match decl  with
-  | `Id tok -> (0, token_to_string tok)
-  | `Poin_decl (_,_,_,_,decl) -> let (level, name) = aux_decl_name decl in (level + 1, name)
-  | `Array_decl (decl,_,_,_,_) -> let (level, name) = aux_decl_name decl in (level + 1, name)
-  | _ -> 
-    Boilerplate.map_declaration_declarator () decl |> Tree_sitter_run.Raw_tree.to_channel stderr ;
-    failwith "Not supported yet: complex declaration names"
+  | `Id tok -> (0, token_to_string tok, false)
+  | `Poin_decl (_,_,_,_,decl) -> let (level, name) = aux_decl_name decl in (level + 1, name, false)
+  | `Array_decl (decl,_,_,_,_) -> let (level, name) = aux_decl_name decl in (level + 1, name, false)
+  | `Paren_decl (_, _, decl, _) -> let (level, name) = aux_decl_name decl in (level, name, false)
+  | `Attr_decl (decl, _) -> let (level, name) = aux_decl_name decl in (level, name, false)
+  | `Func_decl_decl (inner_decl, _, _, _) ->
+      if !warn_unsupported then
+        Printf.eprintf
+          "Not supported yet: function pointer declaration; approximating as an opaque pointer\n";
+      let (level, name) = aux_decl_name inner_decl in
+      (level, name, true)
 and aux_block_item (item : block_item) =
   match item with
   | `Stmt stmt -> aux_statement stmt
