@@ -25,6 +25,31 @@ let predefined_defines = ref default_predefined_defines
 let set_predefined_defines defines =
   predefined_defines := StrSet.of_list defines
 
+(** TEMPORARY WORKAROUND: preloaded string values for a few macros we can't
+    currently resolve through normal preprocessing. These are either (a) in
+    system headers we don't parse (e.g. [<Rinternals.h>], [<inttypes.h>]'s
+    deeper expansions), or (b) guarded by [#if R_VERSION < R_Version(...)]
+    conditions that our [eval_preproc_expression] can't evaluate because it
+    lacks numeric-valued defines and function-like macro support.
+
+    The long-term plan is to extend [eval_preproc_expression] with numeric
+    defines and function-like macro evaluation (at minimum [R_Version])
+    so the conditions in package headers resolve correctly. Until then,
+    grow this list as new packages surface missing macros. *)
+let default_predefined_define_constants : A.const StrMap.t =
+  List.fold_left (fun m (k, v) -> StrMap.add k v m) StrMap.empty [
+    (* R long-vector format specifier; defined by R >= 4.4 in Rinternals.h. *)
+    "R_PRIdXLEN_T", A.CStr "d";
+    (* <inttypes.h> printf specifiers for 64-bit integers. On 64-bit Linux
+       these expand via [__PRI64_PREFIX = "l"]; we flatten to the expanded
+       form. *)
+    "PRIu64", A.CStr "lu";
+    "PRId64", A.CStr "ld";
+    "PRIx64", A.CStr "lx";
+    "PRIX64", A.CStr "lX";
+    "PRIo64", A.CStr "lo";
+  ]
+
 let default_include_dirs = ["/usr/include"; "/usr/local/include"]
 
 (** Memoization cache: each resolved header path is parsed and processed at
@@ -34,9 +59,9 @@ let default_include_dirs = ["/usr/include"; "/usr/local/include"]
     processed before recursing into it. *)
 let processed_headers : (string, unit) Hashtbl.t = Hashtbl.create 64
 
-let define_constants : A.const StrMap.t ref = ref StrMap.empty
+let define_constants : A.const StrMap.t ref = ref default_predefined_define_constants
 
-let reset_define_constants () = define_constants := StrMap.empty
+let reset_define_constants () = define_constants := default_predefined_define_constants
 
 let remove_define_constant name =
   define_constants := StrMap.remove name !define_constants
@@ -1606,7 +1631,14 @@ and aux_system_lib_include (_loc, path) =
       end
 
 let aux_translation_unit tree =
-  reset_define_constants ();
+  (* Note: we intentionally do NOT reset [define_constants] here. A package's
+     [.h] files are parsed before its [.c] files (see [Package.get_c_files]),
+     and source files reference [#define]s established in the headers (e.g.
+     [#define R_PRI_SSIZE "d"] in [rlang-types.h] is used by [arg.c] as
+     [`"%" R_PRI_SSIZE "\n"`]). Resetting here would force each file to
+     rediscover every macro in isolation, which defeats the local-include
+     strategy of parsing the full source tree. The same logic is why
+     [processed_headers] also accumulates across files. *)
   snd (aux_top_level_items !predefined_defines tree)
 
 let to_ast (res: (CST.translation_unit, CST.extra) Tree_sitter_run.Parsing_result.t) =
