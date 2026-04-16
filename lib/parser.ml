@@ -967,8 +967,18 @@ and aux_switch_statement (switch_stmt: switch_statement) =
   let expr  = aux_paren_expr expr in
   let body = aux_compound_stmt cases in
 
-  match body with 
-  | pos, A.Seq lst -> (Position.join (loc_to_pos loc1) pos, A.Switch (expr, lst))
+  match body with
+  | pos, A.Seq lst ->
+      (* Filter out non-case/non-default items that can appear in the switch
+         compound statement (e.g. preprocessor directives turned into Const CNull,
+         or declarations). Only Case and Default are meaningful to the switch. 
+         TODO: actually support the preprocessor inside here*)
+      let lst = List.filter (fun (_, item) ->
+        match item with
+        | A.Case _ | A.Default _ -> true
+        | _ -> false
+      ) lst in
+      (Position.join (loc_to_pos loc1) pos, A.Switch (expr, lst))
   | _ -> failwith "Unexpected body in switch statement"
 
 and aux_labeled_statement (((loc_label, label), (loc_colon, _), _body) as labeled_stmt : labeled_statement) =
@@ -992,7 +1002,7 @@ and aux_non_case_statement (stmt: non_case_statement) =
   | `Do_stmt do_stmt -> aux_do_statement do_stmt
   | `Brk_stmt ((l1, _), (l2, _)) -> (locs_to_pos l1 l2, A.Break)
   | `Cont_stmt ((l1, _), (l2, _)) -> (locs_to_pos l1 l2, A.Next)
-  | `Goto_stmt ((l1, _),_, (l2, _)) -> (locs_to_pos l1 l2, Return None)
+  | `Goto_stmt ((l1, _),_, (l2, _)) -> (locs_to_pos l1 l2, A.Const A.CNull) (* Currently ignore gotos*)
   | `Labe_stmt labeled_stmt -> aux_labeled_statement labeled_stmt
   | `Switch_stmt st -> aux_switch_statement st
   | `Attr_stmt _ -> failwith "Not supported yet: attribute statements"

@@ -281,18 +281,26 @@ let rec aux_e env (pos,e) =
   | Break -> Ast.Break
   | Next -> Ast.Next
   | Switch  (e, cases) -> 
-      (*Detects break and return; remove break*)
-      let remove_break body =
-        match body with 
-        | Seq sts -> 
+      (*Detects break and return; remove break.
+        Recurses into nested Seq nodes so that a break inside a compound
+        statement block (e.g. `case 1: { ...; break; }`) is properly detected
+        and removed rather than leaking as an orphan Ret(BLoop) in the MLsem
+        transform. We do NOT recurse into While/For/Switch bodies, so a break
+        that targets an inner loop is left alone. *)
+      let rec remove_break body =
+        match body with
+        | Seq sts ->
             let has_break_or_return, sts = List.fold_left (fun (had_break, acc) stmt ->
               if had_break then (true, acc)
-              else match stmt with 
+              else match stmt with
               | _, Break -> (true, acc)
               | _, Return _ -> (true, acc @ [stmt])
+              | pos, Seq _ ->
+                  let has_brk, body' = remove_break (snd stmt) in
+                  (has_brk, acc @ [(pos, body')])
               | _ -> (false, acc @ [stmt])
-            ) (false, []) sts 
-            in 
+            ) (false, []) sts
+            in
             (has_break_or_return, Seq sts)
         | Break -> (true, Const CNull)
         | Return _ -> (true, body)
