@@ -1574,23 +1574,43 @@ and aux_top_level_item defines (item : top_level_item) =
         | `Opt_ms_call_modi_decl_decl_opt_gnu_asm_exp (_, declr, _) ->
             begin match declr with
             | `Func_decl_decl (name_decl, param_list, _, _) ->
-                (try
-                  let level, name = aux_decl_name name_decl in
-                  let params = aux_extract_params param_list in
-                  let ret_ty = Ast.build_ptr level base_ty in
-                  Some (Mlsem.Common.Position.dummy,
-                        A.Fundef (ret_ty, name, params,
-                                  (Mlsem.Common.Position.dummy, A.Seq [])))
-                with _ -> None)
+                begin match (try Some (aux_decl_name name_decl) with _ -> None) with
+                | None -> None
+                | Some (level, name) ->
+                    try
+                      let params = aux_extract_params param_list in
+                      let ret_ty = Ast.build_ptr level base_ty in
+                      Some (Mlsem.Common.Position.dummy,
+                            A.Fundef (ret_ty, name, params,
+                                      (Mlsem.Common.Position.dummy, A.Seq [])))
+                    with
+                    | Variadic_function ->
+                        if !warn_unsupported then
+                          Printf.eprintf
+                            "Not supported yet: variadic parameter (...) in declaration of `%s`; skipping\n"
+                            name;
+                        None
+                    | _ -> None
+                end
             | `Poin_decl (_, _, _, _, inner_decl) when has_func_decl inner_decl ->
-                (try
-                  let _, name = aux_decl_name inner_decl in
-                  let level, params = aux_params inner_decl in
-                  let ret_ty = Ast.build_ptr (level + 1) base_ty in
-                  Some (Mlsem.Common.Position.dummy,
-                        A.Fundef (ret_ty, name, params,
-                                  (Mlsem.Common.Position.dummy, A.Seq [])))
-                with _ -> None)
+                begin match (try Some (aux_decl_name inner_decl) with _ -> None) with
+                | None -> None
+                | Some (_, name) ->
+                    try
+                      let level, params = aux_params inner_decl in
+                      let ret_ty = Ast.build_ptr (level + 1) base_ty in
+                      Some (Mlsem.Common.Position.dummy,
+                            A.Fundef (ret_ty, name, params,
+                                      (Mlsem.Common.Position.dummy, A.Seq [])))
+                    with
+                    | Variadic_function ->
+                        if !warn_unsupported then
+                          Printf.eprintf
+                            "Not supported yet: variadic parameter (...) in declaration of `%s`; skipping\n"
+                            name;
+                        None
+                    | _ -> None
+                end
             | _ -> None
             end
         | _ -> None
