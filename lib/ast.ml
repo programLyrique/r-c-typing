@@ -132,30 +132,61 @@ let rec typeof_const c =
   | CArray (elem::_) -> Cptr.mk (typeof_const elem)
 
 
-let rec typeof_ctype ct = 
-  let open Rstt in 
-  match ct with 
-  | Void -> Cenums.void
-  | Int -> Cint.any_na
-  | Float -> Cenums.double
-  | Char -> Cenums.char
-  | Bool -> Cint.bool
-  | Ptr Char -> Cstring.any
-  | Ptr ty -> Cptr.mk (typeof_ctype ty)
-  | SEXP -> Defs.any_sexp
-  | Any -> Ty.any
-  | Typeref _ -> Ty.any  (* unresolved typedef: fall back to any *)
-  | Struct (name, fields) -> record_of_struct name fields
-  | Enum (_, enumerators) ->
-      if List.for_all (fun (_, value) -> Option.is_some value) enumerators && enumerators <> [] then
-        enumerators
-        |> List.filter_map (fun (_, value) -> Option.map Cint.singl value)
-        |> Ty.disj
-      else
-        Cint.any_na
-  | _ -> failwith ("Type not supported yet in typeof_ctype: " ^ show_ctype ct)
-and record_of_struct _name fields = 
-  Record.mk_closed (List.map (fun (field_ty, field_name) -> (field_name, (typeof_ctype field_ty, false))) fields)
+module StrMap = Map.Make(String)
+
+(* [typeof_ctype] translates a [ctype] to an Sstt [Ty.t]. Self-referential
+   structs (e.g. [struct node { struct node *next; }]) are encoded using
+   Sstt's equirecursive machinery: when a struct is first entered, a fresh
+   [Sstt.Var.t] is bound to its name; recursive occurrences re-use that var,
+   and the full type is tied together with [Sstt.Ty.of_eqs]. *)
+let typeof_ctype ct =
+  let open Rstt in
+  let rec aux resolving ct =
+    match ct with
+    | Void -> Cenums.void
+    | Int -> Cint.any_na
+    | Float -> Cenums.double
+    | Char -> Cenums.char
+    | Bool -> Cint.bool
+    | Ptr Char -> Cstring.any
+    | Ptr ty -> Cptr.mk (aux resolving ty)
+    | SEXP -> Defs.any_sexp
+    | Any -> Ty.any
+    | Typeref name ->
+        (match StrMap.find_opt name resolving with
+         | Some v -> Sstt.Ty.mk_var v
+         | None -> Ty.any)
+    | Struct (name, _) when StrMap.mem name resolving ->
+        Sstt.Ty.mk_var (StrMap.find name resolving)
+    | Struct (_, []) -> Record.mk_closed []
+    | Struct (name, fields) ->
+        let v = Sstt.Var.mk name in
+        let resolving = StrMap.add name v resolving in
+        let body = Record.mk_closed
+          (List.map (fun (fty, fname) -> (fname, (aux resolving fty, false))) fields) in
+        if Sstt.VarSet.mem v (Sstt.Ty.vars body) then
+          (* Self-referential struct: tie the knot with Sstt's equirecursive
+             encoding, and register the type under "struct <name>" so the
+             printer doesn't try to unfold the recursion. *)
+          let t = match Sstt.Ty.of_eqs [(v, body)] with
+            | (_, t) :: _ -> t
+            | [] -> body
+          in
+          let alias_name = if name = "" then Sstt.Var.name v else name in
+          PEnv.register ("struct " ^ alias_name) t ;
+          t
+        else
+          body
+    | Enum (_, enumerators) ->
+        if List.for_all (fun (_, value) -> Option.is_some value) enumerators && enumerators <> [] then
+          enumerators
+          |> List.filter_map (fun (_, value) -> Option.map Cint.singl value)
+          |> Ty.disj
+        else
+          Cint.any_na
+    | _ -> failwith ("Type not supported yet in typeof_ctype: " ^ show_ctype ct)
+  in
+  aux StrMap.empty ct
 
 
 

@@ -237,3 +237,14 @@
  (deps    cprogs/enum.c cprogs/enum.expected)
  (action  (diff cprogs/enum.expected enum.output)))
 
+(rule
+ (alias   runtest)
+ (deps    cprogs/self-referential.c)
+ (action  (with-stdout-to self-referential.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/self-referential.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/self-referential.c cprogs/self-referential.expected)
+ (action  (diff cprogs/self-referential.expected self-referential.output)))
+

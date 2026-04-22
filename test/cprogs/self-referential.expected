@@ -1,0 +1,9 @@
+head:
+untypeable: untypeable projection
+argument: *struct node & 'I3
+tail:
+untypeable: untypeable projection
+argument: *struct node & 'I5
+root:
+untypeable: untypeable projection
+argument: *struct tree & 'I7

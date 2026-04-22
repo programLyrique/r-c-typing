@@ -134,32 +134,46 @@ type env = {
   decl: Ast.ctype Ast.DeclMap.t;
 }
 
-let rec resolve_ctype decl ty =
+(* [resolve_ctype] expands Typerefs and empty-struct forward references by
+   looking them up in [decl]. [visited] records struct/typedef names currently
+   being expanded so that self-referential types terminate: back-edges are left
+   as [Typeref name] / [Struct (name, [])] for [Ast.typeof_ctype] to close via
+   Sstt's recursive-type machinery. *)
+let rec resolve_ctype_aux visited decl ty =
   match ty with
-  | Ast.Typeref name -> (
-      match Ast.DeclMap.find_opt name decl with
-      | Some t -> resolve_ctype decl t
-      | None -> ty
-    )
-  | Ast.Struct (name, []) -> (
-      match Ast.DeclMap.find_opt name decl with
-      | Some (Ast.Struct (_, fields)) ->
-          Ast.Struct (name, List.map (fun (fty, fname) -> (resolve_ctype decl fty, fname)) fields)
-      | _ -> ty
-    )
+  | Ast.Typeref name ->
+      if StrSet.mem name visited then ty
+      else (
+        match Ast.DeclMap.find_opt name decl with
+        | Some t -> resolve_ctype_aux (StrSet.add name visited) decl t
+        | None -> ty
+      )
+  | Ast.Struct (name, []) ->
+      if StrSet.mem name visited then ty
+      else (
+        match Ast.DeclMap.find_opt name decl with
+        | Some (Ast.Struct (_, fields)) ->
+            let visited = StrSet.add name visited in
+            Ast.Struct (name, List.map (fun (fty, fname) -> (resolve_ctype_aux visited decl fty, fname)) fields)
+        | _ -> ty
+      )
   | Ast.Struct (name, fields) ->
-      Ast.Struct (name, List.map (fun (fty, fname) -> (resolve_ctype decl fty, fname)) fields)
+      let visited = StrSet.add name visited in
+      Ast.Struct (name, List.map (fun (fty, fname) -> (resolve_ctype_aux visited decl fty, fname)) fields)
   | Ast.Enum (name, []) -> (
       match Ast.DeclMap.find_opt name decl with
       | Some (Ast.Enum (_, enumerators)) -> Ast.Enum (name, enumerators)
       | _ -> ty
     )
   | Ast.Enum (name, enumerators) -> Ast.Enum (name, enumerators)
-  | Ast.Ptr t -> Ast.Ptr (resolve_ctype decl t)
-  | Ast.Array (t, len) -> Ast.Array (resolve_ctype decl t, len)
+  | Ast.Ptr t -> Ast.Ptr (resolve_ctype_aux visited decl t)
+  | Ast.Array (t, len) -> Ast.Array (resolve_ctype_aux visited decl t, len)
   | Ast.Union (name, fields) ->
-      Ast.Union (name, List.map (fun (fty, fname) -> (resolve_ctype decl fty, fname)) fields)
+      let visited = StrSet.add name visited in
+      Ast.Union (name, List.map (fun (fty, fname) -> (resolve_ctype_aux visited decl fty, fname)) fields)
   | _ -> ty
+
+let resolve_ctype decl ty = resolve_ctype_aux StrSet.empty decl ty
 
 let rec has_struct_type ty =
   match ty with
