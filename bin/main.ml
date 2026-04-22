@@ -4,6 +4,15 @@ open Mlsem.Types
 module System = Mlsem.System
 
 
+let positive_float =
+  let parse value =
+    match float_of_string_opt value with
+    | Some seconds when seconds > 0. -> Ok seconds
+    | Some _ -> Error (`Msg "timeout must be strictly positive")
+    | None -> Error (`Msg (Printf.sprintf "invalid float: %s" value))
+  in
+  Arg.conv (parse, Format.pp_print_float)
+
 let main opts include_dirs path =
   System.Config.infer_overload := true;
   Mlsem.Types.Recording.start_recording ();
@@ -65,6 +74,10 @@ let include_dir_opt =
   let doc = "Add a system include search directory (repeatable). Also honors C_INCLUDE_PATH env var." in
   Arg.(value & opt_all string [] & info ["I"; "include-dir"] ~docv:"DIR" ~doc)
 
+let timeout_opt =
+  let doc = "Set a per-function timeout in seconds for full function body inference/checking (default: no timeout)." in
+  Arg.(value & opt (some positive_float) None & info ["timeout"] ~docv:"SECONDS" ~doc)
+
 let path_arg =
   let doc = "C source file to parse or package directory to analyze" in
   Arg.(required & pos 0 (some string) None & info [] ~docv:"PATH" ~doc)
@@ -82,8 +95,9 @@ let cmd =
      and+ debug = debug_opt
      and+ filter = filter_opt
      and+ include_dirs = include_dir_opt
+     and+ timeout = timeout_opt
     and+ path = path_arg in
-    PEnv.sequential_handler PEnv.empty (fun path -> main {cst; past; ast; mlsem ; typing = not no_typing ; debug ; filter} include_dirs path) path |> fst)
+    PEnv.sequential_handler PEnv.empty (fun path -> main {cst; past; ast; mlsem ; typing = not no_typing ; debug ; filter; timeout} include_dirs path) path |> fst)
      
 
 let () = exit (Cmd.eval cmd)

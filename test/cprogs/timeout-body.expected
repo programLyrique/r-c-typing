@@ -1,0 +1,3 @@
+Typing file: cprogs/timeout-body.c
+timeout_body:
+timeout: inference/checking exceeded 1e-06 seconds

@@ -5,6 +5,8 @@ module MVariable = Mlsem.Lang.MVariable
 
 module StrMap = Map.Make(String)
 
+exception Inference_timeout of float
+
 type cmd_options = {
   cst : bool;
   past : bool;
@@ -13,6 +15,7 @@ type cmd_options = {
   typing : bool;
   debug : bool;
   filter: string option;
+  timeout : float option;
 }
 
 let make_substring_pred = function
@@ -91,6 +94,24 @@ let print_visible kind visible v tys =
         Format.printf "define %a: @[<h>%a@]@.@.") 
       Variable.pp v TyScheme.pp_short tys
 
+let with_inference_timeout timeout thunk =
+  match timeout with
+  | None -> thunk ()
+  | Some seconds ->
+      let previous_handler =
+        Sys.signal Sys.sigalrm (Sys.Signal_handle (fun _ -> raise (Inference_timeout seconds)))
+      in
+      let previous_timer = Unix.getitimer Unix.ITIMER_REAL in
+      let restore () =
+        ignore (Unix.setitimer Unix.ITIMER_REAL previous_timer);
+        Sys.set_signal Sys.sigalrm previous_handler
+      in
+      Fun.protect
+        ~finally:restore
+        (fun () ->
+          ignore (Unix.setitimer Unix.ITIMER_REAL { Unix.it_interval = 0.; it_value = seconds });
+          thunk ())
+
 let infer_ast visible opts (idenv, env, decl) (ast : Ast.e) =
   let name,v = 
     match ast with 
@@ -104,28 +125,33 @@ let infer_ast visible opts (idenv, env, decl) (ast : Ast.e) =
     Format.printf "Type inference for function %s@." name;
   try 
     if opts.typing then
-        begin
-        let _env = extend_env mlsem_ast env in (*TODO: bring it back when the inference deals with any in a more appropriate way*)
-        let renvs = System.Refinement.refinements env mlsem_ast in
-        let reconstructed = System.Reconstruction.infer env renvs mlsem_ast in
-        let typ = System.Checker.typeof_def env reconstructed mlsem_ast in
-        let tys = TyScheme.norm_and_simpl typ in
-        let (vars, typ) = TyScheme.get tys in 
-        let typ = GTy.ub typ in 
-        (*Format.printf "%a: upper bound= %a@.@." Variable.pp v  Ty.pp typ ;*)
-        (* We only keep the upper bound as type for v and add it to the environment *)
-        let tys = TyScheme.mk vars (GTy.mk typ) in
-        print_visible `Default visible v tys;
-        (StrMap.add name v idenv, Env.add v tys env, decl)
-      end
+        with_inference_timeout opts.timeout (fun () ->
+          let _env = extend_env mlsem_ast env in (*TODO: bring it back when the inference deals with any in a more appropriate way*)
+          let renvs = System.Refinement.refinements env mlsem_ast in
+          let reconstructed = System.Reconstruction.infer env renvs mlsem_ast in
+          let typ = System.Checker.typeof_def env reconstructed mlsem_ast in
+          let tys = TyScheme.norm_and_simpl typ in
+          let (vars, typ) = TyScheme.get tys in 
+          let typ = GTy.ub typ in 
+          (*Format.printf "%a: upper bound= %a@.@." Variable.pp v  Ty.pp typ ;*)
+          (* We only keep the upper bound as type for v and add it to the environment *)
+          let tys = TyScheme.mk vars (GTy.mk typ) in
+          print_visible `Default visible v tys;
+          (StrMap.add name v idenv, Env.add v tys env, decl))
     else 
       idenv, env, decl
-  with System.Checker.Untypeable err ->
-    Format.printf "%s:@.untypeable: %s@." name err.title;
-    err.descr |> Option.iter (Format.printf "%s@." ) ;
-    if not opts.mlsem && opts.debug  then (* Still print the mlsem ast*)
-      Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp mlsem_ast ;
-    idenv, env, decl
+  with
+  | Inference_timeout seconds ->
+      Format.printf "%s:@.timeout: inference/checking exceeded %.6g seconds@." name seconds;
+      if not opts.mlsem && opts.debug then
+        Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp mlsem_ast ;
+      idenv, env, decl
+  | System.Checker.Untypeable err ->
+      Format.printf "%s:@.untypeable: %s@." name err.title;
+      err.descr |> Option.iter (Format.printf "%s@." ) ;
+      if not opts.mlsem && opts.debug  then (* Still print the mlsem ast*)
+        Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp mlsem_ast ;
+      idenv, env, decl
 
 (** past: the parsed AST *)
 let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=false) visible_name opts (idenv, env, decl)  past =

@@ -1,8 +1,21 @@
 (library
  (name r_c_typing)
- (modules ast defs in_channel_ext parser PAst runner type_parser utils call_graph C_interface package)
- (libraries r-c-typing.c mlsem rstt rstt-repl)
+ (modules
+  ast
+  defs
+  in_channel_ext
+  parser
+  PAst
+  runner
+  type_parser
+  utils
+  call_graph
+  C_interface
+  package)
+ (libraries r-c-typing.c mlsem rstt rstt-repl unix)
  (inline_tests
   (deps ../types/base.ty ../types/posix.ty))
- (preprocess (pps ppx_deriving.show ppx_inline_test))
- (instrumentation (backend bisect_ppx)))
+ (preprocess
+  (pps ppx_deriving.show ppx_inline_test))
+ (instrumentation
+  (backend bisect_ppx)))
