@@ -134,6 +134,13 @@ let rec typeof_const c =
 
 module StrMap = Map.Make(String)
 
+(* Cache of recursive struct types keyed by their syntactic form so that
+   equivalent self-referential structs reuse the same Sstt encoding instead
+   of re-allocating a fresh recursive type (and a fresh alias) at every
+   occurrence. Keyed by [show_ctype] to distinguish structs with the same
+   name but different field layouts from different translation units. *)
+let recursive_struct_cache : (string, Sstt.Ty.t) Hashtbl.t = Hashtbl.create 32
+
 (* [typeof_ctype] translates a [ctype] to an Sstt [Ty.t]. Self-referential
    structs (e.g. [struct node { struct node *next; }]) are encoded using
    Sstt's equirecursive machinery: when a struct is first entered, a fresh
@@ -160,23 +167,29 @@ let typeof_ctype ct =
         Sstt.Ty.mk_var (StrMap.find name resolving)
     | Struct (_, []) -> Record.mk_closed []
     | Struct (name, fields) ->
-        let v = Sstt.Var.mk name in
-        let resolving = StrMap.add name v resolving in
-        let body = Record.mk_closed
-          (List.map (fun (fty, fname) -> (fname, (aux resolving fty, false))) fields) in
-        if Sstt.VarSet.mem v (Sstt.Ty.vars body) then
-          (* Self-referential struct: tie the knot with Sstt's equirecursive
-             encoding, and register the type under "struct <name>" so the
-             printer doesn't try to unfold the recursion. *)
-          let t = match Sstt.Ty.of_eqs [(v, body)] with
-            | (_, t) :: _ -> t
-            | [] -> body
-          in
-          let alias_name = if name = "" then Sstt.Var.name v else name in
-          PEnv.register ("struct " ^ alias_name) t ;
-          t
-        else
-          body
+        let key = show_ctype ct in
+        (match Hashtbl.find_opt recursive_struct_cache key with
+         | Some t -> t
+         | None ->
+           let v = Sstt.Var.mk name in
+           let resolving = StrMap.add name v resolving in
+           let body = Record.mk_closed
+             (List.map (fun (fty, fname) -> (fname, (aux resolving fty, false))) fields) in
+           if Sstt.VarSet.mem v (Sstt.Ty.vars body) then
+             (* Self-referential struct: tie the knot with Sstt's equirecursive
+                encoding, and register the type under "struct <name>" so the
+                printer doesn't unfold the recursion (Rstt's printer can't
+                render recursive [defs]). *)
+             let t = match Sstt.Ty.of_eqs [(v, body)] with
+               | (_, t) :: _ -> t
+               | [] -> body
+             in
+             let alias_name = if name = "" then Sstt.Var.name v else name in
+             PEnv.register ("struct " ^ alias_name) t ;
+             Hashtbl.add recursive_struct_cache key t ;
+             t
+           else
+             body)
     | Enum (_, enumerators) ->
         if List.for_all (fun (_, value) -> Option.is_some value) enumerators && enumerators <> [] then
           enumerators
