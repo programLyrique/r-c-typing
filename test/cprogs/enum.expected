@@ -1,6 +1,6 @@
-keep_color: ((c_int_na \ (c_false | c(5))) -> c_false) & ((c_false) | (c(5)) -> c(4))
+keep_color: (c_int_na \ (c_false | c(5)) -> c_false) & (c(5) | c_false -> c(4))
 
-flip_direction: ((c(-1)) -> c_true) & ((c_false) -> c_false) & ((c_true) -> c(-1))
+flip_direction: (c(-1) -> c_true) & (c_false -> c_false) & (c_true -> c(-1))
 
 mask_value: () -> c_true
 

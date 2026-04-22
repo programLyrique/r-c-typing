@@ -2,5 +2,5 @@ assertPositive_error:
 untypeable: untypeable application
 function: arrow
 argument: c("Input must be a single real number")
-assertPositive_fail: ∀'a,'b. ('a & dbl1) -> 'a & dbl1
+assertPositive_fail: ∀'a,'b. dbl1 & 'a -> dbl1 & 'a
 

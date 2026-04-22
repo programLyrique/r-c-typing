@@ -1,12 +1,12 @@
-isInteger2: (({  ... } | lang | v(chr | clx | dbl | lgl | raw) | sym | env | null | (any -> any)) -> c_false) & ((int) -> c_true)
+isInteger2: (env | lang | list | null | sym | v(chr | clx | dbl | lgl | raw) | (any -> any) -> c_false) & (int -> c_true)
 
-isInteger3: (((any -> any) | sym | v(chr | clx | dbl | lgl | raw) | lang | {  ... } | null | env) -> c_false) & ((int) -> c_true)
+isInteger3: (env | lang | list | null | sym | v(chr | clx | dbl | lgl | raw) | (any -> any) -> c_false) & (int -> c_true)
 
-checkList: (({  ... }) -> c_true) & ((sym | env | (any -> any) | null | lang | vec) -> c_false)
+checkList: (env | lang | null | sym | vec | (any -> any) -> c_false) & (list -> c_true)
 
-isVectorList: (({  ... }) -> c_true) & ((lang | sym | (any -> any) | null | env | vec) -> c_false)
+isVectorList: (env | lang | null | sym | vec | (any -> any) -> c_false) & (list -> c_true)
 
-length2: ∀'a. ((vec[int(i('a & int))]) -> cint('a & int)) & ((null) -> c_false) & ((env) | (sym | (any -> any) | lang) -> c_int)
+length2: ∀'a. (null -> c_false) & (vec[int(i(int & 'a))] -> cint(int & 'a))
 
-length3: ∀'a. ((lgl[int(i('a & int))]) | (int[int(i('a & int))]) | (dbl[int(i('a & int))]) | (clx[int(i('a & int))]) | (chr[int(i('a & int))]) | (raw[int(i('a & int))]) -> cint('a & int)) & ((env | {  ... } | (any -> any) | lang | sym) -> c_true) & ((null) -> c_false)
+length3: ∀'a. (env | lang | list | sym | (any -> any) -> c_true) & (null -> c_false) & (chr[int(i(int & 'a))] | clx[int(i(int & 'a))] | dbl[int(i(int & 'a))] | int[int(i(int & 'a))] | lgl[int(i(int & 'a))] | raw[int(i(int & 'a))] -> cint(int & 'a))
 

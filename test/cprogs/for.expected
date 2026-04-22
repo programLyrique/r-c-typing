@@ -1,2 +1,2 @@
-sum_all: (dbl) -> dbl1
+sum_all: dbl -> dbl1
 

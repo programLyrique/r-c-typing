@@ -30,12 +30,18 @@ let parse_type_line line =
         None
     | (sep, sym, ty_str) ->
         let ty_str = String.trim ty_str in
-        let ty = Rstt_repl.IO.parse_type ty_str in
+        let ty = 
+        try
+          Rstt_repl.IO.parse_type ty_str 
+        with Rstt_repl__IO.SyntaxError (_, msg) ->
+          Printf.eprintf "Syntax error while parsing type in line: %s. Error: %s@." line msg;
+          raise (Rstt_repl.(IO.SyntaxError (Position.dummy, msg)));
+        in
         match sep with
         | ':' -> Some (String.trim sym, ty, Def)
         | '=' -> Some (String.trim sym, ty, Alias)
         | _ -> failwith "Unreachable case in parse_type_line."
-
+        
 let parse_type_file filename = 
   if not (Sys.file_exists filename) then
     failwith (Printf.sprintf "Type file not found: %s" filename);
@@ -100,7 +106,7 @@ let load_file ?(rf_aliases=false) filename =
 
 let mk_arg l =
   let open Builder in
-  TArg { pos = []; pos_named =l; tl = TOption TEmpty; named = [] }
+  TArg { pos_named =l; pos_tl = TOption TEmpty; named_tl = TOption TEmpty; named = [] }
 
 let%test "parse simple types" =
   let line = "x: v(int)" in

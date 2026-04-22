@@ -1,4 +1,4 @@
-add_one: (int) -> int1
+add_one: int -> int1
 
-add_magic: (int) -> int1
+add_magic: int -> int1
 

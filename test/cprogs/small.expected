@@ -1,20 +1,20 @@
-change_int: ∀'a. ('a & int) -> 'a & int
+change_int: ∀'a. int & 'a -> int & 'a
 
-errorIntScalar: (int1) -> ()
+errorIntScalar: int1 -> ()
 
 make_scalar: () -> int1
 
-isIntScalar: ((int1) -> c_true) & ((int[^(int \ 1)]) | (vec[^(int \ 1)] & ~int) | (vec1 & ~int) -> c_false)
+isIntScalar: (int1 -> c_true) & (int[^(int \ 1)] | vec1 & ~int | vec[^(int \ 1)] & ~int -> c_false)
 
 check: () -> c_false
 
-incr: (int1) -> int1
+incr: int1 -> int1
 
-isFunction: ((any -> any) -> c_true) & ((~(any -> any)) -> c_false)
+isFunction: ((any -> any) -> c_true) & (~(any -> any) -> c_false)
 
-isPrimitive: ((any -> any) -> c_true) & ((null | lang | sym | {  ... } | env | vec) -> c_false)
+isPrimitive: ((any -> any) -> c_true) & (env | lang | list | null | sym | vec -> c_false)
 
-isList: (((any -> any) | {  ... } | env | vec | sym) -> c_false) & ((vec & ~chr & ~raw & ~lgl & ~clx & ~dbl & ~int | null) | (lang) -> c_true)
+isList: (env | list | sym | vec | (any -> any) -> c_false) & (lang | (null | vec & ~chr & ~clx & ~dbl & ~int & ~lgl & ~raw) -> c_true)
 
-isNewList: ((sym | vec | env | lang | (any -> any)) -> c_false) & ((null | vec & ~lgl & ~clx & ~raw & ~dbl & ~int & ~chr) | ({  ... }) -> c_true)
+isNewList: (env | lang | sym | vec | (any -> any) -> c_false) & (list | (null | vec & ~chr & ~clx & ~dbl & ~int & ~lgl & ~raw) -> c_true)
 

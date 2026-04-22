@@ -361,7 +361,9 @@ let run_on_package opts path idenv env =
   run_on_files opts c_files ~entry_points idenv env
   
 let () =
-  Mlsem_types.PEnv.add_printer_param (Rstt.Pp.printer_params ()) ;
+  Mlsem_types.PrinterCfg.set_descr_printer Rstt.Pp.print_descr_ctx ;
+  Mlsem_types.PrinterCfg.set_printer Rstt.Pp.print ;
+  Mlsem_types.PrinterCfg.add_printer_param (Rstt.Pp.printer_params ()) ;
   Mlsem_system.Config.normalization_fun := Rstt.Simplify.partition_vecs
 
 let%test "filter predicate with Some substring" =
@@ -371,6 +373,7 @@ let%test "filter predicate with Some substring" =
 let%test "filter predicate with None accepts all" =
   let pred = make_substring_pred None in
   pred "anything" && pred "everything"
+
 
 let%test ".ty bindings have highest precedence" =
   let tys = TyScheme.mk_mono GTy.dyn in

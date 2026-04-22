@@ -1,6 +1,6 @@
-larger_than_3: ∀'a,'b. ('a & int1) -> 'a & int1
+larger_than_3: ∀'a,'b. int1 & 'a -> int1 & 'a
 
-size_bound: ∀'a,'b. ('a & vec[int(i('b & (..10)))]) -> 'a & vec[int(i('b & (..10)))]
+size_bound: ∀'a,'b. vec[int(i('b & (..10)))] & 'a -> vec[int(i('b & (..10)))] & 'a
 
 bail_if: (c_int_na, c_string) -> ()
 

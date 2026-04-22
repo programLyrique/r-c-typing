@@ -1,4 +1,4 @@
-f: ({ x : c_int_na ; y : c_int_na }) -> ()
+f: { x : c_int_na ; y : c_int_na } -> ()
 
 g: () -> { x : c_int_na ; y : c_int_na }
 

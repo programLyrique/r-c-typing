@@ -1,2 +1,2 @@
-mk_value: (env) | (int) -> int1
+mk_value: env | int -> int1
 

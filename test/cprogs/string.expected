@@ -4,9 +4,9 @@ create_str_from_chr: () -> "world"
 
 create_str_from_concat: () -> "hello world"
 
-get_c_string_from_str: ((chr[^(int \ 0)]) -> c_string) & ((v0(clx | dbl | int | lgl | raw)) | (v[^(int \ 0)](clx | dbl | int | lgl | raw)) | (chr0) -> null)
+get_c_string_from_str: (chr[^(int \ 0)] -> c_string) & (chr0 | v0(clx | dbl | int | lgl | raw) | v[^(int \ 0)](clx | dbl | int | lgl | raw) -> null)
 
-is_blank_string: (("" | null) -> c_true) & ((^(chr \ "")) -> c_false)
+is_blank_string: (^(chr \ "") -> c_false) & ("" | null -> c_true)
 
-to_char: ∀'a,'b. (('a & (vec[^(1..)] | sym)) -> chr1) & (('a & (null | env | {  ... } | (any -> any) | lang | vec0)) -> chr \ ^chr) & (('a & (sym | v[^(1..)]('b)) | 'b & 'a & (chr | (sym | v[^(1..)]('b)))) -> chr1 | 'b) & (('a & chr) -> 'a) & (('a & (null | env | {  ... } | (any -> any) | lang | v0('b)) | 'b & 'a & (chr | (null | env | {  ... } | (any -> any) | lang | v0('b)))) -> chr \ ^chr | 'b)
+to_char: ∀'a,'b. ((env | lang | list | null | v0('b) | (any -> any)) & 'a | 'a & 'b & (chr | (env | lang | list | null | v0('b) | (any -> any))) -> chr \ ^chr | 'b) & ((sym | v[^(1..)]('b)) & 'a | 'a & 'b & (chr | (sym | v[^(1..)]('b))) -> chr1 | 'b) & (chr & 'a -> 'a) & ((env | lang | list | null | vec0 | (any -> any)) & 'a -> chr \ ^chr) & ((sym | vec[^(1..)]) & 'a -> chr1)
 

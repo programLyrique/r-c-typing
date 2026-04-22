@@ -1,6 +1,6 @@
-test_while: ∀'a. ('a & int) -> 'a & int
+test_while: ∀'a. int & 'a -> int & 'a
 
-sum_while: (dbl) -> dbl1
+sum_while: dbl -> dbl1
 
-count_do_while: (int) -> int1
+count_do_while: int -> int1
 
