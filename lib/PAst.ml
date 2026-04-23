@@ -136,6 +136,33 @@ let rec bv_e in_lhs_assign (_,e) =
   | VarDeclare (_, _) -> failwith "Declaration must have an identifier" (*Should be unreachable*)
 
 module StrMap = Map.Make(String)
+
+(* Object-like identifier-alias macros: [#define NAME TARGET] where [TARGET]
+   is a bare C identifier. Recorded by the parser, resolved at use-site in
+   [var]. Keeping the table here (rather than in [Parser]) avoids a module
+   cycle: [Parser] depends on [PAst], and [var] needs to consult the table. *)
+let define_aliases : string StrMap.t ref = ref StrMap.empty
+
+let reset_define_aliases () = define_aliases := StrMap.empty
+
+let remove_define_alias name =
+  define_aliases := StrMap.remove name !define_aliases
+
+let remember_define_alias name target =
+  define_aliases := StrMap.add name target !define_aliases
+
+(* Follow the alias chain transitively. A visited set terminates self-aliases
+   and cycles on the last name in the chain. *)
+let resolve_alias name =
+  let rec loop seen n =
+    if StrSet.mem n seen then n
+    else
+      match StrMap.find_opt n !define_aliases with
+      | None -> n
+      | Some target -> loop (StrSet.add n seen) target
+  in
+  loop StrSet.empty name
+
 type env = {
   id: Variable.t StrMap.t;
   decl: Ast.ctype Ast.DeclMap.t;
@@ -189,21 +216,37 @@ let rec has_struct_type ty =
   | Ast.Array (t, _) -> has_struct_type t
   | _ -> false
 
-let var env str = 
-  match StrMap.find_opt str env.id with 
- | None ->
-    begin match Defs.BuiltinOp.find_builtin str with
-    | None -> (
-      match Defs.BuiltinVar.find_builtin_var str with
-      | Some v -> v
-      | None ->
-          match Defs.StrMap.find_opt str Defs.defs_map with 
-          | None -> (Printf.printf "Creating fresh variable: %s\n" str; MVariable.create Immut (Some str))
-          | Some v -> v
-    )
-    | Some v -> v
-    end
+(* Full lookup chain for [str]: local idenv, builtin op, builtin var, .ty
+   bindings. Returns [Some v] if [str] resolves to a concrete binding,
+   [None] if it would fall through to the fresh-variable case. *)
+let lookup_binding env str =
+  match StrMap.find_opt str env.id with
+  | Some _ as r -> r
+  | None ->
+    (match Defs.BuiltinOp.find_builtin str with
+     | Some _ as r -> r
+     | None ->
+       (match Defs.BuiltinVar.find_builtin_var str with
+        | Some _ as r -> r
+        | None -> Defs.StrMap.find_opt str Defs.defs_map))
+
+let var env str =
+  (* Resolve identifier-alias macros ([#define NAME TARGET]) before looking
+     up. Keep the resolution only if [TARGET] is itself bound; otherwise the
+     alias gives us nothing and we preserve the original name so inference
+     sees the same fresh variable as before aliases were supported. *)
+  let effective =
+    let resolved = resolve_alias str in
+    if resolved = str then str
+    else match lookup_binding env resolved with
+      | Some _ -> resolved
+      | None -> str
+  in
+  match lookup_binding env effective with
   | Some v -> v
+  | None ->
+    Printf.printf "Creating fresh variable: %s\n" effective;
+    MVariable.create Immut (Some effective)
 
 let add_var env str =
   let v = MVariable.create MVariable.Mut (Some str) in

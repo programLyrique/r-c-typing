@@ -1325,6 +1325,17 @@ let aux_preproc_define (prepoc : preproc_def) : A.top_level_unit option =
       strip_outer_parens (String.sub s 1 (len - 2))
     else s
   in
+  let is_c_identifier s =
+    let n = String.length s in
+    n > 0
+    && (match s.[0] with 'A'..'Z' | 'a'..'z' | '_' -> true | _ -> false)
+    && (let rec ok i =
+          i = n ||
+          (match s.[i] with
+           | 'A'..'Z' | 'a'..'z' | '0'..'9' | '_' -> ok (i + 1)
+           | _ -> false)
+        in ok 1)
+  in
   let parse_char_literal s =
     let len = String.length s in
     if len = 3 && s.[0] = '\'' && s.[2] = '\'' then Some (A.CChar s.[1])
@@ -1355,6 +1366,15 @@ let aux_preproc_define (prepoc : preproc_def) : A.top_level_unit option =
   | None -> None
   | Some (_, raw_value) ->
       let raw_value = String.trim raw_value in
+      let stripped = strip_outer_parens raw_value in
+      if is_c_identifier stripped && stripped <> name then begin
+        (* Object-like identifier alias: [#define NAME TARGET]. Recorded in
+           [PAst]'s alias table; resolved at every [PAst.var] lookup so the
+           alias picks up whatever binding [TARGET] has (.ty file, builtin,
+           same-package function). No AST node is emitted. *)
+        A.remember_define_alias name stripped;
+        None
+      end else
       begin
         try
           match parse_define_value raw_value with
@@ -1540,6 +1560,7 @@ and aux_top_level_item defines (item : top_level_item) =
       else (
       let defines = StrSet.add name defines in
       remove_define_constant name;
+      A.remove_define_alias name;
       let item = aux_preproc_define prepoc_def in
       begin
         match item with

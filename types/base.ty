@@ -77,8 +77,12 @@ getAttrib: t(any, sym) -> any
 []<-: t(*'a, c_int, 'a) -> *'a
 []: t(*'a, c_int) -> 'a
 
+PROTECT_INDEX = c_int
+
 PROTECT: t('a) -> 'a
 UNPROTECT: t(c_int) -> c_void
+REPROTECT: t(any, PROTECT_INDEX) -> c_void
+PROTECT_WITH_INDEX: t(any, *PROTECT_INDEX) -> c_void
 
 // Arithmetic
 
