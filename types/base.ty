@@ -14,13 +14,17 @@ IS_SCALAR: (t(v[1]('b)) -> c_true) & (t(v[int \ 1]('b)) -> c_false)
 
 INTEGER: t(v(int)) -> *c_int
 REAL: t(v(dbl)) -> *c_double
+LOGICAL: t(v(lgl)) -> *c_int
 
 LENGTH: t(v[int('a)](any)) -> c_int('a)
 XLENGTH: t(v[int('a)](any)) -> c_int('a)
+xlength: t(v[int('a)](any)) -> c_int('a)
 envlength: t(env) -> c_int
 
 // there is also a special case for VECSXP (list) that is coded in OCaml
 allocVector: (t('a & any_prim, c_true) -> v[1]('a)) & (t('a & any_prim, c_int('b) & (c_int \ c_true)) -> v['b]('a)) & (t(list, 'b) -> list)
+allocSExp: t('a & any_r_not_vec) -> 'a
+install: t(c_string) -> sym
 
 // when the names are statically known, we can return a more precise type (handled on the OCaml side)
 mkNamed: (t('a & any_prim, *c_string) -> v('a)) & (t(list, *c_string) -> list)
@@ -60,6 +64,8 @@ R_BaseEnv: env
 R_BaseNamespace: env
 R_NewEnv: t(env, c_int, c_int) -> env
 R_GetCurrentEnv: () -> env
+R_ParentEnv: t(env) -> env
+R_UnboundValue: sym
 
 // Casts
 asLogical: t(any) -> c_true | c_false
@@ -70,9 +76,10 @@ list2: t(any, any) -> lang
 isPairList: (t(lang) -> c_true) & (t(~lang) -> c_false)
 lang1: t(any) -> lang
 
-// Attributes 
+// Attributes
 // TODO: we also support attributes in the type algebra, so add it!
 getAttrib: t(any, sym) -> any
+setAttrib: t(any, sym, any) -> any
 
 []<-: t(*'a, c_int, 'a) -> *'a
 []: t(*'a, c_int) -> 'a
@@ -83,6 +90,8 @@ PROTECT: t('a) -> 'a
 UNPROTECT: t(c_int) -> c_void
 REPROTECT: t(any, PROTECT_INDEX) -> c_void
 PROTECT_WITH_INDEX: t(any, *PROTECT_INDEX) -> c_void
+R_PreserveObject: t(any) -> c_void
+R_ReleaseObject: t(any) -> c_void
 
 // Arithmetic
 
@@ -172,6 +181,7 @@ R_CheckUserInterrupt: t() -> c_void
 // R API: pairlists
 LCONS: t(any, lang | null) -> lang
 CONS: t(any, lang | null) -> lang
+cons: t(any, lang | null) -> lang
 CAR: t(lang) -> any
 CADR: t(lang) -> any
 
