@@ -200,6 +200,27 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
         |> List.fold_left (fun env (v, ty) -> Env.add v (TyScheme.mk_mono (GTy.mk ty)) env) env
       in
       (idenv, env, Ast.DeclMap.add name ty decl)
+  | _, PAst.GlobalVar (name, ctype) ->
+      (* File-scope variable. A [.ty] binding always wins (manually-curated
+         types must not be overridden). For every other pre-existing binding
+         we overwrite: in well-formed C, repeated declarations have the same
+         ctype so the env binding is unchanged, and when the prior binding
+         came from the unknown-name fallback in [PAst.var] (type [any]) the
+         more precise ctype-derived type takes over. *)
+      if has_ty_binding name then
+        (idenv, env, decl)
+      else begin
+        let resolved = PAst.resolve_ctype decl ctype in
+        let ty =
+          try Ast.typeof_ctype resolved
+          with Failure _ -> Ty.any
+        in
+        let v = Defs.BuiltinVar.register_dynamic name ty in
+        let tys = ty |> GTy.mk |> TyScheme.mk_mono in
+        if opts.debug && visible then
+          print_visible `Default visible v tys;
+        (StrMap.add name v idenv, Env.add v tys env, decl)
+      end
   | _,PAst.Fundef (ret_ty, name, params, _) when convention=Some(Package.C) ->
     (try
       let ty = C_interface.infer_dotC ~typedef_map:decl ret_ty params |> GTy.mk |> TyScheme.mk_mono in
@@ -274,6 +295,7 @@ let run_on_file opts filename idenv env =
             (function
               | _, PAst.Fundef (_, name, _, _) -> visible_name name
               | _, PAst.TypeDecl _ -> false
+              | _, PAst.GlobalVar _ -> false
               | _, PAst.Define _ -> false
               | _, PAst.Include _ -> false)
             past

@@ -108,9 +108,18 @@ module BuiltinVar = struct
 
 let dynamic : (string, Variable.t * Ty.t) Hashtbl.t = Hashtbl.create 64
 
+(* Register [name] with declared type [ty]. If [name] is already present,
+   the variable is reused (so call sites alias) and the stored type is
+   refined when [ty] is a subtype of the previously-stored type. This lets
+   a later, more precise declaration upgrade a fallback binding (e.g. a
+   [Ty.any] placeholder installed by [PAst.var]'s unknown-name path gets
+   replaced when the real [extern SEXP foo;] declaration is seen). *)
 let register_dynamic name ty : Variable.t =
   match Hashtbl.find_opt dynamic name with
-  | Some (v, _) -> v
+  | Some (v, existing) ->
+      if Ty.leq ty existing && not (Ty.equiv ty existing) then
+        Hashtbl.replace dynamic name (v, ty);
+      v
   | None ->
       let v = MVariable.create Immut (Some name) in
       Hashtbl.add dynamic name (v, ty);

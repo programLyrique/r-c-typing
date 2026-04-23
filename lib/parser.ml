@@ -1625,8 +1625,49 @@ and aux_top_level_item defines (item : top_level_item) =
             end
         | _ -> None
       in
+      (* For non-function declarators, emit a [GlobalVar] carrying the
+         declared type. Function prototypes and function pointers were
+         already consumed by [try_func_of_decl] above, so we only see
+         true variable shapes here. Initializers are intentionally
+         dropped — only the declared type seeds the binding. *)
+      let try_global_of_decl (decl: anon_choice_opt_ms_call_modi_decl_decl_opt_gnu_asm_exp_2fa2f9e) =
+        let emit level name =
+          let ty = Ast.build_ptr level base_ty in
+          Some (Mlsem.Common.Position.dummy, A.GlobalVar (name, ty))
+        in
+        match decl with
+        | `Init_decl (declr, _, _init) ->
+            (* [Init_decl] takes a [declarator], which uses [`Func_decl] for
+               function shapes. The parser for function definitions uses the
+               other branch; here we reach this only for initialized globals. *)
+            (match declr with
+             | `Func_decl _ -> None
+             | `Poin_decl (_, _, _, _, inner) when has_func_decl inner -> None
+             | `Id _ | `Poin_decl _ | `Array_decl _ | `Paren_decl _ | `Attr_decl _ ->
+                 (try let (level, name) = aux_decl_name declr in emit level name
+                  with _ -> None))
+        | `Opt_ms_call_modi_decl_decl_opt_gnu_asm_exp (_, declr, _) ->
+            (* [declaration_declarator] uses [`Func_decl_decl] for functions
+               and prototypes. Those were handled by [try_func_of_decl]; any
+               that survive a failed match there (e.g. variadic) are dropped. *)
+            (match declr with
+             | `Func_decl_decl _ -> None
+             | `Poin_decl (_, _, _, _, inner) when has_func_decl inner -> None
+             | `Id _ | `Poin_decl _ | `Array_decl _ | `Paren_decl _ | `Attr_decl _ ->
+                 (try
+                   let (level, name, is_fp) = aux_decl2_name declr in
+                   if is_fp then None else emit level name
+                  with _ -> None))
+      in
       let all_decls = first_decl :: List.map snd more_decls in
-      let items = List.filter_map try_func_of_decl all_decls in
+      let items =
+        List.filter_map
+          (fun d ->
+            match try_func_of_decl d with
+            | Some _ as item -> item
+            | None -> try_global_of_decl d)
+          all_decls
+      in
       (defines, items)
   | _ ->
       if !warn_unsupported then begin

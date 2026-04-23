@@ -31,6 +31,12 @@ type const =
         [Ast.Enum] ctype) as well as typedef aliases (payload is the aliased
         ctype). Both flow through a single arm downstream because they behave
         identically: add [name -> ctype] to [DeclMap]. *)
+  | GlobalVar of string * Ast.ctype
+    (** File-scope variable declaration or definition. Payload is the
+        identifier and its declared type. Any initializer is dropped here;
+        only the declared type seeds the identifier's binding in
+        [Runner.infer_def]. Covers both [extern] declarations and in-file
+        definitions. *)
   | Define of string * const
   | Include of top_level_unit list (* items parsed from an included external header *)
   [@@deriving show]
@@ -68,6 +74,7 @@ let top_level_unit_name top =
   match top with
   | _, Fundef (_, name, _, _) -> name
   | _, TypeDecl (name, _) -> name
+  | _, GlobalVar (name, _) -> name
   | _, Define (name, _) -> name
   | _, Include _ -> ""
 
@@ -203,20 +210,19 @@ let add_var env str =
   StrMap.add str v env
 
 
-(* Check if variables in the body are defined as parameters.
-  If yes, we create a fresh variable with let that gets the param. 
-  pid: parameters 
-  eid : variables
-  e: expression to add after (let v = param in e)
-  str: name of the variable to look at 
-  TODO: we already have explicit declarations in C so we should rather use them instead of detecting variables *)
-let add_def pid eid e str =
+(* Wrap [e] in a [Declare] for body variable [str], unless [str] is already
+   bound as a parameter (parameters are lambda-bound, so no local Declare is
+   needed). The param set is passed explicitly rather than reading from an
+   [env.id] map because [env.id] now also carries file-scope globals, and a
+   body-var that happens to shadow a global must still be locally declared.
+   TODO: we already have explicit declarations in C so we should rather use
+   them instead of detecting variables *)
+let add_def params eid e str =
   let v = StrMap.find str eid in
-  match StrMap.find_opt str pid with
-  | None ->
-      let _, decl, _, _ = e in
-      (Eid.unique (), decl, Ast.VarMap.empty, Ast.Declare (v, e))
-  | _ -> e
+  if StrSet.mem str params then e
+  else
+    let _, decl, _, _ = e in
+    (Eid.unique (), decl, Ast.VarMap.empty, Ast.Declare (v, e))
 
 let mk_e env eid expr =
   (eid, env.decl, Ast.VarMap.empty, expr)
@@ -371,19 +377,20 @@ and process_call env f args =
 and transform env (pos, topl_unit) = 
   let eid = Eid.unique_with_pos pos in
   let (decl, e) = match topl_unit with 
-  | Fundef (ret_ty, name, params, body) -> 
+  | Fundef (ret_ty, name, params, body) ->
 
     let param_vars = bv_params params in
     let pid = List.fold_left add_var env.id (StrSet.elements param_vars) in
-    let env = {env with id=pid} in 
+    let env = {env with id=pid} in
     let body_vars = bv_e false body in
     let eid = List.fold_left add_var env.id (StrSet.elements body_vars) in
     let env = {env with id=eid} in
-    let e = List.fold_left (add_def pid eid) (aux_e env body) (StrSet.elements body_vars) in
+    let e = List.fold_left (add_def param_vars eid) (aux_e env body) (StrSet.elements body_vars) in
     let params = List.map (fun (ty,name) -> resolve_ctype env.decl ty, var env name) params in
     let ret_ty = resolve_ctype env.decl ret_ty in
-    (env.decl, Ast.Function (name, ret_ty, params, e)) 
+    (env.decl, Ast.Function (name, ret_ty, params, e))
   | TypeDecl (name, ty) -> (Ast.DeclMap.add name ty env.decl, Ast.Noop)
+  | GlobalVar _ -> (env.decl, Ast.Noop) (* handled by infer_def directly *)
   | Define (_name, _value) -> (env.decl, Ast.Noop)
   | Include _ -> (env.decl, Ast.Noop) (* handled by infer_def directly *)
   in

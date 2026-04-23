@@ -258,3 +258,14 @@
  (alias   runtest)
  (deps    cprogs/self-referential.c cprogs/self-referential.expected)
  (action  (diff cprogs/self-referential.expected self-referential.output)))
+(rule
+ (alias   runtest)
+ (deps    cprogs/globals-probe.c)
+ (action  (with-stdout-to globals-probe.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/globals-probe.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/globals-probe.c cprogs/globals-probe.expected)
+ (action  (diff cprogs/globals-probe.expected globals-probe.output)))
+

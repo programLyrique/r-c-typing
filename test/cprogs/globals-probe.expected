@@ -1,0 +1,32 @@
+use_ext_sexp: () -> env | prim | vec
+
+use_ext_int: () -> c_int_na
+
+use_ext_const_int: () -> c_int_na
+
+use_def_sexp: () -> env | prim | vec
+
+use_def_int: () -> c_int_na
+
+use_def_int_42: () -> c_int_na
+
+use_def_const_int_42: () -> c_int_na
+
+use_def_sexp_nil: () -> env | prim | vec
+
+use_stat_sexp: () -> env | prim | vec
+
+use_stat_int_7: () -> c_int_na
+
+use_def_arr: c_int -> c_int_na
+
+use_def_pt_x: () -> c_int_na
+
+use_ext_sexp_A: () -> env | prim | vec
+
+use_ext_sexp_B: () -> env | prim | vec
+
+set_def_int: c_int_na -> ()
+
+get_def_int: () -> c_int_na
+
