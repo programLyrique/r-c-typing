@@ -152,6 +152,17 @@ let infer_ast visible opts (idenv, env, decl) (ast : Ast.e) =
       if not opts.mlsem && opts.debug  then (* Still print the mlsem ast*)
         Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp mlsem_ast ;
       idenv, env, decl
+  | Not_found ->
+      (* Refinement/reconstruction occasionally raises Not_found when an
+         identifier referenced in the body isn't bound in the env (e.g. R C
+         API macros, file-scope globals). Treat as untypeable so the rest of
+         the package still gets processed. *)
+      Format.printf "%s:@.untypeable: internal error: Not_found@." name;
+      if opts.debug then
+        Format.eprintf "%s@." (Printexc.get_backtrace ()) ;
+      if not opts.mlsem && opts.debug then
+        Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp mlsem_ast ;
+      idenv, env, decl
 
 (** past: the parsed AST *)
 let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=false) visible_name opts (idenv, env, decl)  past =
