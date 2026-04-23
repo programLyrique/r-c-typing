@@ -206,7 +206,13 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
          we overwrite: in well-formed C, repeated declarations have the same
          ctype so the env binding is unchanged, and when the prior binding
          came from the unknown-name fallback in [PAst.var] (type [any]) the
-         more precise ctype-derived type takes over. *)
+         more precise ctype-derived type takes over.
+
+         [Env.replace] (not [Env.add]) is required because [register_dynamic]
+         returns the same [Variable.t] for repeated declarations of a global
+         across translation units (shared [extern] in a header included from
+         several .c files). [Env.add] asserts the variable is unbound and
+         would crash the package on the second sighting. *)
       if has_ty_binding name then
         (idenv, env, decl)
       else begin
@@ -219,7 +225,7 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
         let tys = ty |> GTy.mk |> TyScheme.mk_mono in
         if opts.debug && visible then
           print_visible `Default visible v tys;
-        (StrMap.add name v idenv, Env.add v tys env, decl)
+        (StrMap.add name v idenv, Env.replace v tys env, decl)
       end
   | _,PAst.Fundef (ret_ty, name, params, _) when convention=Some(Package.C) ->
     (try
