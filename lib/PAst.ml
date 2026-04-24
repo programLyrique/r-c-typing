@@ -201,7 +201,18 @@ let rec resolve_ctype_aux visited decl ty =
       | _ -> ty
     )
   | Ast.Enum (name, enumerators) -> Ast.Enum (name, enumerators)
-  | Ast.Ptr t -> Ast.Ptr (resolve_ctype_aux visited decl t)
+  | Ast.Ptr t ->
+      let t' = resolve_ctype_aux visited decl t in
+      (* R's canonical definition is [typedef struct SEXPREC *SEXP;]. Packages
+         that vendor their own alias (e.g. rlang's [typedef struct SEXPREC
+         r_obj;] and then [r_obj*]) would otherwise leave us with [*struct { }]
+         — an opaque pointer that no base.ty signature accepts. Collapse any
+         pointer that resolves to [struct SEXPREC] down to [SEXP] here so the
+         rest of the pipeline sees the familiar form regardless of the typedef
+         name the package chose. *)
+      (match t' with
+       | Ast.Struct ("SEXPREC", _) -> Ast.SEXP
+       | _ -> Ast.Ptr t')
   | Ast.Array (t, len) -> Ast.Array (resolve_ctype_aux visited decl t, len)
   | Ast.Union (name, fields) ->
       let visited = StrSet.add name visited in

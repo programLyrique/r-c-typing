@@ -269,3 +269,14 @@
  (deps    cprogs/globals-probe.c cprogs/globals-probe.expected)
  (action  (diff cprogs/globals-probe.expected globals-probe.output)))
 
+(rule
+ (alias   runtest)
+ (deps    cprogs/sexprec-alias.c)
+ (action  (with-stdout-to sexprec-alias.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/sexprec-alias.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/sexprec-alias.c cprogs/sexprec-alias.expected)
+ (action  (diff cprogs/sexprec-alias.expected sexprec-alias.output)))
+

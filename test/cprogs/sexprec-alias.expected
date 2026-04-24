@@ -1,0 +1,8 @@
+Rf_xlength: ∀'a. vec[int(i(int & 'a))] -> cint(int & 'a)
+
+r_length: ∀'a. vec[int(i(int & 'a))] -> cint(int & 'a)
+
+my_length: ∀'a. vec[int(i(int & 'a))] -> cint(int & 'a)
+
+raw_length: ∀'a. vec[int(i(int & 'a))] -> cint(int & 'a)
+
