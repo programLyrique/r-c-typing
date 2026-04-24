@@ -70,6 +70,16 @@ Run inference for an R package directory:
 dune exec r-c-typing -- test/packages/testpkg
 ```
 
+## Useful flags
+
+| Flag | Description |
+|------|-------------|
+| `--timeout SECONDS` | Per-function timeout for body inference. The rest of the package continues after a timeout. |
+| `--fallback-c-signature` | When body inference fails (untypeable, internal error, or timeout), bind the function at its declared C signature — `params -> ret_ty` — so callers can still be typed instead of cascading as "unbound variable". The original error is still printed, followed by an indented `fallback: <type>` line. Off by default. |
+| `--debug` | Print intermediate AST/inference information. |
+| `--past`, `--ast`, `--mlsem`, `--cst` | Print the corresponding intermediate form. |
+| `-f/--filter SUBSTRING` | Restrict printed output to symbols whose name contains `SUBSTRING`. |
+
 ## Type definitions
 
 Builtin and external signatures are currently described in both `types/base.ty` and `types/posix.ty`.
