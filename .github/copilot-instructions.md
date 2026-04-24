@@ -109,6 +109,22 @@ dune build test/typing_test.exe  # Build standalone test executable
 dune exec bin/main.exe -- <file.c>  # Run type inference on a C file
 ```
 
+### Large-Change Validation
+
+For substantial parser, preprocessor, PAst, runner, or package-handling changes, do not stop at `dune build` or `dune runtest`.
+
+- Validate the change against the external pipeline in `/home/pierre/Documents/RLanguage/r-typing`.
+- Run the pipeline on at least one small real package such as `clue` or `jsonlite` via `scripts/run_one_package.sh`.
+- Treat package-level crashes, new nonzero exits, decreases in the number of typed functions for a package, or other obvious regressions in the pipeline output as blocking until investigated.
+
+Example:
+
+```bash
+cd /home/pierre/Documents/RLanguage/r-typing
+CHECKER_DIR=/home/pierre/Documents/RLanguage/r-c-typing scripts/run_one_package.sh work/sources/jsonlite work/raw_output_test
+CHECKER_DIR=/home/pierre/Documents/RLanguage/r-c-typing scripts/run_one_package.sh work/sources/clue work/raw_output_test
+```
+
 ### Code Coverage Analysis
 
 The project uses bisect_ppx for code coverage instrumentation:
