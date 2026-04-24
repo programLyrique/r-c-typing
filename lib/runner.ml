@@ -275,7 +275,7 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
         Format.printf "%s:@.untypeable: %s@." name msg;
       (idenv, env, decl))
   | _, (PAst.Fundef (ret_ty, name, params, _) as e) when simple_c_fun && C_interface.is_simple_c_function e ->
-    let ty = C_interface.infer_cfun ret_ty params |> GTy.mk |>  TyScheme.mk_mono in
+    let ty = C_interface.infer_cfun ~typedef_map:decl ret_ty params |> GTy.mk |>  TyScheme.mk_mono in
     if has_ty_binding name then begin
       (match find_existing_binding name idenv env with
        | Some (v, tys) -> print_visible `SimpleC visible v tys
@@ -296,7 +296,7 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
     end else if StrMap.mem name idenv then
       (idenv, env, decl)
     else
-      let ty = C_interface.infer_cfun ret_ty params |> GTy.mk |> TyScheme.mk_mono in
+      let ty = C_interface.infer_cfun ~typedef_map:decl ret_ty params |> GTy.mk |> TyScheme.mk_mono in
       let v = MVariable.create Immut (Some name) in
       print_visible `Default visible v ty;
       (StrMap.add name v idenv, Env.add v ty env, decl)
@@ -317,7 +317,7 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
         if opts.fallback_c_signature then
           match past with
           | _, PAst.Fundef (ret_ty, _, params, _) ->
-              Some (fun () -> C_interface.infer_cfun ret_ty params)
+              Some (fun () -> C_interface.infer_cfun ~typedef_map:decl ret_ty params)
           | _ -> None
         else None
       in

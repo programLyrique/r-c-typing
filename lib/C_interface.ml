@@ -30,11 +30,21 @@ let is_simple_c_function past =
 
        
 
-let infer_cfun return_ty params =
-  let arg_types = List.map (fun (ty, _) -> Ast.typeof_ctype ty) params in
+(* [typedef_map] carries the accumulated [TypeDecl]s so that typedef-aliased
+   parameter/return types (e.g. [r_obj* = struct SEXPREC*]) are resolved to
+   their canonical form before being translated to Sstt. Without it,
+   [Typeref "r_obj"] degrades to [Ty.any] and a [SEXP] signature becomes
+   [*any -> *any]. The result is wrapped with [Attr.mk_anyclass] to match
+   the calling convention expected by [Ast.build_call] (which projects the
+   callee through [pfun], whose domain requires an attribute-wrapped
+   function); without this, any body applying such a binding fails with
+   "untypeable projection". *)
+let infer_cfun ?(typedef_map = Ast.DeclMap.empty) return_ty params =
+  let resolve = PAst.resolve_ctype typedef_map in
+  let arg_types = List.map (fun (ty, _) -> Ast.typeof_ctype (resolve ty)) params in
   let arg_tuple = Tuple.mk arg_types in
-  let ret_ty = Ast.typeof_ctype return_ty in
-  Arrow.mk arg_tuple ret_ty
+  let ret_ty = Ast.typeof_ctype (resolve return_ty) in
+  Arrow.mk arg_tuple ret_ty |> Rstt.Attr.mk_anyclass
 
 
 let dotC_typeof typedef_map ct =
@@ -65,7 +75,8 @@ let infer_dotC ?(typedef_map = Ast.DeclMap.empty) ret_ty params =
   let arg_tuple = Tuple.mk arg_types in
   if ret_ty != Ast.Void then
     failwith "Return type of .C functions must be void.";
-  Arrow.mk arg_tuple Rstt.Cenums.void
+  (* Same attribute wrapping as [infer_cfun] — see comment there. *)
+  Arrow.mk arg_tuple Rstt.Cenums.void |> Rstt.Attr.mk_anyclass
 
 
 let infer_dotC_from_past ?(typedef_map = Ast.DeclMap.empty) = function
@@ -108,6 +119,7 @@ let%test "infer_dotC infers supported .C parameters from a PAst function" =
            Vec.AnyLength (Prim.mk Prim.Chr.any) |> Vec.mk |> Attr.mk_anyclass;
            Vec.AnyLength (Prim.mk Prim.Raw.any) |> Vec.mk |> Attr.mk_anyclass ])
       Cenums.void
+    |> Attr.mk_anyclass
   in
   Ty.equiv (infer_dotC_from_past past) expected
 
