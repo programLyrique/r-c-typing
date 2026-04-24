@@ -84,3 +84,8 @@ INT_MAX: c_int
 INT_MIN: c_int
 DBL_MAX: c_double
 DBL_MIN: c_double
+
+
+// C stdlib string 
+strlen: t(c_string) -> c_int
+strcmp: t(c_string, c_string) -> c_int // TODO: we should make it work on string singletons also, to be able to check for equality at least

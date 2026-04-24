@@ -13,8 +13,12 @@ isLogical: (t(v(lgl)) -> c_true) & (t(~v(lgl)) -> c_false)
 IS_SCALAR: (t(v[1]('b)) -> c_true) & (t(v[int \ 1]('b)) -> c_false)
 
 INTEGER: t(v(int)) -> *c_int
+INTEGER_RO: t(v(int)) -> *c_int
 REAL: t(v(dbl)) -> *c_double
+REAL_RO: t(v(dbl)) -> *c_double
 LOGICAL: t(v(lgl)) -> *c_int
+LOGICAL_RO: t(v(lgl)) -> *c_int
+
 
 LENGTH: t(v[int('a)](any)) -> c_int('a)
 XLENGTH: t(v[int('a)](any)) -> c_int('a)
@@ -33,10 +37,11 @@ VECTOR_ELT: t({ 'r}, c_int) -> 'r
 SET_VECTOR_ELT: t({ 'r}, c_int, 'a) -> { 'r | 'a}
 
 isVector: (t(v('a) | expr | list) -> c_true) & (t(any_r_not_vec \ (list & expr)) -> c_false)
-
+isVectorList: (t(list | expr) -> c_true) & (t(v('a) | any_r_not_vec \ (list | expr)) -> c_false)
 
 ScalarReal: t(c_double | c_int) -> dbl1
 ScalarInteger: (t(c_int('a)) -> v[1](int('a))) & (t(c_na) -> v[1](int \ ^int))
+ScalarLogical: (t(c(0)) -> v[1](ff)) & (t(c_na) -> v[1](lgl \ ^lgl)) & (t(c_int \ c(0)) -> v[1](tt))
 
 // Strings 
 na_string = p(chr \ ^chr)
@@ -56,6 +61,7 @@ asChar: (t(v[(1..)]('a)) -> chr1) & (t(p(chr) & 'a) -> 'a) & (t(sym) -> chr1) & 
 type2char:  (t(p(int)) -> c("integer")) & (t(p(dbl)) -> c("double")) & (t(p(lgl)) -> c("logical")) & (t(p(chr)) -> c("character")) & (t(p(clx)) -> c("complex")) & (t(p(raw)) -> c("raw")) & (t(list) -> c("list")) & (t(null) -> c("NULL")) & (t(env) -> c("environment")) & (t(sym) -> c("symbol")) & (t(lang) -> c("language")) & (t(expr) -> c("expression")) & (t(any -> any) -> c("closure"))
 isString: (t(v(chr)) -> c_true) & (t(any \ v(chr)) -> c_false)
 getCharCE: t(p(chr)) -> c_int
+translateCharUTF8: t(chr) -> c_string
 
 // Environments 
 R_GlobalEnv: env
@@ -75,6 +81,7 @@ asInteger: t(any) -> c_int
 list2: t(any, any) -> lang
 isPairList: (t(lang) -> c_true) & (t(~lang) -> c_false)
 lang1: t(any) -> lang
+lang2: t(any, any) -> lang
 
 // Attributes
 // TODO: we also support attributes in the type algebra, so add it!
@@ -116,9 +123,14 @@ R_ReleaseObject: t(any) -> c_void
 *__1: t(*'a) -> 'a
 &__1: t('a) -> *'a
 
+abs: t(c_int) -> c_int //TODO: rather put the interval [0,+infinity] ; (0..)?
+ 
 R_INT_MIN: c_int
 R_INT_MAX: c_int
+R_LEN_T_MAX: c_int
 sizeof: t(any) -> c_int
+
+INT64_MIN: c_int
 
 
 Rf_envlength: t(any) -> c_int
@@ -139,6 +151,7 @@ CDR: t(any) -> any
 TYPEOF: (t(v('a)) -> 'a) & (t('b & ~vec & any_r_not_vec) -> 'b)
 
 NA_INTEGER: c_int_na
+NA_LOGICAL: c_int_na
 
 TRUE: c_true
 FALSE: c_false
@@ -182,6 +195,7 @@ R_CheckUserInterrupt: t() -> c_void
 LCONS: t(any, lang | null) -> lang
 CONS: t(any, lang | null) -> lang
 cons: t(any, lang | null) -> lang
+lcons: t(any, lang | null) -> lang
 CAR: t(lang) -> any
 CADR: t(lang) -> any
 
@@ -194,6 +208,13 @@ asReal: t(any) -> c_double
 memcpy: t(any, any, c_int) -> any
 R_alloc: t(c_int, c_int) -> *any
 R_isort: t(*c_int_na, c_int) -> c_void
+shallow_duplicate: t('a) -> 'a
+duplicate: t('a) -> 'a
+
+// Coercion
+coerceVector: t(any, 'a) -> 'a//TODO: not all coercions are possible!
+
+MARK_NOT_MUTABLE: t(any) -> c_void
 
 // classes 
 inherits: t(any, c_string) -> c_bool // to improve when supporting classes
