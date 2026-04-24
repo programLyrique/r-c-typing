@@ -129,7 +129,7 @@ let infer_ast visible opts (idenv, env, decl) (ast : Ast.e) =
   try 
     if opts.typing then
         with_inference_timeout opts.timeout (fun () ->
-          let env = extend_env mlsem_ast env in
+          let _env = extend_env mlsem_ast env in
           let renvs = System.Refinement.refinements env mlsem_ast in
           let reconstructed = System.Reconstruction.infer env renvs mlsem_ast in
           let typ = System.Checker.typeof_def env reconstructed mlsem_ast in

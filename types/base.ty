@@ -62,6 +62,9 @@ type2char:  (t(p(int)) -> c("integer")) & (t(p(dbl)) -> c("double")) & (t(p(lgl)
 isString: (t(v(chr)) -> c_true) & (t(any \ v(chr)) -> c_false)
 getCharCE: t(p(chr)) -> c_int
 translateCharUTF8: t(chr) -> c_string
+PRINTNAME: t(sym) -> p(chr)
+STRING_PTR_RO: t(v(chr)) -> *p(chr)
+STRING_PTR: t(v(chr)) -> *p(chr)
 
 // Environments 
 R_GlobalEnv: env
@@ -112,6 +115,7 @@ R_ReleaseObject: t(any) -> c_void
 /__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any)
 |__2: t(c_int, c_int) -> c_int
 ^__2: t(c_int, c_int) -> c_int
+&__2: t(c_int, c_int) -> c_int
 ~__1: t(c_int) -> c_int
 <<__2: t(c_int, c_int) -> c_int
 >>__2: t(c_int, c_int) -> c_int
