@@ -4,7 +4,7 @@ isInteger3: (env | lang | list | null | sym | v(chr | clx | dbl | lgl | raw) | (
 
 checkList: (env | lang | null | sym | vec | (any -> any) -> c_false) & (list -> c_true)
 
-isVectorList: (env | lang | null | sym | vec | (any -> any) -> c_false) & (list -> c_true)
+isVectorList: ∀'a. (env | lang | null | sym | v('a) | (any -> any) -> c_false) & (list -> c_true)
 
 length2: ∀'a. (null -> c_false) & (vec[int(i(int & 'a))] -> cint(int & 'a))
 

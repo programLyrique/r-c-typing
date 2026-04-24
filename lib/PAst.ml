@@ -1,4 +1,5 @@
 open Mlsem.Common
+open Mlsem.Types
 module MVariable = Mlsem.Lang.MVariable
 
 module Position = struct
@@ -246,7 +247,7 @@ let var env str =
   | Some v -> v
   | None ->
     Printf.printf "Creating fresh variable: %s\n" effective;
-    MVariable.create Immut (Some effective)
+    Defs.BuiltinVar.register_dynamic effective Ty.any
 
 let add_var env str =
   let v = MVariable.create MVariable.Mut (Some str) in

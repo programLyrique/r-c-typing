@@ -32,14 +32,17 @@ let make_substring_pred = function
    env: typing environment: Variable.t -> TyScheme.ty 
 *)
 
-(**  Give the any type to any free variables (not in the environment) *)
+(**  Give the [dyn] (gradual) type to any free variables not already in the
+     environment. These are C identifiers that neither had a [.ty] binding nor
+     a declaration in the translation unit — e.g. calls into another package's
+     C code. Binding them gradually lets inference tolerate the unknown type
+     instead of propagating constraints from a free variable. *)
 let extend_env mlast env =
   let fv = System.Ast.fv mlast in
   let dom = Env.domain env |> VarSet.of_list in
   let missing = VarSet.diff fv dom in
   missing |> VarSet.elements |> List.fold_left
-    (fun env v -> (Printf.printf "Missing: %s at %s \n" (Variable.get_unique_name v) (Position.string_of_pos (Variable.get_location v));
-     Env.add v (TyScheme.mk_mono GTy.dyn) env)) env
+    (fun env v -> Env.add v (TyScheme.mk_mono GTy.dyn) env) env
 
 let is_declaration = function
   | _, PAst.Fundef (_, _, _, (_, PAst.Seq [])) -> true
@@ -126,7 +129,7 @@ let infer_ast visible opts (idenv, env, decl) (ast : Ast.e) =
   try 
     if opts.typing then
         with_inference_timeout opts.timeout (fun () ->
-          let _env = extend_env mlsem_ast env in (*TODO: bring it back when the inference deals with any in a more appropriate way*)
+          let env = extend_env mlsem_ast env in
           let renvs = System.Refinement.refinements env mlsem_ast in
           let reconstructed = System.Reconstruction.infer env renvs mlsem_ast in
           let typ = System.Checker.typeof_def env reconstructed mlsem_ast in
