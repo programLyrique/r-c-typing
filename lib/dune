@@ -4,6 +4,8 @@
   ast
   defs
   in_channel_ext
+    parser_utils
+    preprocessor
   parser
   PAst
   runner

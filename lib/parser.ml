@@ -3,92 +3,21 @@ open Tree_sitter_run
 open CST
 module A = PAst
 open Mlsem.Common
+module U = Parser_utils
 
-module StrSet = Set.Make(String)
-module StrMap = Map.Make(String)
+module StrSet = Preprocessor.StrSet
 
 let warn_unsupported = ref true
 
 let set_warn_unsupported value =
-  warn_unsupported := value
+  warn_unsupported := value;
+  Preprocessor.set_warn_unsupported value
 
-let default_predefined_defines =
-  match Sys.os_type with
-  | "Win32" ->
-      StrSet.of_list ["_WIN32"; "WIN32"; "__WIN32"; "__WINDOWS__"]
-  | _ ->
-      StrSet.of_list
-        ["__linux__"; "__linux"; "linux"; "__gnu_linux__"; "__unix__"; "__unix"; "unix"]
+let default_include_dirs = Preprocessor.default_include_dirs
 
-let predefined_defines = ref default_predefined_defines
+let set_predefined_defines = Preprocessor.set_predefined_defines
 
-let set_predefined_defines defines =
-  predefined_defines := StrSet.of_list defines
-
-(** TEMPORARY WORKAROUND: preloaded string values for a few macros we can't
-    currently resolve through normal preprocessing. These are either (a) in
-    system headers we don't parse (e.g. [<Rinternals.h>], [<inttypes.h>]'s
-    deeper expansions), or (b) guarded by [#if R_VERSION < R_Version(...)]
-    conditions that our [eval_preproc_expression] can't evaluate because it
-    lacks numeric-valued defines and function-like macro support.
-
-    The long-term plan is to extend [eval_preproc_expression] with numeric
-    defines and function-like macro evaluation (at minimum [R_Version])
-    so the conditions in package headers resolve correctly. Until then,
-    grow this list as new packages surface missing macros. *)
-let default_predefined_define_constants : A.const StrMap.t =
-  List.fold_left (fun m (k, v) -> StrMap.add k v m) StrMap.empty [
-    (* R long-vector format specifier; defined by R >= 4.4 in Rinternals.h. *)
-    "R_PRIdXLEN_T", A.CStr "d";
-    (* <inttypes.h> printf specifiers for 64-bit integers. On 64-bit Linux
-       these expand via [__PRI64_PREFIX = "l"]; we flatten to the expanded
-       form. *)
-    "PRIu64", A.CStr "lu";
-    "PRId64", A.CStr "ld";
-    "PRIx64", A.CStr "lx";
-    "PRIX64", A.CStr "lX";
-    "PRIo64", A.CStr "lo";
-  ]
-
-let default_include_dirs = ["/usr/include"; "/usr/local/include"]
-
-(** Memoization cache: each resolved header path is parsed and processed at
-    most once per run. Without this, every [#include <stdio.h>] across a
-    package's translation units would reparse glibc's header closure, causing
-    combinatorial blow-up. Also breaks include cycles since we mark a path as
-    processed before recursing into it. *)
-let processed_headers : (string, unit) Hashtbl.t = Hashtbl.create 64
-
-let define_constants : A.const StrMap.t ref = ref default_predefined_define_constants
-
-let reset_define_constants () = define_constants := default_predefined_define_constants
-
-let remove_define_constant name =
-  define_constants := StrMap.remove name !define_constants
-
-let remember_define_constant name value =
-  define_constants := StrMap.add name value !define_constants
-
-let resolve_defined_string name =
-  match StrMap.find_opt name !define_constants with
-  | Some (A.CStr s) -> Some s
-  | _ -> None
-
-let reset_processed_headers () = Hashtbl.clear processed_headers
-
-let include_dirs : string list ref = ref default_include_dirs
-
-let set_include_dirs dirs =
-  include_dirs := dirs;
-  (* Different search paths can resolve the same relative header to a
-     different file, so invalidate the cache when paths change. *)
-  reset_processed_headers ()
-
-let resolve_header relative_path =
-  List.find_map (fun dir ->
-    let full = Filename.concat dir relative_path in
-    if Sys.file_exists full then Some full else None
-  ) !include_dirs
+let set_include_dirs = Preprocessor.set_include_dirs
 
 let print_res (res: (CST.translation_unit, CST.extra) Tree_sitter_run.Parsing_result.t) = 
   Printf.printf "Errors: %d. Lines with errors: %d / %d\n" res.stat.error_count
@@ -130,28 +59,14 @@ let parse_string s =
       current_id
 
 (* Taken from E-Sh4rk/typed-r *)
-let line_length = 0x10000
-let conv_pos tspos =
-  let bol = tspos.Loc.row*line_length in
-  {
-    Lexing.pos_fname = "" ;
-    pos_lnum = tspos.Loc.row ;
-    pos_bol = bol ;
-    pos_cnum = bol + tspos.Loc.column ;
-  }
+let conv_pos = U.conv_pos
 
 
-let loc_to_pos (loc: Loc.t) : Position.t =
-  let start_pos = conv_pos loc.start in
-  let end_pos = conv_pos loc.end_ in
-  Position.lex_join start_pos end_pos
+let loc_to_pos = U.loc_to_pos
 
 (** Given to locations, create a position using the start of
    the first loc and the end of the second loc *)
-let locs_to_pos (loc1: Loc.t) (loc2: Loc.t) : Position.t =
-  let start_pos = conv_pos loc1.start in
-  let end_pos = conv_pos loc2.end_ in
-  Position.lex_join start_pos end_pos
+let locs_to_pos = U.locs_to_pos
 
 let exprs_to_pos (expr1: A.e) (expr2: A.e) : Position.t =
   let pos1, _ = expr1 in
@@ -199,71 +114,9 @@ let top_level_initializer_count ((_, initializers, _, _) : initializer_list) =
   | None -> 0
   | Some (_, inits) -> 1 + List.length inits
 
-let strip_int_suffix s =
-  let i = ref (String.length s - 1) in
-  while
-    !i >= 0
-    && match s.[!i] with 'u' | 'U' | 'l' | 'L' -> true | _ -> false
-  do
-    decr i
-  done;
-  String.sub s 0 (!i + 1)
+let parse_c_int_literal = U.parse_c_int_literal
 
-let normalize_int_literal s =
-  let len = String.length s in
-  if len >= 2 && s.[0] = '0' && (s.[1] = 'x' || s.[1] = 'X' || s.[1] = 'b' || s.[1] = 'B') then s
-  else if len > 1 && s.[0] = '0' then
-    let rec all_octal i =
-      i >= len || ((s.[i] >= '0' && s.[i] <= '7') && all_octal (i + 1))
-    in
-    if all_octal 1 then "0o" ^ String.sub s 1 (len - 1) else s
-  else s
-
-let parse_c_int_literal s =
-  let core = s |> strip_int_suffix |> normalize_int_literal in
-  int_of_string core
-
-let decode_c_escape_sequence s =
-  let fail () = failwith ("Invalid C escape sequence: " ^ s) in
-  if String.length s < 2 || s.[0] <> '\\' then fail ()
-  else
-    let parse_int base digits =
-      if String.length digits = 0 then fail () else int_of_string (base ^ digits)
-    in
-    match s.[1] with
-    | 'a' when String.length s = 2 -> 7
-    | 'b' when String.length s = 2 -> 8
-    | 'f' when String.length s = 2 -> 12
-    | 'n' when String.length s = 2 -> 10
-    | 'r' when String.length s = 2 -> 13
-    | 't' when String.length s = 2 -> 9
-    | 'v' when String.length s = 2 -> 11
-    | '\\' when String.length s = 2 -> Char.code '\\'
-    | '\'' when String.length s = 2 -> Char.code '\''
-    | '"' when String.length s = 2 -> Char.code '"'
-    | '?' when String.length s = 2 -> Char.code '?'
-    | 'x' -> parse_int "0x" (String.sub s 2 (String.length s - 2))
-    | 'u' when String.length s = 6 -> parse_int "0x" (String.sub s 2 4)
-    | 'U' when String.length s = 10 -> parse_int "0x" (String.sub s 2 8)
-    | c2 when '0' <= c2 && c2 <= '7' -> parse_int "0o" (String.sub s 1 (String.length s - 1))
-    | c2 when String.length s = 2 -> Char.code c2
-    | _ -> fail ()
-
-let decode_c_char_literal_values chars =
-  List.map
-    (function
-      | `Imm_tok_pat_36637e2 (_, s) ->
-          assert (String.length s = 1);
-          Char.code s.[0]
-      | `Esc_seq (_, s) -> decode_c_escape_sequence s)
-    chars
-
-let int_of_char_literal (char_lit : char_literal) =
-  let _, chars, _ = char_lit in
-  let values = decode_c_char_literal_values chars in
-  match values with
-  | [value] -> value
-  | _ -> List.fold_left (fun acc value -> (acc lsl 8) lor (value land 0xFF)) 0 values
+let int_of_char_literal = U.int_of_char_literal
 
 type enum_counter =
   | EnumInit
@@ -634,7 +487,7 @@ and aux_string (s: string_) =
     (start_loc, end_loc, str)
   in
   let identifier_parts ((loc, name) as identifier) =
-    match resolve_defined_string name with
+    match Preprocessor.resolve_defined_string name with
     | Some str -> (loc, loc, str)
     | None ->
         failwith
@@ -717,7 +570,7 @@ and aux_char_lit (c: char_literal) =
     | `U8SQUOT (loc, _)
     | `SQUOT (loc, _) -> loc
   in
-  let values = decode_c_char_literal_values chars in
+  let values = U.decode_c_char_literal_values chars in
   let is_plain_char =
     match (start, values) with
     | (`SQUOT _, [v]) when v >= 0 && v <= 255 -> true
@@ -1233,7 +1086,7 @@ and aux_paren_expr (p_expr: parenthesized_expression) =
   let (l1,_), expr, (l2,_) = p_expr in
   match expr with
   | `Exp e -> aux_expression e
-  | `Comma_exp (e1, _, e2) -> 
+  | `Comma_exp (e1, _, e2) ->
       let ast1 = aux_expression e1 in
       let ast2 = aux_comma_expression e2 in
       (locs_to_pos l1 l2, A.Comma (ast1,ast2))
@@ -1244,13 +1097,13 @@ and aux_if_statement (if_stmt: if_statement) =
   let ast_cond = aux_paren_expr cond in
   let ast_then = aux_statement then_stmt in
   let ast_else = Option.map (fun (_,st) -> aux_statement st) else_opt in
-  let l2 = Option.map  
+  let l2 = Option.map
     (fun (pos,_) -> Position.end_of_position pos)
     ast_else
     |> Option.value ~default:(Position.end_of_position @@ fst ast_then)
   in
 
-  (Position.lex_join (conv_pos l1.start) l2,A.If (ast_cond, ast_then, ast_else)) 
+  (Position.lex_join (conv_pos l1.start) l2,A.If (ast_cond, ast_then, ast_else))
 
 let rec body_has_trailing_return ((_, expr) : A.e) =
   match expr with
@@ -1270,248 +1123,29 @@ let ensure_void_return body =
     | A.Seq exprs -> (pos, A.Seq (exprs @ [trailing_return]))
     | _ -> (pos, A.Seq [body; trailing_return])
 
-and aux_prep_func_def (func_def: preproc_function_def) = 
-  let ((loc1, _), name, params, body, (loc2,_)) = func_def in
-  let name = token_to_string name in
-  let _,params,(end_param,_) = params in 
-  let aux_prep_param (p: anon_choice_stmt_id_d3c4b5f) = 
-    match p with 
-    | `Id (_,s) -> s
-    | `DOTDOTDOT (loc, _) -> raise (VariadicParameter ("Not supported yet: variadic parameter in preprocessor function at " ^ (Position.string_of_lex_pos (conv_pos loc.start))))
-  in
-  try
-    let params = Option.fold ~none:[] ~some:(fun (p1, others) -> 
-      aux_prep_param p1 :: List.map (fun (_, p) -> aux_prep_param p) others
-    ) params |> 
-      List.map (fun p -> (Ast.Any, p)) 
-    in
-    let body = match body with 
-      | None -> (locs_to_pos end_param loc2, A.Return None)
-      | Some (_loc3,comp) -> 
-        let res = parse_string comp in
-        match res.program with
-        | None -> failwith ("Failed to parse preprocessor function body for " ^ name)
-        | Some tu -> 
-          Printf.printf "List length: %d\n" (List.length tu);
-          let items = List.filter_map (fun item -> 
-            match item with 
-            | `Top_level_stmt stmt -> Some (aux_top_level_statement stmt)
-            | _ ->
-                if !warn_unsupported then begin
-                  Printf.printf "Not supported yet: top level item in define";
-                  print_top_level_item item
-                end;
-                None
-          ) tu in 
-          List.hd items
-    in
-    Some(locs_to_pos loc1 loc2, A.Fundef (Ast.Any, name, params, body))
-  with Failure msg ->
-    if !warn_unsupported then
-      Printf.printf "Not supported yet: failed to parse preprocessor function body for %s: %s\n" name msg;
-    None
-  | VariadicParameter msg ->
-    if !warn_unsupported then
-      Printf.printf "%s\n" msg;
-    None
+let rec preprocessor_callbacks () =
+  {
+    Preprocessor.parse_string = parse_string;
+    top_level_statement = aux_top_level_statement;
+    parse_file;
+    parse_translation_unit = aux_translation_unit;
+  }
 
-let aux_preproc_define (prepoc : preproc_def) : A.top_level_unit option =
-  let ((loc1, _), name_tok, value_opt, _nl) = prepoc in
-  let name = token_to_string name_tok in
-  let rec strip_outer_parens s =
-    let s = String.trim s in
-    let len = String.length s in
-    if len >= 2 && s.[0] = '(' && s.[len - 1] = ')' then
-      strip_outer_parens (String.sub s 1 (len - 2))
-    else s
-  in
-  let is_c_identifier s =
-    let n = String.length s in
-    n > 0
-    && (match s.[0] with 'A'..'Z' | 'a'..'z' | '_' -> true | _ -> false)
-    && (let rec ok i =
-          i = n ||
-          (match s.[i] with
-           | 'A'..'Z' | 'a'..'z' | '0'..'9' | '_' -> ok (i + 1)
-           | _ -> false)
-        in ok 1)
-  in
-  let parse_char_literal s =
-    let len = String.length s in
-    if len = 3 && s.[0] = '\'' && s.[2] = '\'' then Some (A.CChar s.[1])
-    else None
-  in
-  let parse_define_value s =
-    let s = strip_outer_parens s in
-    let len = String.length s in
-    if len = 0 then None
-    else
-      match s with
-      | "NULL" | "nullptr" -> Some A.CNull
-      | "true" | "TRUE" -> Some (A.CBool true)
-      | "false" | "FALSE" -> Some (A.CBool false)
-      | _ when len >= 2 && s.[0] = '"' && s.[len - 1] = '"' ->
-          Some (A.CStr (String.sub s 1 (len - 2)))
-      | _ ->
-          begin
-            match parse_char_literal s with
-            | Some c -> Some c
-            | None ->
-                (match aux_num_lit s with
-                | A.Const c -> Some c
-                | _ -> None)
-          end
-  in
-  match value_opt with
-  | None -> None
-  | Some (_, raw_value) ->
-      let raw_value = String.trim raw_value in
-      let stripped = strip_outer_parens raw_value in
-      if is_c_identifier stripped && stripped <> name then begin
-        (* Object-like identifier alias: [#define NAME TARGET]. Recorded in
-           [PAst]'s alias table; resolved at every [PAst.var] lookup so the
-           alias picks up whatever binding [TARGET] has (.ty file, builtin,
-           same-package function). No AST node is emitted. *)
-        A.remember_define_alias name stripped;
-        None
-      end else
-      begin
-        try
-          match parse_define_value raw_value with
-          | Some c -> Some (loc_to_pos loc1, A.Define (name, c))
-          | None ->
-              if !warn_unsupported then
-                Printf.printf "Not supported yet: #define %s with empty/invalid value\n" name;
-              None
-        with Failure _ ->
-          if !warn_unsupported then
-            Printf.printf "Not supported yet: #define %s with non-literal value `%s`\n" name raw_value;
-          None
-      end
-
-let preproc_define_name ((_, name_tok, _, _) : preproc_def) =
-  token_to_string name_tok
-
-let preproc_ifdef_is_ifndef = function
-  | `Pat_25b90ba _ -> false
-  | `Pat_9d92f6a _ -> true
-
-let preproc_elifdef_is_ifndef = function
-  | `Pat_0307ca2 _ -> false
-  | `Pat_a6d4183 _ -> true
-
-(* Evaluate a preprocessor expression to an integer, following C semantics.
-   Undefined identifiers evaluate to 0 (per the C standard for #if). *)
-let rec eval_preproc_expression defines (expr : preproc_expression) : int =
-  match expr with
-  | `Id (_loc, name) ->
-      (* In C preprocessor, undefined identifiers evaluate to 0 *)
-      if StrSet.mem name defines then 1 else 0
-  | `Num_lit (_loc, s) ->
-      (* Strip integer suffixes (u/U/l/L) then parse *)
-      let strip_suffix s =
-        let i = ref (String.length s - 1) in
-        while !i >= 0 && (match s.[!i] with 'u' | 'U' | 'l' | 'L' -> true | _ -> false) do
-          decr i
-        done;
-        String.sub s 0 (!i + 1)
-      in
-      let core = strip_suffix s in
-      (try int_of_string core with Failure _ -> 0)
-  | `Char_lit char_lit ->
-      (* Reuse the existing char literal parser, extract the int value *)
-      let (_, expr) = aux_char_lit char_lit in
-      (match expr with
-       | A.Const (A.CChar c) -> Char.code c
-       | A.Const (A.CInt n) -> n
-       | _ -> 0)
-  | `Prep_defi defined ->
-      (* defined(X) or defined X *)
-      let name = match defined with
-        | `Defi_LPAR_id_RPAR (_, _, (_loc, name), _) -> name
-        | `Defi_id (_, (_loc, name)) -> name
-      in
-      if StrSet.mem name defines then 1 else 0
-  | `Prep_un_exp (op, sub_expr) ->
-      let v = eval_preproc_expression defines sub_expr in
-      (match op with
-       | `BANG _ -> if v = 0 then 1 else 0
-       | `TILDE _ -> lnot v
-       | `DASH _ -> -v
-       | `PLUS _ -> v)
-  | `Prep_bin_exp bin_expr ->
-      eval_preproc_binary defines bin_expr
-  | `Prep_paren_exp (_, sub_expr, _) ->
-      eval_preproc_expression defines sub_expr
-  | `Prep_call_exp ((_loc, _name), _args) ->
-      (* Unknown macro calls in #if context evaluate to 0 *)
-      0
-
-and eval_preproc_binary defines (bin_expr : preproc_binary_expression) : int =
-  let eval = eval_preproc_expression defines in
-  match bin_expr with
-  | `Prep_exp_PLUS_prep_exp (l, _, r) -> eval l + eval r
-  | `Prep_exp_DASH_prep_exp (l, _, r) -> eval l - eval r
-  | `Prep_exp_STAR_prep_exp (l, _, r) -> eval l * eval r
-  | `Prep_exp_SLASH_prep_exp (l, _, r) ->
-      let rv = eval r in if rv = 0 then 0 else eval l / rv
-  | `Prep_exp_PERC_prep_exp (l, _, r) ->
-      let rv = eval r in if rv = 0 then 0 else eval l mod rv
-  | `Prep_exp_BARBAR_prep_exp (l, _, r) ->
-      if eval l <> 0 then 1 else if eval r <> 0 then 1 else 0
-  | `Prep_exp_AMPAMP_prep_exp (l, _, r) ->
-      if eval l = 0 then 0 else if eval r <> 0 then 1 else 0
-  | `Prep_exp_BAR_prep_exp (l, _, r) -> eval l lor eval r
-  | `Prep_exp_HAT_prep_exp (l, _, r) -> eval l lxor eval r
-  | `Prep_exp_AMP_prep_exp (l, _, r) -> eval l land eval r
-  | `Prep_exp_EQEQ_prep_exp (l, _, r) -> if eval l = eval r then 1 else 0
-  | `Prep_exp_BANGEQ_prep_exp (l, _, r) -> if eval l <> eval r then 1 else 0
-  | `Prep_exp_GT_prep_exp (l, _, r) -> if eval l > eval r then 1 else 0
-  | `Prep_exp_GTEQ_prep_exp (l, _, r) -> if eval l >= eval r then 1 else 0
-  | `Prep_exp_LTEQ_prep_exp (l, _, r) -> if eval l <= eval r then 1 else 0
-  | `Prep_exp_LT_prep_exp (l, _, r) -> if eval l < eval r then 1 else 0
-  | `Prep_exp_LTLT_prep_exp (l, _, r) -> eval l lsl eval r
-  | `Prep_exp_GTGT_prep_exp (l, _, r) -> eval l asr eval r
-
-let fold_top_level_items aux_item defines items =
-  let defines, rev_items =
-    List.fold_left
-      (fun (defines, rev_items) item ->
-        let defines, current = aux_item defines item in
-        (defines, List.rev_append (List.rev current) rev_items))
-      (defines, []) items
-  in
-  (defines, List.rev rev_items)
-
-let rec aux_top_level_items defines items =
-  fold_top_level_items aux_top_level_item defines items
+and aux_top_level_items defines items =
+  Preprocessor.top_level_items
+    ~parser_callbacks:(preprocessor_callbacks ())
+    ~top_level_item:aux_top_level_item_non_preproc
+    ~top_level_block_item:aux_top_level_block_item_non_preproc
+    defines items
 
 and aux_top_level_block_items defines items =
-  fold_top_level_items aux_top_level_block_item defines items
+  Preprocessor.top_level_block_items
+    ~parser_callbacks:(preprocessor_callbacks ())
+    ~top_level_item:aux_top_level_item_non_preproc
+    ~top_level_block_item:aux_top_level_block_item_non_preproc
+    defines items
 
-and aux_top_level_else_branch defines else_branch =
-  match else_branch with
-  | `Prep_else (_else_tok, body) -> aux_top_level_block_items defines body
-  | `Prep_elif_5b2d46e (_elif_tok, condition, _newline, body, else_opt) ->
-      let value = eval_preproc_expression defines condition in
-      if value <> 0 then aux_top_level_block_items defines body
-      else (
-        match else_opt with
-        | None -> (defines, [])
-        | Some else_branch -> aux_top_level_else_branch defines else_branch)
-  | `Prep_elif_b56056c (directive, name_tok, body, else_opt) ->
-      let name = token_to_string name_tok in
-      let is_defined = StrSet.mem name defines in
-      let take_body =
-        if preproc_elifdef_is_ifndef directive then not is_defined else is_defined
-      in
-      if take_body then aux_top_level_block_items defines body
-      else (
-        match else_opt with
-        | None -> (defines, [])
-        | Some else_branch -> aux_top_level_else_branch defines else_branch)
-
-and aux_top_level_item defines (item : top_level_item) =
+and aux_top_level_item_non_preproc defines (item : top_level_item) =
   match item with
   | `Func_defi (_, decl_spec, _, decl, body) ->
       let _,name = aux_decl_name decl in
@@ -1532,50 +1166,6 @@ and aux_top_level_item defines (item : top_level_item) =
             "Not supported yet: variadic parameter (...) in function `%s`; skipping function\n"
             name;
         (defines, []))
-  | `Prep_ifdef (directive, name_tok, body, else_opt, _endif_tok) ->
-      let name = token_to_string name_tok in
-      let is_defined = StrSet.mem name defines in
-      let take_body =
-        if preproc_ifdef_is_ifndef directive then not is_defined else is_defined
-      in
-      if take_body then aux_top_level_block_items defines body
-      else (
-        match else_opt with
-        | None -> (defines, [])
-        | Some else_branch -> aux_top_level_else_branch defines else_branch)
-  | `Prep_if (_if_tok, condition, _newline, body, else_opt, _endif_tok) ->
-      let value = eval_preproc_expression defines condition in
-      if value <> 0 then aux_top_level_block_items defines body
-      else (
-        match else_opt with
-        | None -> (defines, [])
-        | Some else_branch -> aux_top_level_else_branch defines else_branch)
-  | `Prep_def prepoc_def ->
-      let name = preproc_define_name prepoc_def in
-      (* Predefined constants should not be redefined, as if they are predefined,
-        it is because their definition did not parse correctly so we hard-coded them.
-      Without this, this would basically erase them from the define_constant table. *)
-      if StrMap.mem name default_predefined_define_constants then
-        (defines, [])
-      else (
-      let defines = StrSet.add name defines in
-      remove_define_constant name;
-      A.remove_define_alias name;
-      let item = aux_preproc_define prepoc_def in
-      begin
-        match item with
-        | Some (_, A.Define (name, value)) -> remember_define_constant name value
-        | _ -> ()
-      end;
-      (defines,
-       match item with
-       | None -> []
-       | Some item -> [item]))
-  | `Prep_func_def func_def ->
-      (defines,
-       match aux_prep_func_def func_def with
-       | None -> []
-       | Some item -> [item])
   | `Empty_decl (type_spec, _tok) ->
       let s = aux_type_spec type_spec in
       (match s with
@@ -1596,8 +1186,6 @@ and aux_top_level_item defines (item : top_level_item) =
            (defines, [Mlsem.Common.Position.dummy, A.TypeDecl ("", s)]))
   | `Type_defi type_def ->
       (defines, aux_type_definition type_def)
-  | `Prep_incl (_, `System_lib_str path, _) ->
-      (defines, aux_system_lib_include path)
   | `Decl (decl_spec, first_decl, more_decls, _semi) ->
       let base_ty = aux_decl_spec decl_spec in
       let try_func_of_decl (decl: anon_choice_opt_ms_call_modi_decl_decl_opt_gnu_asm_exp_2fa2f9e) =
@@ -1690,6 +1278,8 @@ and aux_top_level_item defines (item : top_level_item) =
           all_decls
       in
       (defines, items)
+  | `Prep_ifdef _ | `Prep_if _ | `Prep_def _ | `Prep_func_def _ | `Prep_incl _ ->
+      failwith "internal error: preprocessor item reached non-preprocessor top-level handler"
   | _ ->
       if !warn_unsupported then begin
         Printf.printf "Not supported yet: top level item\n";
@@ -1697,21 +1287,18 @@ and aux_top_level_item defines (item : top_level_item) =
       end;
       (defines, [])
 
-and aux_top_level_block_item defines (item : block_item) =
+and aux_top_level_block_item_non_preproc defines (item : block_item) =
   match item with
-  | `Func_defi func_def -> aux_top_level_item defines (`Func_defi func_def)
-  | `Old_style_func_defi old_func_def -> aux_top_level_item defines (`Old_style_func_defi old_func_def)
-  | `Link_spec link_spec -> aux_top_level_item defines (`Link_spec link_spec)
-  | `Decl decl -> aux_top_level_item defines (`Decl decl)
-  | `Attr_stmt attr_stmt -> aux_top_level_item defines (`Attr_stmt attr_stmt)
-  | `Type_defi type_def -> aux_top_level_item defines (`Type_defi type_def)
-  | `Empty_decl empty_decl -> aux_top_level_item defines (`Empty_decl empty_decl)
-  | `Prep_if prep_if -> aux_top_level_item defines (`Prep_if prep_if)
-  | `Prep_ifdef prep_ifdef -> aux_top_level_item defines (`Prep_ifdef prep_ifdef)
-  | `Prep_incl prep_include -> aux_top_level_item defines (`Prep_incl prep_include)
-  | `Prep_def prep_def -> aux_top_level_item defines (`Prep_def prep_def)
-  | `Prep_func_def prep_func_def -> aux_top_level_item defines (`Prep_func_def prep_func_def)
-  | `Prep_call prep_call -> aux_top_level_item defines (`Prep_call prep_call)
+  | `Func_defi func_def -> aux_top_level_item_non_preproc defines (`Func_defi func_def)
+  | `Old_style_func_defi old_func_def -> aux_top_level_item_non_preproc defines (`Old_style_func_defi old_func_def)
+  | `Link_spec link_spec -> aux_top_level_item_non_preproc defines (`Link_spec link_spec)
+  | `Decl decl -> aux_top_level_item_non_preproc defines (`Decl decl)
+  | `Attr_stmt attr_stmt -> aux_top_level_item_non_preproc defines (`Attr_stmt attr_stmt)
+  | `Type_defi type_def -> aux_top_level_item_non_preproc defines (`Type_defi type_def)
+  | `Empty_decl empty_decl -> aux_top_level_item_non_preproc defines (`Empty_decl empty_decl)
+  | `Prep_call prep_call -> aux_top_level_item_non_preproc defines (`Prep_call prep_call)
+  | `Prep_if _ | `Prep_ifdef _ | `Prep_incl _ | `Prep_def _ | `Prep_func_def _ ->
+      failwith "internal error: preprocessor block item reached non-preprocessor handler"
   | `Stmt _ ->
       if !warn_unsupported then begin
         Printf.printf "Not supported yet: statement inside top level preprocessor branch\n";
@@ -1719,30 +1306,7 @@ and aux_top_level_block_item defines (item : block_item) =
       end;
       (defines, [])
 
-and aux_system_lib_include (_loc, path) =
-  (* Strip surrounding < > from the system lib string token *)
-  let relative = String.sub path 1 (String.length path - 2) in
-  match resolve_header relative with
-  | None -> Printf.eprintf "Could not find system header: %s\n" relative;  []
-  | Some full_path ->
-      if Hashtbl.mem processed_headers full_path then
-        (* Already processed once in this run; its declarations are already
-           in the typing state. Return empty to avoid redundant work (and to
-           break cycles — see [processed_headers] docstring). *)
-        []
-      else begin
-        (* Mark before recursing so a cycle A -> B -> A terminates. *)
-        Hashtbl.add processed_headers full_path ();
-        Printf.printf "Processing system header: %s\n" full_path;
-        let cst = parse_file full_path in
-        match cst.program with
-        | None -> []
-        | Some tree ->
-            let items = snd (aux_top_level_items !predefined_defines tree) in
-            [Mlsem.Common.Position.dummy, A.Include items]
-      end
-
-let aux_translation_unit tree =
+and aux_translation_unit tree =
   (* Note: we intentionally do NOT reset [define_constants] here. A package's
      [.h] files are parsed before its [.c] files (see [Package.get_c_files]),
      and source files reference [#define]s established in the headers (e.g.
@@ -1751,7 +1315,7 @@ let aux_translation_unit tree =
      rediscover every macro in isolation, which defeats the local-include
      strategy of parsing the full source tree. The same logic is why
      [processed_headers] also accumulates across files. *)
-  snd (aux_top_level_items !predefined_defines tree)
+  snd (aux_top_level_items (Preprocessor.current_predefined_defines ()) tree)
 
 let to_ast (res: (CST.translation_unit, CST.extra) Tree_sitter_run.Parsing_result.t) =
   match res.program with
@@ -1825,6 +1389,15 @@ let%test "linux predefined macros are enabled by default" =
   let res =
     parse_string
       "#ifdef __linux__\nint f() { return 1; }\n#else\nint g() { return 2; }\n#endif\n"
+  in
+  match to_ast res with
+  | [(_, A.Fundef (_, "f", _, _))] -> true
+  | _ -> false
+
+let%test "quoted include is ignored instead of crashing" =
+  let res =
+    parse_string
+      "#include \"local.h\"\nint f() { return 1; }\n"
   in
   match to_ast res with
   | [(_, A.Fundef (_, "f", _, _))] -> true
