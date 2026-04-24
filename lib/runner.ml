@@ -16,6 +16,12 @@ type cmd_options = {
   debug : bool;
   filter: string option;
   timeout : float option;
+  (* When full-body inference fails (untypeable, Not_found, or timeout), bind
+     the function at its declared C signature ([ret_ty params -> ret_ty]) so
+     callers can still be typed instead of cascading "unbound variable". The
+     original error is still printed; the fallback is additionally reported on
+     a [fallback:] line. Off by default. *)
+  fallback_c_signature : bool;
 }
 
 let make_substring_pred = function
@@ -115,18 +121,38 @@ let with_inference_timeout timeout thunk =
           ignore (Unix.setitimer Unix.ITIMER_REAL { Unix.it_interval = 0.; it_value = seconds });
           thunk ())
 
-let infer_ast visible opts (idenv, env, decl) (ast : Ast.e) =
-  let name,v = 
-    match ast with 
+let infer_ast ?fallback visible opts (idenv, env, decl) (ast : Ast.e) =
+  let name,v =
+    match ast with
     | _,_,_,Ast.Function (name, _, _, _) -> name,MVariable.create Immut (Some name)
     | _ -> failwith "Expected a function definition at the top level."
   in
-  let mlsem_ast = Ast.to_mlsem ast in 
-  if opts.mlsem && visible then 
+  let mlsem_ast = Ast.to_mlsem ast in
+  if opts.mlsem && visible then
     Format.printf "%a@." Mlsem.System.Ast.pp mlsem_ast;
   if opts.debug then
     Format.printf "Type inference for function %s@." name;
-  try 
+  (* [fallback] is a thunk that produces the declared C signature when body
+     inference fails. Kept lazy so the cost (and possible [Failure] from
+     [typeof_ctype]) is only paid on the exception path. The original error
+     is still printed above; on success this adds a [fallback:] line naming
+     the substituted type and binds [name] in env — stopping the "unbound
+     variable" cascade through callers. *)
+  let apply_fallback () =
+    match fallback with
+    | None -> (idenv, env, decl)
+    | Some compute ->
+        (try
+          let ty = compute () in
+          let tys = ty |> GTy.mk |> TyScheme.mk_mono in
+          (* Indent the fallback line so downstream parsers (parse_output.R)
+             don't mistake [fallback: <type>] for a new function header. *)
+          if visible then
+            Format.printf "  fallback: @[<h>%a@]@.@." TyScheme.pp_short tys;
+          (StrMap.add name v idenv, Env.add v tys env, decl)
+        with Failure _ -> (idenv, env, decl))
+  in
+  try
     if opts.typing then
         with_inference_timeout opts.timeout (fun () ->
           let _env = extend_env mlsem_ast env in
@@ -134,27 +160,27 @@ let infer_ast visible opts (idenv, env, decl) (ast : Ast.e) =
           let reconstructed = System.Reconstruction.infer env renvs mlsem_ast in
           let typ = System.Checker.typeof_def env reconstructed mlsem_ast in
           let tys = TyScheme.norm_and_simpl typ in
-          let (vars, typ) = TyScheme.get tys in 
-          let typ = GTy.ub typ in 
+          let (vars, typ) = TyScheme.get tys in
+          let typ = GTy.ub typ in
           (*Format.printf "%a: upper bound= %a@.@." Variable.pp v  Ty.pp typ ;*)
           (* We only keep the upper bound as type for v and add it to the environment *)
           let tys = TyScheme.mk vars (GTy.mk typ) in
           print_visible `Default visible v tys;
           (StrMap.add name v idenv, Env.add v tys env, decl))
-    else 
+    else
       idenv, env, decl
   with
   | Inference_timeout seconds ->
       Format.printf "%s:@.timeout: inference/checking exceeded %.6g seconds@." name seconds;
       if not opts.mlsem && opts.debug then
         Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp mlsem_ast ;
-      idenv, env, decl
+      apply_fallback ()
   | System.Checker.Untypeable err ->
       Format.printf "%s:@.untypeable: %s@." name err.title;
       err.descr |> Option.iter (Format.printf "%s@." ) ;
       if not opts.mlsem && opts.debug  then (* Still print the mlsem ast*)
         Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp mlsem_ast ;
-      idenv, env, decl
+      apply_fallback ()
   | Not_found ->
       (* Refinement/reconstruction occasionally raises Not_found when an
          identifier referenced in the body isn't bound in the env (e.g. R C
@@ -165,7 +191,7 @@ let infer_ast visible opts (idenv, env, decl) (ast : Ast.e) =
         Format.eprintf "%s@." (Printexc.get_backtrace ()) ;
       if not opts.mlsem && opts.debug then
         Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp mlsem_ast ;
-      idenv, env, decl
+      apply_fallback ()
 
 (** past: the parsed AST *)
 let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=false) visible_name opts (idenv, env, decl)  past =
@@ -284,9 +310,20 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
       let e = PAst.transform {PAst.id = idenv; decl} past in
       if opts.ast && visible then
         Printf.printf "%s\n" (Ast.show_e e);
+      (* Provide a declared-C-signature fallback for Fundefs when [opts] asks
+         for it. Only meaningful for Fundefs — everything else reaching this
+         branch (if any) just gets a best-effort inference with no fallback. *)
+      let fallback =
+        if opts.fallback_c_signature then
+          match past with
+          | _, PAst.Fundef (ret_ty, _, params, _) ->
+              Some (fun () -> C_interface.infer_cfun ret_ty params)
+          | _ -> None
+        else None
+      in
       match e with
       | _, decl', _, Ast.Noop -> (idenv, env, decl')
-      | _, decl', _, _ -> infer_ast visible opts (idenv, env, decl') e
+      | _, decl', _, _ -> infer_ast ?fallback visible opts (idenv, env, decl') e
 
 let run_on_file opts filename idenv env =
   if not (Sys.file_exists filename) then

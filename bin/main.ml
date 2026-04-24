@@ -78,6 +78,15 @@ let timeout_opt =
   let doc = "Set a per-function timeout in seconds for full function body inference/checking (default: no timeout)." in
   Arg.(value & opt (some positive_float) None & info ["timeout"] ~docv:"SECONDS" ~doc)
 
+let fallback_c_sig_opt =
+  let doc =
+    "When full-body inference fails (untypeable, internal error, or timeout), \
+     bind the function at its declared C signature so callers can still be \
+     typed instead of cascading 'unbound variable' errors. The original error \
+     is still printed, followed by a 'fallback: <type>' line."
+  in
+  Arg.(value & flag & info ["fallback-c-signature"] ~doc)
+
 let path_arg =
   let doc = "C source file to parse or package directory to analyze" in
   Arg.(required & pos 0 (some string) None & info [] ~docv:"PATH" ~doc)
@@ -96,8 +105,9 @@ let cmd =
      and+ filter = filter_opt
      and+ include_dirs = include_dir_opt
      and+ timeout = timeout_opt
+     and+ fallback_c_signature = fallback_c_sig_opt
     and+ path = path_arg in
-    PEnv.sequential_handler PEnv.empty (fun path -> main {cst; past; ast; mlsem ; typing = not no_typing ; debug ; filter; timeout} include_dirs path) path |> fst)
+    PEnv.sequential_handler PEnv.empty (fun path -> main {cst; past; ast; mlsem ; typing = not no_typing ; debug ; filter; timeout; fallback_c_signature} include_dirs path) path |> fst)
      
 
 let () = exit (Cmd.eval cmd)

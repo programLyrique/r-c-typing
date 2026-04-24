@@ -12,7 +12,8 @@ let () =
   
   (* Options: enable parsing of the PAst and typing, but do not print CST/AST/MLsem. *)
   let opts = Runner.{ cst = false; past = false; ast = false; mlsem = false;
-                      typing = true; debug = false; filter = None; timeout = None } in
+                      typing = true; debug = false; filter = None; timeout = None;
+                      fallback_c_signature = false } in
   Parser.set_warn_unsupported false;
   let idenv = Runner.StrMap.empty in
   let env = Defs.initial_env in
