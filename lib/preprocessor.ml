@@ -418,5 +418,192 @@ and top_level_item_dispatch ~parser_callbacks ~top_level_item ~top_level_block_i
       top_level_item_dispatch ~parser_callbacks ~top_level_item ~top_level_block_item defines (`Prep_def prep_def)
   | `Prep_func_def prep_func_def ->
       top_level_item_dispatch ~parser_callbacks ~top_level_item ~top_level_block_item defines (`Prep_func_def prep_func_def)
-  | _ ->
+    | _ ->
       top_level_block_item defines item
+
+let with_test_state f =
+  let saved_warn = !warn_unsupported in
+  let saved_predefined = !predefined_defines in
+  let saved_include_dirs = !include_dirs in
+  let saved_define_constants = !define_constants in
+  Fun.protect
+    ~finally:(fun () ->
+      warn_unsupported := saved_warn;
+      predefined_defines := saved_predefined;
+      include_dirs := saved_include_dirs;
+      define_constants := saved_define_constants;
+      reset_processed_headers ();
+      A.reset_define_aliases ())
+    (fun () ->
+      set_warn_unsupported false;
+      reset_processed_headers ();
+      A.reset_define_aliases ();
+      reset_define_constants ();
+      f ())
+
+
+let parse_translation_unit_exn source =
+  match Parse.string source with
+  | { Parsing_result.program = Some translation_unit; _ } -> translation_unit
+  | _ -> failwith "Failed to parse test translation unit"
+
+
+let first_top_level_item_exn source =
+  match parse_translation_unit_exn source with
+  | item :: _ -> item
+  | [] -> failwith "Expected a top-level item"
+
+
+let first_preproc_if_condition_exn source =
+  match first_top_level_item_exn source with
+  | `Prep_if (_, condition, _, _, _, _) -> condition
+  | _ -> failwith "Expected a #if item"
+
+
+let first_preproc_define_exn source =
+  match first_top_level_item_exn source with
+  | `Prep_def define -> define
+  | _ -> failwith "Expected a #define item"
+
+
+let make_test_callbacks () =
+  let top_level_item_stub defines _ = (defines, []) in
+  let top_level_block_item_stub defines _ = (defines, []) in
+  let top_level_statement_stub _ = (Mlsem.Common.Position.dummy, A.Seq []) in
+  let rec parse_translation_unit translation_unit =
+    snd
+      (top_level_items
+         ~parser_callbacks
+         ~top_level_item:top_level_item_stub
+         ~top_level_block_item:top_level_block_item_stub
+         (current_predefined_defines ())
+         translation_unit)
+  and parser_callbacks =
+    {
+      parse_string = Parse.string;
+      top_level_statement = top_level_statement_stub;
+      parse_file = Parse.file;
+      parse_translation_unit;
+    }
+  in
+  parser_callbacks
+
+
+let preprocess_source_with_defines defines source =
+  let parser_callbacks = make_test_callbacks () in
+  snd
+    (top_level_items
+       ~parser_callbacks
+       ~top_level_item:(fun defines _ -> (defines, []))
+       ~top_level_block_item:(fun defines _ -> (defines, []))
+       defines
+       (parse_translation_unit_exn source))
+
+
+let strip_positions items =
+  List.map snd items
+
+
+let with_temp_header header_name contents f =
+  let dir = Filename.temp_file "rctyping-preprocessor" "" in
+  Sys.remove dir;
+  Unix.mkdir dir 0o755;
+  let header_path = Filename.concat dir header_name in
+  let oc = open_out header_path in
+  output_string oc contents;
+  close_out oc;
+  Fun.protect
+    ~finally:(fun () ->
+      Sys.remove header_path;
+      Unix.rmdir dir)
+    (fun () -> f dir)
+
+
+let%test "eval_preproc_expression handles identifiers unary operators and chars" =
+  with_test_state (fun () ->
+    let expr =
+      first_preproc_if_condition_exn
+        "#if FOO && !BAZ && ('A' == 65) && (~0 < 0) && (+3 == 3) && (-1 < 0)\n#endif\n"
+    in
+    eval_preproc_expression (StrSet.of_list ["FOO"]) expr <> 0)
+
+
+let%test "eval_preproc_expression covers arithmetic logical bitwise and shifts" =
+  with_test_state (fun () ->
+    let expr =
+      first_preproc_if_condition_exn
+        "#if ((1 + 2) == 3) && ((5 - 3) == 2) && ((2 * 3) == 6) && ((7 / 0) == 0) && ((7 % 0) == 0) && ((1 || 0) == 1) && ((1 && 2) == 1) && ((1 | 2) == 3) && ((3 ^ 1) == 2) && ((3 & 1) == 1) && ((2 == 2) == 1) && ((2 != 3) == 1) && ((3 > 2) == 1) && ((3 >= 3) == 1) && ((2 <= 2) == 1) && ((2 < 3) == 1) && ((1 << 3) == 8) && ((8 >> 1) == 4)\n#endif\n"
+    in
+    eval_preproc_expression StrSet.empty expr <> 0)
+
+
+let%test "parse_preproc_define recognizes numeric string and char literals" =
+  with_test_state (fun () ->
+  (match parse_preproc_define (make_test_callbacks ()) (first_preproc_define_exn "#define COUNT 12\n") with
+   | Some (_, A.Define ("COUNT", A.CInt 12)) -> true
+     | _ -> false)
+  && (match parse_preproc_define (make_test_callbacks ()) (first_preproc_define_exn "#define MSG \"ok\"\n") with
+    | Some (_, A.Define ("MSG", A.CStr "ok")) -> true
+        | _ -> false)
+    && (match parse_preproc_define (make_test_callbacks ()) (first_preproc_define_exn "#define CH 'x'\n") with
+        | Some (_, A.Define ("CH", A.CChar 'x')) -> true
+        | _ -> false))
+
+
+let%test "top_level_items records string constants and identifier aliases" =
+  with_test_state (fun () ->
+    let items =
+      preprocess_source_with_defines
+        StrSet.empty
+        "#define GREETING \"hi\"\n#define HELLO GREETING\n"
+    in
+      strip_positions items = [A.Define ("GREETING", A.CStr "hi")]
+    && resolve_defined_string "GREETING" = Some "hi"
+    && A.resolve_alias "HELLO" = "GREETING")
+
+
+let%test "top_level_items skips predefined fallback constants and rejects non literals" =
+  with_test_state (fun () ->
+    preprocess_source_with_defines StrSet.empty "#define PRIu64 12\n#define SUM (1 + 2)\n" = []
+    && resolve_defined_string "PRIu64" = Some "lu")
+
+
+let%test "top_level_items selects branches for ifdef ifndef and elif" =
+  with_test_state (fun () ->
+    let ifdef_items =
+      preprocess_source_with_defines
+        (StrSet.of_list ["FOO"])
+        "#ifdef FOO\n#define YES 1\n#else\n#define NO 0\n#endif\n"
+    in
+    let ifndef_items =
+      preprocess_source_with_defines
+        StrSet.empty
+        "#ifndef FOO\n#define MISSING 1\n#else\n#define PRESENT 1\n#endif\n"
+    in
+    let elif_items =
+      preprocess_source_with_defines
+        StrSet.empty
+        "#if 0\n#define NOPE 0\n#elif 1\n#define YES 2\n#else\n#define ALT 3\n#endif\n"
+    in
+    strip_positions ifdef_items = [A.Define ("YES", A.CInt 1)]
+    && strip_positions ifndef_items = [A.Define ("MISSING", A.CInt 1)]
+    && strip_positions elif_items = [A.Define ("YES", A.CInt 2)])
+
+
+let%test "top_level_items ignores non-system includes" =
+  with_test_state (fun () ->
+    preprocess_source_with_defines StrSet.empty "#include \"local.h\"\n" = [])
+
+
+let%test "system includes are parsed once and cached" =
+  with_test_state (fun () ->
+    with_temp_header "sample.h" "#define FROM_HEADER 7\n" (fun dir ->
+      set_include_dirs [dir];
+      let items =
+        preprocess_source_with_defines
+          StrSet.empty
+          "#include <sample.h>\n#include <sample.h>\n"
+      in
+      match items with
+          | [_, A.Include nested_items] -> strip_positions nested_items = [A.Define ("FROM_HEADER", A.CInt 7)]
+      | _ -> false))

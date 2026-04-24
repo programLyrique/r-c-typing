@@ -4,7 +4,6 @@
 
 Type functions written in C using the R C API to R types.
 
-
 ## Dependencies
 
 - OCaml >= 5.3.0
@@ -14,14 +13,13 @@ Type functions written in C using the R C API to R types.
 - rstt
 - cmdliner
 
-You can install the OCaml libraries using `opam`. 
+You can install the OCaml libraries using `opam`.
 
 `mlsem`, `sstt`, and `rstt` are only on GitHub so far but can be installed with `opam pin`.
 
+## Tree sitter
 
-## Tree sitter 
-
-You need to compile and install `https://github.com/E-Sh4rk/r-parser`. 
+You need to compile and install `https://github.com/E-Sh4rk/r-parser`.
 Set the following environment variables:
 
 ```bash
@@ -29,6 +27,22 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/.../r-parser/core/tree-sitter/lib/
 export TREESITTER_INCDIR=/.../r-parser/core/tree-sitter/include/
 export TREESITTER_LIBDIR=/.../r-parser/core/tree-sitter/lib/
 ```
+
+## Common commands
+
+The repository includes a `Makefile` that wraps the required environment setup:
+
+```bash
+make build
+make test
+make release
+make coverage
+```
+
+- `make build` runs `dune build`
+- `make test` runs `dune runtest`
+- `make release` runs `dune build --profile release`
+- `make coverage` runs the test suite with `bisect_ppx`, stores raw coverage data in `_coverage/data/`, and writes the HTML report to `_coverage/html/index.html`
 
 ## Adding type inference tests
 
@@ -72,13 +86,13 @@ dune exec r-c-typing -- test/packages/testpkg
 
 ## Useful flags
 
-| Flag | Description |
-|------|-------------|
-| `--timeout SECONDS` | Per-function timeout for body inference. The rest of the package continues after a timeout. |
-| `--fallback-c-signature` | When body inference fails (untypeable, internal error, or timeout), bind the function at its declared C signature — `params -> ret_ty` — so callers can still be typed instead of cascading as "unbound variable". The original error is still printed, followed by an indented `fallback: <type>` line. Off by default. |
-| `--debug` | Print intermediate AST/inference information. |
-| `--past`, `--ast`, `--mlsem`, `--cst` | Print the corresponding intermediate form. |
-| `-f/--filter SUBSTRING` | Restrict printed output to symbols whose name contains `SUBSTRING`. |
+| Flag                                  | Description                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--timeout SECONDS`                   | Per-function timeout for body inference. The rest of the package continues after a timeout.                                                                                                                                                                                                                              |
+| `--fallback-c-signature`              | When body inference fails (untypeable, internal error, or timeout), bind the function at its declared C signature — `params -> ret_ty` — so callers can still be typed instead of cascading as "unbound variable". The original error is still printed, followed by an indented `fallback: <type>` line. Off by default. |
+| `--debug`                             | Print intermediate AST/inference information.                                                                                                                                                                                                                                                                            |
+| `--past`, `--ast`, `--mlsem`, `--cst` | Print the corresponding intermediate form.                                                                                                                                                                                                                                                                               |
+| `-f/--filter SUBSTRING`               | Restrict printed output to symbols whose name contains `SUBSTRING`.                                                                                                                                                                                                                                                      |
 
 ## Type definitions
 

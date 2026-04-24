@@ -130,3 +130,107 @@ let parse_define_literal s =
 
 let eval_char_literal char_lit =
   Some (int_of_char_literal char_lit)
+
+
+let test_loc start_row start_col end_row end_col =
+  {
+    Loc.start = { row = start_row; column = start_col };
+    end_ = { row = end_row; column = end_col };
+  }
+
+
+let test_token text =
+  (test_loc 0 0 0 (String.length text), text)
+
+
+let test_char_literal values : char_literal =
+  (`SQUOT (test_token "'"), values, test_token "'")
+
+
+let%test "conv_pos computes line-based absolute offsets" =
+  let pos = conv_pos { Loc.row = 3; column = 12 } in
+  pos.Lexing.pos_lnum = 3
+  && pos.pos_bol = 3 * line_length
+  && pos.pos_cnum = (3 * line_length) + 12
+
+
+let%test "loc_to_pos preserves start and end coordinates" =
+  let pos = loc_to_pos (test_loc 2 4 2 9) in
+  let start_ = Position.start_of_position pos in
+  let end_ = Position.end_of_position pos in
+  start_.Lexing.pos_lnum = 2
+  && (start_.pos_cnum - start_.pos_bol) = 4
+  && end_.Lexing.pos_lnum = 2
+  && (end_.pos_cnum - end_.pos_bol) = 9
+
+
+let%test "locs_to_pos spans from first start to second end" =
+  let pos = locs_to_pos (test_loc 1 2 1 5) (test_loc 3 7 4 1) in
+  let start_ = Position.start_of_position pos in
+  let end_ = Position.end_of_position pos in
+  start_.Lexing.pos_lnum = 1
+  && (start_.pos_cnum - start_.pos_bol) = 2
+  && end_.Lexing.pos_lnum = 4
+  && (end_.pos_cnum - end_.pos_bol) = 1
+
+
+let%test "string_of_loc_start depends only on the start position" =
+  string_of_loc_start (test_loc 5 8 5 10)
+  = string_of_loc_start (test_loc 5 8 9 3)
+
+
+let%test "strip_int_suffix removes standard integer suffixes" =
+  strip_int_suffix "123uLL" = "123"
+
+
+let%test "normalize_int_literal rewrites octal but preserves non-octal and prefixed literals" =
+  normalize_int_literal "077" = "0o77"
+  && normalize_int_literal "089" = "089"
+  && normalize_int_literal "0xff" = "0xff"
+  && normalize_int_literal "0b1010" = "0b1010"
+
+
+let%test "parse_c_int_literal handles suffixes hexadecimal and octal" =
+  parse_c_int_literal "42UL" = 42
+  && parse_c_int_literal "0x10" = 16
+  && parse_c_int_literal "077" = 63
+
+
+let%test "decode_c_escape_sequence handles simple hexadecimal unicode and octal escapes" =
+  decode_c_escape_sequence "\\n" = 10
+  && decode_c_escape_sequence "\\x41" = 65
+  && decode_c_escape_sequence "\\101" = 65
+  && decode_c_escape_sequence "\\u0041" = 65
+
+
+let%test "decode_c_escape_sequence rejects malformed escapes" =
+  try
+    ignore (decode_c_escape_sequence "\\x");
+    false
+  with Failure _ -> true
+
+
+let%test "decode_c_char_literal_values handles raw and escaped characters" =
+  decode_c_char_literal_values
+    [ `Imm_tok_pat_36637e2 (test_token "A");
+      `Esc_seq (test_token "\\n") ]
+  = [65; 10]
+
+
+let%test "int_of_char_literal folds multi-byte character literals" =
+  int_of_char_literal
+    (test_char_literal
+       [ `Imm_tok_pat_36637e2 (test_token "A");
+         `Imm_tok_pat_36637e2 (test_token "B") ])
+  = ((Char.code 'A' lsl 8) lor Char.code 'B')
+
+
+let%test "parse_number_literal distinguishes ints and floats" =
+  parse_number_literal "17" = A.CInt 17
+  && parse_number_literal "2.5f" = A.CFloat 2.5
+  && parse_number_literal "1e3" = A.CFloat 1000.
+
+
+let%test "parse_define_literal and eval_char_literal wrap parsed values in options" =
+  parse_define_literal "0x20" = Some (A.CInt 32)
+  && eval_char_literal (test_char_literal [ `Esc_seq (test_token "\\n") ]) = Some 10

@@ -355,4 +355,117 @@ let%test "keep_reachable with multiple entry points" =
   Callgraph.node_count filtered = 3 &&
   not (Callgraph.has_node filtered "unused")
 
+let test_pos = Mlsem.Common.Position.dummy
+
+let mk_e e' =
+  (test_pos, e')
+
+let mk_call name args =
+  mk_e (PAst.Call (mk_e (PAst.Id name), args))
+
+let mk_fundef ?(body = mk_e (PAst.Return None)) name =
+  (test_pos, PAst.Fundef (Ast.Any, name, [], body))
+
+let mk_decl name =
+  mk_fundef ~body:(mk_e (PAst.Seq [])) name
+
+let%test "callgraph duplicate nodes and invalid lookups are stable" =
+  let g = Callgraph.create () in
+  let id1 = Callgraph.add_node g "f" in
+  let id2 = Callgraph.add_node g "f" in
+  id1 = id2
+  && Callgraph.node_count g = 1
+  && Callgraph.id_of_name g "missing" = None
+  && Callgraph.name_of_id g (-1) = None
+  && Callgraph.name_of_id g 99 = None
+  && Callgraph.successors g 99 = []
+  && Callgraph.successors_by_name g "missing" = []
+
+let%test "of_adjacency fold_edges and in_degree agree on a small DAG" =
+  let g =
+    Callgraph.of_adjacency
+      [ ("a", ["b"; "c"]);
+        ("b", ["c"]);
+        ("c", []) ]
+  in
+  let edge_count = Callgraph.fold_edges g 0 (fun acc _ _ -> acc + 1) in
+  let deg = Callgraph.in_degree g in
+  match Callgraph.id_of_name g "a", Callgraph.id_of_name g "b", Callgraph.id_of_name g "c" with
+  | Some a, Some b, Some c ->
+      edge_count = 3
+      && deg.(a) = 0
+      && deg.(b) = 1
+      && deg.(c) = 2
+  | _ -> false
+
+let%test "dfs bfs scc and kahn cover cyclic and acyclic cases" =
+  let cyclic =
+    Callgraph.of_adjacency
+      [ ("a", ["b"]);
+        ("b", ["c"]);
+        ("c", ["a"]);
+        ("d", []) ]
+  in
+  let acyclic =
+    Callgraph.of_adjacency
+      [ ("start", ["mid1"; "mid2"]);
+        ("mid1", ["finish"]);
+        ("mid2", ["finish"]);
+        ("finish", []) ]
+  in
+  let cyclic_components =
+    Callgraph.scc cyclic
+    |> List.map (List.filter_map (Callgraph.name_of_id cyclic))
+    |> List.map (List.sort String.compare)
+    |> List.sort compare
+  in
+  let bfs_names =
+    match Callgraph.id_of_name acyclic "start" with
+    | None -> []
+    | Some id -> Callgraph.bfs_from_id acyclic id |> List.filter_map (Callgraph.name_of_id acyclic)
+  in
+  let kahn_names = Callgraph.topo_sort_kahn acyclic |> List.filter_map (Callgraph.name_of_id acyclic) in
+  let kahn_cycle = Callgraph.topo_sort_kahn cyclic in
+  Callgraph.dfs_from_name cyclic "missing" = []
+  && List.length bfs_names = 4
+  && List.hd bfs_names = "start"
+  && List.sort String.compare bfs_names = ["finish"; "mid1"; "mid2"; "start"]
+  && cyclic_components = [["a"; "b"; "c"]; ["d"]]
+  && List.length kahn_names = 4
+  && List.hd kahn_names = "start"
+  && List.mem "finish" kahn_names
+  && kahn_cycle = [match Callgraph.id_of_name cyclic "d" with Some id -> id | None -> -1]
+
+let%test "collect_fun_names includes nested include fundefs" =
+  let defs =
+    [ mk_fundef "top";
+      (test_pos, PAst.Include [mk_fundef "nested"; (test_pos, PAst.Define ("X", PAst.CInt 1))]) ]
+  in
+  let names = collect_fun_names [defs] in
+  PAst.StrSet.mem "top" names
+  && PAst.StrSet.mem "nested" names
+  && not (PAst.StrSet.mem "X" names)
+
+let%test "of_past and of_past_list build edges from function bodies" =
+  let caller_body = mk_e (PAst.Seq [mk_call "callee" []; mk_call "ext" []]) in
+  let defs1 = [mk_fundef ~body:caller_body "caller"; mk_fundef "callee"] in
+  let defs2 = [mk_fundef ~body:(mk_e (PAst.Seq [mk_call "caller" []])) "other"] in
+  let single = of_past defs1 in
+  let merged = of_past_list [defs1; defs2] in
+  List.sort String.compare (Callgraph.successors_by_name single "caller") = ["callee"; "ext"]
+  && Callgraph.has_node single "caller"
+  && Callgraph.has_node single "callee"
+  && Callgraph.has_node single "ext"
+  && Callgraph.successors_by_name merged "other" = ["caller"]
+
+let%test "topo_sort prefers function definitions over declarations" =
+  let foo_decl = ("decl.c", mk_decl "foo") in
+  let foo_def = ("def.c", mk_fundef ~body:(mk_e (PAst.Return (Some (mk_e (PAst.Const (PAst.CInt 1)))))) "foo") in
+  let bar_def = ("bar.c", mk_fundef ~body:(mk_e (PAst.Seq [mk_call "foo" []; mk_e (PAst.Return None)])) "bar") in
+  let graph = of_past_list [[snd foo_decl; snd foo_def; snd bar_def]] in
+  let sorted = topo_sort [foo_decl; foo_def; bar_def] graph in
+  List.mem foo_def sorted
+  && not (List.mem foo_decl sorted)
+  && List.mem bar_def sorted
+
 

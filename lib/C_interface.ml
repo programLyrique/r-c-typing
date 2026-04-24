@@ -98,6 +98,11 @@ let infer_dotC_failure past =
     Some msg
 
 
+let mk_simple_test_fundef ?(ret_ty=Ast.Void) ?(params=[]) name =
+  let _, past = mk_test_fundef ~ret_ty ~params name in
+  past
+
+
 let%test "infer_dotC infers supported .C parameters from a PAst function" =
   let past =
     mk_test_fundef
@@ -141,3 +146,53 @@ let%test "infer_dotC rejects unsupported .C parameter types from a PAst function
       (Ast.show_ctype Ast.Int)
   in
   infer_dotC_failure past = Some expected
+
+
+let%test "is_simple_c_function accepts scalar pointer-only C entry points" =
+  is_simple_c_function
+    (mk_simple_test_fundef
+       ~ret_ty:Ast.Void
+       ~params:[Ast.Ptr Ast.Int, "x"; Ast.Float, "y"]
+       "native_entry")
+
+
+let%test "is_simple_c_function rejects SEXP structs and non-functions" =
+  not
+    (is_simple_c_function
+     (mk_simple_test_fundef ~ret_ty:Ast.SEXP ~params:[Ast.Ptr Ast.Int, "x"] "sexp_entry"))
+  && not
+       (is_simple_c_function
+       (mk_simple_test_fundef
+             ~ret_ty:Ast.Void
+             ~params:[Ast.Struct ("payload", [Ast.Int, "field"]), "x"]
+             "struct_entry"))
+  && not (is_simple_c_function (GlobalVar ("g", Ast.Int)))
+
+
+let%test "infer_cfun resolves typedef aliases before building the function type" =
+  let typedef_map =
+    Ast.DeclMap.empty
+    |> Ast.DeclMap.add "sexp_t" Ast.SEXP
+    |> Ast.DeclMap.add "int_ptr_t" (Ast.Ptr Ast.Int)
+  in
+  Ty.equiv
+    (infer_cfun ~typedef_map (Ast.Typeref "sexp_t") [Ast.Typeref "int_ptr_t", "arg"])
+    (infer_cfun Ast.SEXP [Ast.Ptr Ast.Int, "arg"])
+
+
+let%test "infer_dotC resolves typedef aliases for supported pointer arguments" =
+  let typedef_map =
+    Ast.DeclMap.empty
+    |> Ast.DeclMap.add "int_ptr_t" (Ast.Ptr Ast.Int)
+    |> Ast.DeclMap.add "char_ptr_ptr_t" (Ast.Ptr (Ast.Ptr Ast.Char))
+  in
+  Ty.equiv
+    (infer_dotC ~typedef_map Ast.Void
+       [Ast.Typeref "int_ptr_t", "ints"; Ast.Typeref "char_ptr_ptr_t", "names"])
+    (infer_dotC Ast.Void [Ast.Ptr Ast.Int, "ints"; Ast.Ptr (Ast.Ptr Ast.Char), "names"])
+
+
+let%test "infer_dotC_from_past rejects non-function top-level items" =
+  match infer_dotC_failure (Mlsem.Common.Position.dummy, GlobalVar ("g", Ast.Int)) with
+  | Some "Expected a function definition." -> true
+  | _ -> false
