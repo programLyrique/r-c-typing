@@ -87,6 +87,15 @@ let fallback_c_sig_opt =
   in
   Arg.(value & flag & info ["fallback-c-signature"] ~doc)
 
+let call_graph_opt =
+  let doc =
+    "Write the call graph (after entry-point reachability filtering) in \
+     Graphviz .dot format to FILE. Non-trivial SCCs are colored, nodes are \
+     clustered by source file, and entry points are marked with \
+     [shape=doublecircle]. Render with [dot -Tsvg FILE -o FILE.svg]."
+  in
+  Arg.(value & opt (some string) None & info ["call-graph"] ~docv:"FILE" ~doc)
+
 let path_arg =
   let doc = "C source file to parse or package directory to analyze" in
   Arg.(required & pos 0 (some string) None & info [] ~docv:"PATH" ~doc)
@@ -106,8 +115,9 @@ let cmd =
      and+ include_dirs = include_dir_opt
      and+ timeout = timeout_opt
      and+ fallback_c_signature = fallback_c_sig_opt
+     and+ call_graph = call_graph_opt
     and+ path = path_arg in
-    PEnv.sequential_handler PEnv.empty (fun path -> main {cst; past; ast; mlsem ; typing = not no_typing ; debug ; filter; timeout; fallback_c_signature} include_dirs path) path |> fst)
+    PEnv.sequential_handler PEnv.empty (fun path -> main {cst; past; ast; mlsem ; typing = not no_typing ; debug ; filter; timeout; fallback_c_signature; call_graph} include_dirs path) path |> fst)
      
 
 let () = exit (Cmd.eval cmd)

@@ -302,6 +302,208 @@ let keep_reachable t entry_points =
   ) reachable_names;
   new_graph
 
+(* --- Graphviz (.dot) export ----------------------------------------------- *)
+
+(** Sanitize a string for use as a dot identifier (only [[A-Za-z0-9_]]
+    chars survive; everything else becomes [_]). Used for cluster ids. *)
+let sanitize_id s =
+  let b = Buffer.create (String.length s) in
+  String.iter (fun c ->
+    match c with
+    | 'A'..'Z' | 'a'..'z' | '0'..'9' | '_' -> Buffer.add_char b c
+    | _ -> Buffer.add_char b '_') s;
+  Buffer.contents b
+
+(** Escape a string for use inside a quoted dot label/id. *)
+let escape_dot s =
+  let b = Buffer.create (String.length s) in
+  String.iter (fun c ->
+    match c with
+    | '"' | '\\' -> Buffer.add_char b '\\'; Buffer.add_char b c
+    | _ -> Buffer.add_char b c) s;
+  Buffer.contents b
+
+(** Wrap a long C identifier across multiple lines for use as a dot label.
+    Splits at underscores and packs segments into lines of at most
+    ~[max_line] characters. Names <= [max_line] are returned unchanged.
+    Returns a literal "\\n" sequence (which dot interprets as a newline
+    inside a quoted label). *)
+let wrap_label ?(max_line=14) name =
+  if String.length name <= max_line then name
+  else
+    let parts = String.split_on_char '_' name in
+    if List.length parts <= 1 then name
+    else
+      let lines = ref [] in
+      let cur = Buffer.create max_line in
+      List.iter (fun p ->
+        let part_len = String.length p in
+        if Buffer.length cur = 0 then
+          Buffer.add_string cur p
+        else if Buffer.length cur + 1 + part_len > max_line then begin
+          (* Keep the trailing underscore on the current line so readers
+             see this is a single identifier broken across lines. *)
+          Buffer.add_char cur '_';
+          lines := Buffer.contents cur :: !lines;
+          Buffer.clear cur;
+          Buffer.add_string cur p
+        end else begin
+          Buffer.add_char cur '_';
+          Buffer.add_string cur p
+        end
+      ) parts;
+      if Buffer.length cur > 0 then lines := Buffer.contents cur :: !lines;
+      String.concat "\\n" (List.rev !lines)
+
+(** Emit the call graph in Graphviz .dot format.
+
+    - [name]: top-level digraph identifier (default ["callgraph"]).
+    - [file_of_node]: optional callback returning the source file a node
+      came from. When supplied, nodes are grouped into [subgraph cluster_*]
+      blocks per file.
+    - [entry_points]: nodes that should be visually marked as roots
+      ([shape=doublecircle]).
+    - [highlight_scc]: when [true] (default), members of non-trivial
+      strongly-connected components get a fill color; trivial SCCs (a
+      single node with no self-loop) are left uncolored. Useful for
+      spotting cycles like [df_proxy <-> vec_proxy_equal] at a glance. *)
+let to_dot
+    ?(name="callgraph")
+    ?(file_of_node=(fun _ -> None))
+    ?(entry_points=[])
+    ?(highlight_scc=true)
+    t =
+  let module StrSet = Set.Make(String) in
+  let module StrMap = Map.Make(String) in
+  let n = Callgraph.node_count t in
+  (* Compute per-node SCC index and component sizes when highlighting. *)
+  let scc_index = Array.make n (-1) in
+  let scc_size_of_idx = ref [||] in
+  if highlight_scc then begin
+    let comps = Callgraph.scc t in
+    let sizes = Array.make (List.length comps) 0 in
+    List.iteri (fun i comp ->
+      sizes.(i) <- List.length comp;
+      List.iter (fun id -> scc_index.(id) <- i) comp
+    ) comps;
+    scc_size_of_idx := sizes
+  end;
+  let palette =
+    [| "lightcoral"; "lightskyblue"; "palegreen"; "khaki"; "lightpink";
+       "lightsalmon"; "paleturquoise"; "plum"; "wheat"; "thistle" |]
+  in
+  let color_of_id id =
+    if not highlight_scc then None
+    else
+      let i = scc_index.(id) in
+      if i < 0 then None
+      else
+        let size = (!scc_size_of_idx).(i) in
+        if size <= 1 then None
+        else Some palette.(i mod Array.length palette)
+  in
+  let entry_set = List.fold_left (fun s e -> StrSet.add e s) StrSet.empty entry_points in
+  let node_attrs name id =
+    let parts = ref [] in
+    let wrapped = wrap_label name in
+    if wrapped <> name then
+      (* The label already contains literal [\n] separators that dot must
+         see as the two-character escape sequence; don't run it through
+         [escape_dot] (which would double the backslashes and turn the
+         line breaks into a literal "\n" in the output). C identifier
+         characters never need escaping themselves. *)
+      parts := (Printf.sprintf "label=\"%s\"" wrapped) :: !parts;
+    let is_entry = StrSet.mem name entry_set in
+    let scc_fill = color_of_id id in
+    (* Composition rule for [style] / [fillcolor]:
+       - SCC member only         => filled with SCC color
+       - Entry point only        => filled with [lightyellow]
+       - Both                    => filled with SCC color + [bold] outline
+                                     (fill is overridden by SCC; the bold
+                                     outline keeps the entry-point signal)
+       - Entry point alone is already "bold,filled" so the double-marker
+         case is just an additive style. *)
+    let style_parts = ref [] in
+    if is_entry then style_parts := "bold" :: !style_parts;
+    (match scc_fill with
+     | Some c ->
+         parts := ("fillcolor=" ^ c) :: !parts;
+         style_parts := "filled" :: !style_parts
+     | None ->
+         if is_entry then begin
+           parts := "fillcolor=lightyellow" :: !parts;
+           style_parts := "filled" :: !style_parts
+         end);
+    (match !style_parts with
+     | [] -> ()
+     | [s] -> parts := ("style=" ^ s) :: !parts
+     | xs -> parts := (Printf.sprintf "style=\"%s\"" (String.concat "," xs)) :: !parts);
+    match !parts with
+    | [] -> ""
+    | xs -> " [" ^ String.concat "," xs ^ "]"
+  in
+  (* Per-cluster background tints — soft pastel palette, distinct from edge
+     black and from SCC fill colors. Each file cluster cycles through this. *)
+  let cluster_palette =
+    [| "#fff8e1"; "#e3f2fd"; "#f3e5f5"; "#e8f5e9"; "#fce4ec";
+       "#fff3e0"; "#e0f7fa"; "#f1f8e9"; "#fdedef"; "#ede7f6" |]
+  in
+  (* Group nodes by file (or "" for unknown). Iterate ids 0..n-1 to keep
+     a stable, source-order layout per file. *)
+  let by_file = ref StrMap.empty in
+  for id = 0 to n - 1 do
+    match Callgraph.name_of_id t id with
+    | None -> ()
+    | Some name ->
+        let f = match file_of_node name with Some f -> f | None -> "" in
+        let prev = try StrMap.find f !by_file with Not_found -> [] in
+        by_file := StrMap.add f ((id, name) :: prev) !by_file
+  done;
+  let buf = Buffer.create 4096 in
+  Buffer.add_string buf (Printf.sprintf "digraph %s {\n" (sanitize_id name));
+  Buffer.add_string buf "  rankdir=LR;\n";
+  (* [splines=ortho]: dot's default spline router fails
+     ([routesplines: Pshortestpath failed]) on dense graphs with many
+     clusters and produces SVGs that have nodes but no edges. Orthogonal
+     routing bypasses that solver and renders reliably; [splines=line]
+     also fails on the same inputs. *)
+  Buffer.add_string buf "  splines=ortho;\n";
+  Buffer.add_string buf "  node [shape=box,fontname=Courier];\n";
+  let cluster_idx = ref 0 in
+  StrMap.iter (fun file nodes ->
+    let nodes = List.rev nodes in
+    if file = "" then
+      List.iter (fun (id, n) ->
+        Buffer.add_string buf
+          (Printf.sprintf "  \"%s\"%s;\n" (escape_dot n) (node_attrs n id))
+      ) nodes
+    else begin
+      let bg = cluster_palette.(!cluster_idx mod Array.length cluster_palette) in
+      incr cluster_idx;
+      Buffer.add_string buf
+        (Printf.sprintf "  subgraph cluster_%s {\n" (sanitize_id file));
+      Buffer.add_string buf
+        (Printf.sprintf
+           "    label=\"%s\";\n    style=\"rounded,filled\";\n    bgcolor=\"%s\";\n    color=\"#888888\";\n    penwidth=2;\n"
+           (escape_dot file) bg);
+      List.iter (fun (id, n) ->
+        Buffer.add_string buf
+          (Printf.sprintf "    \"%s\"%s;\n" (escape_dot n) (node_attrs n id))
+      ) nodes;
+      Buffer.add_string buf "  }\n"
+    end
+  ) !by_file;
+  (* Edges: emit at top level (dot understands cross-cluster edges fine).
+     [iter_edges] yields ids; resolve back to names. *)
+  Callgraph.iter_edges t (fun caller_id callee_id ->
+    match Callgraph.name_of_id t caller_id, Callgraph.name_of_id t callee_id with
+    | Some c, Some d ->
+        Buffer.add_string buf
+          (Printf.sprintf "  \"%s\" -> \"%s\";\n" (escape_dot c) (escape_dot d))
+    | _ -> ());
+  Buffer.add_string buf "}\n";
+  Buffer.contents buf
+
 let topo_sort pasts call_graph =
   let past_map = Hashtbl.create (List.length pasts) in
   List.iter (fun (filename, past) ->
@@ -467,5 +669,84 @@ let%test "topo_sort prefers function definitions over declarations" =
   List.mem foo_def sorted
   && not (List.mem foo_decl sorted)
   && List.mem bar_def sorted
+
+let%test "to_dot emits nodes, edges, clusters, entry-point and SCC styling" =
+  (* Graph: cyclic 2-SCC {a,b}, standalone leaf c reachable from a, plus
+     standalone d that is an entry point but not in any non-trivial SCC.
+     a, b live in foo.c; c, d live in bar.c. a and d are entry points. *)
+  let g =
+    Callgraph.of_adjacency
+      [ ("a", ["b"; "c"]);
+        ("b", ["a"]);
+        ("c", []);
+        ("d", []) ]
+  in
+  let file_of = function
+    | "a" | "b" -> Some "foo.c"
+    | "c" | "d" -> Some "bar.c"
+    | _ -> None
+  in
+  let dot = to_dot ~file_of_node:file_of ~entry_points:["a"; "d"] g in
+  let contains s = try ignore (Str.search_forward (Str.regexp_string s) dot 0); true
+                   with Not_found -> false in
+  contains "digraph callgraph"
+  && contains "rankdir=LR"
+  && contains "\"a\" -> \"b\""
+  && contains "\"b\" -> \"a\""
+  && contains "\"a\" -> \"c\""
+  && contains "subgraph cluster_foo_c"
+  && contains "subgraph cluster_bar_c"
+  (* Entry point alone (d): [lightyellow] fill, [bold] in style. *)
+  && contains "fillcolor=lightyellow"
+  (* Entry point that's also in a non-trivial SCC (a): SCC color wins for
+     fill; [bold] is added to keep the entry-point signal. The order
+     within [style=".."] is implementation-defined. *)
+  && contains "style=\"filled,bold\""
+  && contains "fillcolor="
+  && contains "}\n"
+
+let%test "to_dot leaves trivial SCCs uncoloured when highlight_scc=true" =
+  (* Pure DAG — every node is its own trivial SCC, none should be filled. *)
+  let g = Callgraph.of_adjacency [ ("x", ["y"]); ("y", ["z"]); ("z", []) ] in
+  let dot = to_dot g in
+  not (try ignore (Str.search_forward (Str.regexp_string "fillcolor=") dot 0); true
+       with Not_found -> false)
+
+let%test "to_dot escapes quotes and backslashes in node names" =
+  let g = Callgraph.of_adjacency [ ({|weird"name|}, [{|back\slash|}]); ({|back\slash|}, []) ] in
+  let dot = to_dot g in
+  let contains s = try ignore (Str.search_forward (Str.regexp_string s) dot 0); true
+                   with Not_found -> false in
+  contains {|"weird\"name"|}
+  && contains {|"back\\slash"|}
+
+let%test "wrap_label leaves short names alone and wraps long ones at underscores" =
+  wrap_label "foo" = "foo"
+  && wrap_label "vec_size" = "vec_size"
+  (* Long, multi-underscore name: split into multiple lines, with [\n]
+     literals between groups and trailing [_] kept on each non-final line. *)
+  && wrap_label ~max_line:14 "vec_proxy_equal_impl" = "vec_proxy_\\nequal_impl"
+  (* Long single-token name without underscores: unchanged (nothing to split). *)
+  && wrap_label "abcdefghijklmnopqrstuvwxyz" = "abcdefghijklmnopqrstuvwxyz"
+
+let%test "to_dot adds a wrapped label= attribute for long node names" =
+  let g = Callgraph.of_adjacency [ ("vec_proxy_equal_impl", []); ("short", []) ] in
+  let dot = to_dot g in
+  let contains s = try ignore (Str.search_forward (Str.regexp_string s) dot 0); true
+                   with Not_found -> false in
+  (* Long name gets a label= attribute with a literal \n inside. *)
+  contains "label=\"vec_proxy_\\nequal_impl\""
+  (* Short name doesn't (would just duplicate the id). *)
+  && not (contains "label=\"short\"")
+
+let%test "to_dot tints file clusters with bgcolor and a darker border" =
+  let g = Callgraph.of_adjacency [ ("foo", []); ("bar", []) ] in
+  let file_of = function "foo" -> Some "a.c" | "bar" -> Some "b.c" | _ -> None in
+  let dot = to_dot ~file_of_node:file_of g in
+  let contains s = try ignore (Str.search_forward (Str.regexp_string s) dot 0); true
+                   with Not_found -> false in
+  contains "bgcolor=\"#"
+  && contains "color=\"#888888\""
+  && contains "style=\"rounded,filled\""
 
 

@@ -13,7 +13,7 @@ let () =
   (* Options: enable parsing of the PAst and typing, but do not print CST/AST/MLsem. *)
   let opts = Runner.{ cst = false; past = false; ast = false; mlsem = false;
                       typing = true; debug = false; filter = None; timeout = None;
-                      fallback_c_signature = false } in
+                      fallback_c_signature = false; call_graph = None } in
   let idenv = Runner.StrMap.empty in
   let env = Defs.initial_env in
   (* Runner.run_on_file already prints the interesting output to stdout via

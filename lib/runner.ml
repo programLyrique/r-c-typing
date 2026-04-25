@@ -22,6 +22,10 @@ type cmd_options = {
      original error is still printed; the fallback is additionally reported on
      a [fallback:] line. Off by default. *)
   fallback_c_signature : bool;
+  (* When [Some path], dump the call graph (after [keep_reachable]) in
+     Graphviz .dot format to [path]. Cycles are colored, files clustered,
+     entry points marked. *)
+  call_graph : string option;
 }
 
 let make_substring_pred = function
@@ -364,14 +368,37 @@ let run_on_files opts filenames ?entry_points idenv env =
       (filename, past)
     ) filenames in
   let call_graph = Call_graph.of_past_list (List.map snd pasts) in
+  let entry_names = match entry_points with
+    | None -> []
+    | Some entries ->
+      entries |> List.filter_map (fun (func_name, convention) ->
+        match convention with
+        | Package.Call | Package.C | Package.External -> Some func_name
+        | _ -> None)
+  in
   let call_graph = match entry_points with
     | None -> call_graph
-    | Some entries -> 
-      let entries = entries |> List.filter_map (fun (func_name, convention) -> 
-        match convention with 
-        | Package.Call | Package.C | Package.External -> Some func_name
-        | _ -> None) in
-      Call_graph.keep_reachable call_graph entries in
+    | Some _ -> Call_graph.keep_reachable call_graph entry_names in
+  (* Optional: dump the call graph for inspection (after [keep_reachable]).
+     A name -> source-file map is built from [pasts] for per-file clustering. *)
+  (match opts.call_graph with
+   | None -> ()
+   | Some path ->
+       let module H = Hashtbl in
+       let file_of = H.create 256 in
+       let rec scan filename = function
+         | _, PAst.Fundef (_, n, _, _) -> H.replace file_of n (Filename.basename filename)
+         | _, PAst.Include items -> List.iter (scan filename) items
+         | _ -> ()
+       in
+       List.iter (fun (filename, items) ->
+         List.iter (scan filename) items) pasts;
+       let file_of_node n = H.find_opt file_of n in
+       let dot = Call_graph.to_dot ~file_of_node ~entry_points:entry_names call_graph in
+       let oc = open_out path in
+       output_string oc dot;
+       close_out oc;
+       Printf.printf "Call graph written to %s\n" path);
   (* Only keep the transitive closure of the entry points *)
   let filtered_pasts = List.concat_map (fun (filename, past) ->
       List.filter_map (fun item ->
