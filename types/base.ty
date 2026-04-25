@@ -66,7 +66,7 @@ PRINTNAME: t(sym) -> p(chr)
 STRING_PTR_RO: t(v(chr)) -> *p(chr)
 STRING_PTR: t(v(chr)) -> *p(chr)
 
-// Environments 
+// Environments
 R_GlobalEnv: env
 R_EmptyEnv: env
 R_BaseEnv: env
@@ -75,6 +75,47 @@ R_NewEnv: t(env, c_int, c_int) -> env
 R_GetCurrentEnv: () -> env
 R_ParentEnv: t(env) -> env
 R_UnboundValue: sym
+R_NamespaceRegistry: env
+R_FindNamespace: t(any) -> env
+R_IsNamespaceEnv: t(env) -> c_bool
+
+// R API: internal symbols (getAttrib/setAttrib/defineVar args)
+R_LevelsSymbol: sym
+R_ClassSymbol: sym
+R_NamesSymbol: sym
+R_DimSymbol: sym
+R_DimNamesSymbol: sym
+R_RowNamesSymbol: sym
+R_BraceSymbol: sym
+
+// R API: evaluation / binding
+Rf_eval: t(any, env) -> any
+Rf_defineVar: t(sym, any, env) -> c_void
+Rf_GetOption1: t(sym) -> any
+
+// R API: reflection / printing
+Rf_PrintValue: t(any) -> c_void
+Rf_type2str: t(any) -> sym
+Rf_isObject: t(any) -> c_bool
+Rf_asS4:     t(any) -> any
+Rf_isS4:     t(any) -> c_bool
+Rf_onintr:   t() -> c_void
+Rf_lengthgets: t(any, c_int) -> any
+Rf_ParseVector: t(any, c_int, *c_int, any) -> any
+
+// R API: external pointers (extended)
+R_ClearExternalPtr: t(any) -> c_void
+R_SetExternalPtrAddr: t(any, *any) -> c_void
+R_ExternalPtrTag: t(any) -> any
+R_ExternalPtrProtected: t(any) -> any
+R_RegisterCFinalizerEx: t(any, any -> any, c_bool) -> c_void
+
+// R API: closures
+R_ClosureExpr: t(any -> any) -> lang
+
+// R API: misc
+R_CheckStack2: t(c_int) -> c_void
+R_GetCCallable: t(c_string, c_string) -> any
 
 // Casts
 asLogical: t(any) -> c_true | c_false
@@ -85,6 +126,8 @@ list2: t(any, any) -> lang
 isPairList: (t(lang) -> c_true) & (t(~lang) -> c_false)
 lang1: t(any) -> lang
 lang2: t(any, any) -> lang
+Rf_lang3: t(any, any, any) -> lang
+Rf_lang4: t(any, any, any, any) -> lang
 
 // Attributes
 // TODO: we also support attributes in the type algebra, so add it!
@@ -132,6 +175,8 @@ abs: t(c_int) -> c_int //TODO: rather put the interval [0,+infinity] ; (0..)?
 R_INT_MIN: c_int
 R_INT_MAX: c_int
 R_LEN_T_MAX: c_int
+R_SSIZE_MAX: c_int
+R_NaN: c_double
 sizeof: t(any) -> c_int
 
 INT64_MIN: c_int
