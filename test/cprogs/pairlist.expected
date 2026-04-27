@@ -1,2 +1,2 @@
-reflist_add: (lang, any | chr) | (null, any | chr) -> lang
+reflist_add: (lang, env | lang | list | null | sym | vec | (any -> any)) -> lang
 

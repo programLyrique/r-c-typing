@@ -12,7 +12,7 @@ Entry points for .C convention:
 
 .C(sum_doubles): (dbl, int | lgl, dbl) -> c_void
 
-make_pair: (any | chr, any | chr) -> lang
+make_pair: (env | lang | list | null | sym | vec | (any -> any), env | lang | list | null | sym | vec | (any -> any)) -> lang
 
 reverse_strings: ∀'a. (chr1 -> chr1) & (chr[int(i(int & 'a & ~1))] -> chr['a])
 

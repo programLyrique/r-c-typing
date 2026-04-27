@@ -3,6 +3,6 @@
 SEXP reflist_add(SEXP x, SEXP target)
 {
     if (!Rf_isPairList(x))
-        Rf_error("Not a LISTSXP");
+        error("Not a LISTSXP");
     return (Rf_cons(target, x));
 }

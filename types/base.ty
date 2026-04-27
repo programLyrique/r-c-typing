@@ -98,42 +98,42 @@ Rf_GetOption1: t(sym) -> any_sexp
 Rf_PrintValue: t(any_sexp) -> c_void
 Rf_type2str: t(any) -> sym // similar to TYPEOF for the argument. Fix accordingly
 Rf_isObject: t(any_sexp) -> c_bool
-Rf_asS4:     t(any) -> any
-Rf_isS4:     t(any) -> c_bool
+Rf_asS4:     t(any_sexp) -> any_sexp
+Rf_isS4:     t(any_sexp) -> c_bool
 Rf_onintr:   t() -> c_void
-Rf_lengthgets: t(any, c_int) -> any
-Rf_ParseVector: t(any, c_int, *c_int, any) -> any
+Rf_lengthgets: t(vec | list | lang, c_int) -> any_sexp
+Rf_ParseVector: t(any_sexp, c_int, *c_int, chr1) -> any_sexp // the 2 sexp arguments are probably STRSXP actually and the return type, an expr?
 
 // R API: external pointers (extended)
-R_ClearExternalPtr: t(any) -> c_void
-R_SetExternalPtrAddr: t(any, *any) -> c_void
-R_ExternalPtrTag: t(any) -> any
-R_ExternalPtrProtected: t(any) -> any
-R_RegisterCFinalizerEx: t(any, any -> any, c_bool) -> c_void
+R_ClearExternalPtr: t(any_sexp) -> c_void
+R_SetExternalPtrAddr: t(any_sexp, *any) -> c_void
+R_ExternalPtrTag: t(any_sexp) -> any_sexp
+R_ExternalPtrProtected: t(any_sexp) -> any_sexp
+R_RegisterCFinalizerEx: t(any_sexp, any -> any, c_bool) -> c_void // not sure about the 2nd argument...
 
 // R API: closures
-R_ClosureExpr: t(any -> any) -> lang
+R_ClosureExpr: t(any -> any) -> lang 
 
 // R API: misc
 R_CheckStack2: t(c_int) -> c_void
 R_GetCCallable: t(c_string, c_string) -> any
 
 // Casts
-asLogical: t(any) -> c_true | c_false
-asInteger: t(any) -> c_int
+asLogical: t(any_sexp) -> c_true | c_false
+asInteger: t(any_sexp) -> c_int
 
 // Pairlists and language
-list2: t(any, any) -> lang
+list2: t(any_sexp, any_sexp) -> lang
 isPairList: (t(lang) -> c_true) & (t(~lang) -> c_false)
-lang1: t(any) -> lang
-lang2: t(any, any) -> lang
-Rf_lang3: t(any, any, any) -> lang
-Rf_lang4: t(any, any, any, any) -> lang
+lang1: t(any_sexp) -> lang
+lang2: t(any_sexp, any_sexp) -> lang
+Rf_lang3: t(any_sexp, any_sexp, any_sexp) -> lang
+Rf_lang4: t(any_sexp, any_sexp, any_sexp, any_sexp) -> lang
 
 // Attributes
 // TODO: we also support attributes in the type algebra, so add it!
-getAttrib: t(any, sym) -> any
-setAttrib: t(any, sym, any) -> any
+getAttrib: t(any_sexp, sym) -> any_sexp
+setAttrib: t(any_sexp, sym, any) -> any_sexp
 
 []<-: t(*'a, c_int, 'a) -> *'a
 []: t(*'a, c_int) -> 'a
@@ -142,10 +142,10 @@ PROTECT_INDEX = c_int
 
 PROTECT: t('a) -> 'a
 UNPROTECT: t(c_int) -> c_void
-REPROTECT: t(any, PROTECT_INDEX) -> c_void
-PROTECT_WITH_INDEX: t(any, *PROTECT_INDEX) -> c_void
-R_PreserveObject: t(any) -> c_void
-R_ReleaseObject: t(any) -> c_void
+REPROTECT: t(any_sexp, PROTECT_INDEX) -> c_void
+PROTECT_WITH_INDEX: t(any_sexp, *PROTECT_INDEX) -> c_void
+R_PreserveObject: t(any_sexp) -> c_void
+R_ReleaseObject: t(any_sexp) -> c_void
 
 // Arithmetic
 
@@ -171,8 +171,9 @@ R_ReleaseObject: t(any) -> c_void
 *__1: t(*'a) -> 'a
 &__1: t('a) -> *'a
 
-abs: t(c_int) -> c_int //TODO: rather put the interval [0,+infinity] ; (0..)?
- 
+abs: t(c_int) -> c(0..) 
+
+// TODO: put the actual value here?
 R_INT_MIN: c_int
 R_INT_MAX: c_int
 R_LEN_T_MAX: c_int
@@ -183,8 +184,8 @@ sizeof: t(any) -> c_int
 INT64_MIN: c_int
 
 
-Rf_envlength: t(any) -> c_int
-CDR: t(any) -> any
+Rf_envlength: t(env) -> c_int
+CDR: t(lang) -> any_sexp
 
 // Boolean operators and comparisons
 ||__2: (t(c_true, c_true) | t(c_true, c_false) | t(c_false, c_true) -> c_true) & (t(c_false, c_false) -> c_false)
@@ -224,7 +225,7 @@ SYMSXP: sym
 LISTSXP: lang
 LANGSXP: lang
 ENVSXP: env
-ANYSXP: any_r_not_vec | vec
+ANYSXP: any_sexp
 DOTSXP: any
 EXTPTRSXP: any // we should have a specific type for it
 
@@ -237,17 +238,17 @@ Rf_warningcall: (t(any, any) -> c_void) & (t(any, any, any) -> c_void) & (t(any,
 isFunction: (t(any -> any) -> c_true) & (t(~(any -> any)) -> c_false)
 
 // R API: evaluation
-R_ToplevelExec: t(any, any) -> c_bool
-R_tryEval: t(any, env, *c_int) -> any
+R_ToplevelExec: t(any, *any) -> c_bool
+R_tryEval: t(any_sexp, env, *c_int) -> any_sexp
 R_CheckUserInterrupt: t() -> c_void
 
 // R API: pairlists
-LCONS: t(any, lang | null) -> lang
-CONS: t(any, lang | null) -> lang
-cons: t(any, lang | null) -> lang
-lcons: t(any, lang | null) -> lang
-CAR: t(lang) -> any
-CADR: t(lang) -> any
+LCONS: t(any_sexp, lang | null) -> lang
+CONS: t(any_sexp, lang | null) -> lang
+cons: t(any_sexp, lang | null) -> lang
+lcons: t(any_sexp, lang | null) -> lang
+CAR: t(lang) -> any_sexp
+CADR: t(lang) -> any_sexp
 
 // R API: raw vectors
 RAW: t(v(raw)) -> *c_int
@@ -269,10 +270,10 @@ MARK_NOT_MUTABLE: t(any) -> c_void
 // classes 
 inherits: t(any, c_string) -> c_bool // to improve when supporting classes
 
-// Extermal pointers 
+// External pointers 
 // TODO: add a specific type 
-R_ExternalPtrAddr: t(any) -> *any
-R_MakeExternalPtr: t(*any, any, any) -> any
+R_ExternalPtrAddr: t(any_sexp) -> *any
+R_MakeExternalPtr: t(*any, any_sexp, any_sexp) -> any_sexp
 
 // C functions
 
