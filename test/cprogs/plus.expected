@@ -1,6 +1,6 @@
 r_plus_scalar_real: (dbl, dbl) -> dbl1
 
-make_int_or_float: (c_false -> empty) & (c_int_na -> int1)
+make_int_or_float: (c_false -> int2) & (c_int_na -> int1 | int2) & (c_true -> int1)
 
 incr_real: dbl1 -> dbl1
 
@@ -14,7 +14,7 @@ r_plus_scalar_strict: ((dbl, dbl) -> dbl1) & ((int, int) -> int1)
 
 r_plus_scalar: ((int, int) -> int1) & ((dbl, dbl) | (dbl, int) | (int, dbl) -> dbl1)
 
-r_plus_all: ∀'a,'b. ((int1, int1) -> int1) & ((int[int(i(int & 'b))], int[int(i(1 | int & 'b))]) -> int1 | int['b]) & ((dbl1, dbl1) | (dbl1, int1) | (int1, dbl1) -> dbl1) & ((dbl[int(i(int & 'a))], dbl[int(i(1 | int & 'a))]) | (dbl[int(i(int & 'a))], int[int(i(1 | int & 'a))]) | (int[int(i(int & 'a))], dbl[int(i(1 | int & 'a))]) -> dbl1 | dbl['a]) & ((dbl[int(i(int & 'a & ~1))], dbl[int(i(int & 'a & ~1))]) | (dbl[int(i(int & 'a & ~1))], int[int(i(int & 'a & ~1))]) | (int[int(i(int & 'a & ~1))], dbl[int(i(int & 'a & ~1))]) | (int[int(i(int & 'b & ~1))], int[int(i(int & 'b & ~1))]) -> empty)
+r_plus_all: ∀'a,'b. ((int[int(i(int & 'b))], int[int(i(int & 'b))]) -> int[int(i(int & 'b))]) & ((dbl[int(i(int & 'a))], dbl[int(i(int & 'a))]) | (dbl[int(i(int & 'a))], int[int(i(int & 'a))]) | (int[int(i(int & 'a))], dbl[int(i(int & 'a))]) -> dbl[int(i(int & 'a))])
 
 R_integer_plus: (c_int_na, c(..-1), *c_bool) | (c_int_na, c(1..), *c_bool) | (c_int_na, c_na | c_false, *c_bool) -> c_int_na
 

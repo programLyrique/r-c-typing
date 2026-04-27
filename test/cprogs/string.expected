@@ -10,3 +10,5 @@ is_blank_string: (^(chr \ "") -> c_false) & ("" | null -> c_true)
 
 to_char: ∀'a,'b. ((env | lang | list | null | v0('b) | (any -> any)) & 'a | 'a & 'b & (chr | (env | lang | list | null | v0('b) | (any -> any))) -> chr \ ^chr | 'b) & ((sym | v[^(1..)]('b)) & 'a | 'a & 'b & (chr | (sym | v[^(1..)]('b))) -> chr1 | 'b) & (chr & 'a -> 'a) & ((env | lang | list | null | vec0 | (any -> any)) & 'a -> chr \ ^chr) & ((sym | vec[^(1..)]) & 'a -> chr1)
 
+make_url_names: () -> chr9
+

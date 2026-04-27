@@ -14,5 +14,5 @@ Entry points for .C convention:
 
 make_pair: (env | lang | list | null | sym | vec | (any -> any), env | lang | list | null | sym | vec | (any -> any)) -> lang
 
-reverse_strings: ∀'a. (chr1 -> chr1) & (chr[int(i(int & 'a & ~1))] -> chr['a])
+reverse_strings: ∀'a. chr[int(i(int & 'a))] -> chr[int(i(int & 'a))]
 

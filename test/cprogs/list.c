@@ -1,30 +1,35 @@
 #include <Rinternals.h>
 
-
-SEXP create_pos_list() {
+SEXP create_pos_list()
+{
     return allocVector(VECSXP, 3);
 }
 
-SEXP create_list() {
+SEXP create_list()
+{
     int n = 3;
     return allocVector(VECSXP, n);
 }
 
-SEXP create_named_list() {
+SEXP create_named_list()
+{
     const char *names[] = {"a", "b", ""};
     return mkNamed(VECSXP, names);
 }
 
-SEXP create_list_const_prop() {
+SEXP create_list_const_prop()
+{
     int n = 3, m = 4;
     return allocVector(VECSXP, n + m);
 }
 
-SEXP create_list_const_prop2() {
+SEXP create_list_const_prop2()
+{
     return allocVector(VECSXP, 3 + 4);
 }
 
-SEXP create_named_list_with_elems() {
+SEXP create_named_list_with_elems()
+{
     const char *names[] = {"a", "b", ""};
     SEXP l = PROTECT(mkNamed(VECSXP, names));
     SET_VECTOR_ELT(l, 0, ScalarReal(3));
@@ -33,7 +38,8 @@ SEXP create_named_list_with_elems() {
     return l;
 }
 
-SEXP create_named_list_with_int() {
+SEXP create_named_list_with_int()
+{
     const char *names[] = {"a", "b", ""};
     SEXP l = PROTECT(mkNamed(VECSXP, names));
     SET_VECTOR_ELT(l, 0, ScalarInteger(3));
@@ -42,7 +48,8 @@ SEXP create_named_list_with_int() {
     return l;
 }
 
-SEXP create_named_list_set_only_one() {
+SEXP create_named_list_set_only_one()
+{
     const char *names[] = {"a", "b", ""};
     SEXP l = PROTECT(mkNamed(VECSXP, names));
     SET_VECTOR_ELT(l, 0, ScalarInteger(3));
@@ -50,23 +57,26 @@ SEXP create_named_list_set_only_one() {
     return l;
 }
 
-SEXP set_noname_list(SEXP val) {
+SEXP set_noname_list(SEXP val)
+{
     SEXP l = allocVector(VECSXP, 3);
     SET_VECTOR_ELT(l, 0, val);
     SET_VECTOR_ELT(l, 1, val);
     return l;
 }
 
-SEXP set_protected_noname_list(SEXP val) {
+SEXP set_protected_noname_list(SEXP val)
+{
     SEXP l = PROTECT(allocVector(VECSXP, 3));
     SET_VECTOR_ELT(l, 0, val);
     UNPROTECT(1);
     return l;
 }
 
-SEXP read_in_list() {
+SEXP read_in_list()
+{
     SEXP l = PROTECT(allocVector(VECSXP, 2));
     SET_VECTOR_ELT(l, 0, ScalarInteger(3));
     return VECTOR_ELT(l, 0);
-    //return l;
+    // return l;
 }
