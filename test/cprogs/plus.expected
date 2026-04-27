@@ -1,6 +1,6 @@
 r_plus_scalar_real: (dbl, dbl) -> dbl1
 
-make_int_or_float: (c_false -> int2) & (c_int_na -> int1 | int2) & (c_true -> int1)
+make_int_or_float: (c_false -> dbl2) & (c_int_na \ c_false -> int1)
 
 incr_real: dbl1 -> dbl1
 

@@ -45,9 +45,11 @@ let set_vector_elt_ty name =
 
 let tobool, tobool_t =
   let v = MVariable.create Immut (Some "tobool") in
-  let def = Arrow.mk Ty.any Cint.bool in
-  (* We actually only care about this part for C*)
-  let tt = Arrow.mk Cint.tt Cint.tt in
+  let non_int = Ty.diff Ty.any Cint.any_na in
+  let nonzero = Ty.diff Cint.any_na Cint.ff in
+  let def = Arrow.mk non_int Cint.bool in
+  (* C conditions follow C truthiness: 0 is false, any other integer is true. *)
+  let tt = Arrow.mk nonzero Cint.tt in
   let ff = Arrow.mk Cint.ff Cint.ff in
   let ty = Ty.conj [def;tt;ff] in
   v, ty
