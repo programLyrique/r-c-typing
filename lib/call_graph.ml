@@ -265,6 +265,11 @@ let collect_fun_names defs_list =
 let rec of_past_unit ~fun_names _t (_pos, unit') =
   match unit' with
   | PAst.Fundef (_, fname, _params, body) ->
+      (* Always register the defining function as a node, even if its body has
+         no callees in [fun_names]. Otherwise leaf functions (e.g. platform
+         stubs returning a constant) would be dropped by [keep_reachable]
+         even when they are entry points themselves. *)
+      let _ = Callgraph.add_node _t fname in
       let callees = PAst.extract_calls_from_expr ~fun_names body in
       List.iter (fun callee -> Callgraph.add_edge _t ~caller:fname ~callee) callees
   | PAst.TypeDecl _ -> ()
@@ -292,6 +297,10 @@ let keep_reachable t entry_points =
   let module StrSet = Set.Make(String) in
   let reachable_set = StrSet.of_list reachable_names in
   let new_graph = Callgraph.create ~capacity:(List.length reachable_names) () in
+  (* First add every reachable name as a node so leaf nodes (no outgoing
+     edges) survive the filter. [add_edge] alone would drop reachable leaves
+     because nodes are only created as a side effect of edge insertion. *)
+  List.iter (fun n -> let _ = Callgraph.add_node new_graph n in ()) reachable_names;
   (* Add edges only between reachable nodes *)
   List.iter (fun caller ->
     let callees = Callgraph.successors_by_name t caller in
