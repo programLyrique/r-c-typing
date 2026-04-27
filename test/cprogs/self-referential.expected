@@ -1,9 +1,9 @@
 head:
 untypeable: untypeable projection
-argument: *struct node & 'I3
+argument: *x1 & 'I3 where x1 = { value : c_int_na ; next : *x1 }
 tail:
 untypeable: untypeable projection
-argument: *struct node & 'I5
+argument: *x1 & 'I5 where x1 = { value : c_int_na ; next : *x1 }
 root:
 untypeable: untypeable projection
-argument: *struct tree & 'I7
+argument: *x1 & 'I7 where x1 = { value : c_int_na ; left : *x1 ; right : *x1 }

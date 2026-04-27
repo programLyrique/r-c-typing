@@ -280,3 +280,14 @@
  (deps    cprogs/sexprec-alias.c cprogs/sexprec-alias.expected)
  (action  (diff cprogs/sexprec-alias.expected sexprec-alias.output)))
 
+(rule
+ (alias   runtest)
+ (deps    cprogs/pairlist.c)
+ (action  (with-stdout-to pairlist.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/pairlist.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/pairlist.c cprogs/pairlist.expected)
+ (action  (diff cprogs/pairlist.expected pairlist.output)))
+

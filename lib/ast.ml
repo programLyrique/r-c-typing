@@ -184,8 +184,6 @@ let typeof_ctype ct =
                | (_, t) :: _ -> t
                | [] -> body
              in
-             let alias_name = if name = "" then Sstt.Var.name v else name in
-             PEnv.register ("struct " ^ alias_name) t ;
              Hashtbl.add recursive_struct_cache key t ;
              t
            else
