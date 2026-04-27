@@ -4,8 +4,8 @@
   ast
   defs
   in_channel_ext
-    parser_utils
-    preprocessor
+  parser_utils
+  preprocessor
   parser
   PAst
   runner
@@ -16,7 +16,8 @@
   package)
  (libraries r-c-typing.c mlsem rstt rstt-repl unix)
  (inline_tests
-  (deps ../types/base.ty ../types/posix.ty))
+  (deps
+   (glob_files ../types/*.ty)))
  (preprocess
   (pps ppx_deriving.show ppx_inline_test))
  (instrumentation

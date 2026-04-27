@@ -43,7 +43,7 @@ echo "Adding rules to $DUNE_INC_FILE..."
 # Create the rule for generating output
 RULE1="(rule
  (alias   runtest)
- (deps    cprogs/$C_FILE)
+ (deps    (glob_files ../types/*.ty) cprogs/$C_FILE)
  (action  (with-stdout-to $1.output
               (run %{exe:typing_test.exe} %{dep:cprogs/$C_FILE}))))"
 

@@ -15,6 +15,7 @@
 (rule
  (alias runtest)
  (deps
+  (glob_files ../types/*.ty)
   (source_tree packages/testpkg))
  (action
   (with-stdout-to

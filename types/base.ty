@@ -3,6 +3,7 @@ any_scalar = int | dbl | lgl | chr | clx | raw
 any_prim = p(int) | p(dbl) | p(lgl) | p(chr) | p(clx) | p(raw)
 expr = {lang|sym}
 any_r_not_vec = env | null | sym | list | lang | (any -> any) | expr
+any_sexp = any_r_not_vec | vec
 
 error: empty -> any
 fail: any -> empty
@@ -89,14 +90,14 @@ R_RowNamesSymbol: sym
 R_BraceSymbol: sym
 
 // R API: evaluation / binding
-Rf_eval: t(any, env) -> any
-Rf_defineVar: t(sym, any, env) -> c_void
-Rf_GetOption1: t(sym) -> any
+Rf_eval: t(any_sexp, env) -> any
+Rf_defineVar: t(sym, any_sexp, env) -> c_void
+Rf_GetOption1: t(sym) -> any_sexp
 
 // R API: reflection / printing
-Rf_PrintValue: t(any) -> c_void
-Rf_type2str: t(any) -> sym
-Rf_isObject: t(any) -> c_bool
+Rf_PrintValue: t(any_sexp) -> c_void
+Rf_type2str: t(any) -> sym // similar to TYPEOF for the argument. Fix accordingly
+Rf_isObject: t(any_sexp) -> c_bool
 Rf_asS4:     t(any) -> any
 Rf_isS4:     t(any) -> c_bool
 Rf_onintr:   t() -> c_void
