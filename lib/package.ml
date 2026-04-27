@@ -40,7 +40,19 @@ let find_native_calls path =
       with _ -> ""
   in
 
-  (* Convert prefixed R variables back to the underlying native symbol name. *)
+  (* Convert prefixed R variables back to the underlying native symbol name.
+     TODO: stripping the [.fixes] prefix only handles one of two layers of
+     R-to-C name remapping. The other layer is the [R_CallMethodDef] table
+     in [src/init.c], whose entries can map an arbitrary R-visible string
+     key to a different C function pointer, e.g.
+       {"vctrs_split", (DL_FUNC) &vec_split, 2}.
+     Calls of the form [.Call(vctrs_split, ...)] resolve to [vec_split]
+     at runtime, but here we still report the entry point as [vctrs_split],
+     which never matches a [Fundef] in the source — surfaced on the
+     dashboard as "no record in functions.csv". To fix, parse the
+     [R_CallMethodDef] (and [R_CMethodDef]/[R_FortranMethodDef]/
+     [R_ExternalMethodDef]) initializers, build an R-name -> C-name map,
+     and use the C name as the entry-point identifier. *)
   let strip_prefix prefix func_name =
     if prefix = "" then func_name
     else if String.starts_with ~prefix func_name then
@@ -63,7 +75,15 @@ let find_native_calls path =
             (try
               let lines = In_channel.with_open_text filepath In_channel.input_lines in
               let content = String.concat "\n" lines in
-              (* Create regex patterns for .C, .Call, .Fortran, .External *)
+              (* Create regex patterns for .C, .Call, .Fortran, .External.
+                 TODO: the captured identifier is the R-side name as it
+                 appears in [.Call("foo", ...)] / [.Call(foo, ...)]. For
+                 packages that register entries via [R_CallMethodDef] with
+                 a string key different from the C function name (e.g.
+                 vctrs maps [vctrs_split] -> [&vec_split]), this name
+                 won't match any [Fundef] in [src/]. Resolving via the
+                 [R_CallMethodDef] table (see [strip_prefix]'s TODO) and
+                 emitting the C-side name here would close that gap. *)
               let extract_calls pattern_name convention =
                 let pattern = Str.regexp
                   ("\\." ^ pattern_name ^ "[ \t]*([ \t]*\"?\\([a-zA-Z0-9_]+\\)")

@@ -17,7 +17,7 @@ let () =
   Parser.set_warn_unsupported false;
   let idenv = Runner.StrMap.empty in
   let env = Defs.initial_env in
-  ignore (PEnv.sequential_handler PEnv.empty 
+  ignore (PEnv.sequential_handler Defs.parsed_types_penv 
     (fun path -> Runner.run_on_package opts path idenv env)
     package_path);
   (* Ensure all output is flushed before exiting *) 

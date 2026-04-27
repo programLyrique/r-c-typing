@@ -18,7 +18,7 @@ let () =
   let env = Defs.initial_env in
   (* Runner.run_on_file already prints the interesting output to stdout via
      Format/Printf, which dune will capture in the rules using with-stdout-to. *)
-  ignore (PEnv.sequential_handler PEnv.empty 
+  ignore (PEnv.sequential_handler Defs.parsed_types_penv 
     (fun filename -> Runner.run_on_file opts filename idenv env)
     full_c_file);
   (* Ensure all output is flushed before exiting *) 

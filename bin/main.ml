@@ -117,7 +117,7 @@ let cmd =
      and+ fallback_c_signature = fallback_c_sig_opt
      and+ call_graph = call_graph_opt
     and+ path = path_arg in
-    PEnv.sequential_handler PEnv.empty (fun path -> main {cst; past; ast; mlsem ; typing = not no_typing ; debug ; filter; timeout; fallback_c_signature; call_graph} include_dirs path) path |> fst)
+    PEnv.sequential_handler Defs.parsed_types_penv (fun path -> main {cst; past; ast; mlsem ; typing = not no_typing ; debug ; filter; timeout; fallback_c_signature; call_graph} include_dirs path) path |> fst)
      
 
 let () = exit (Cmd.eval cmd)

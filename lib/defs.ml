@@ -46,6 +46,7 @@ let set_vector_elt_ty name =
 let tobool, tobool_t =
   let v = MVariable.create Immut (Some "tobool") in
   let non_int = Ty.diff Ty.any Cint.any_na in
+  (* In rstt, c_true is defined as c(1), not as c(1..) | c(..-1) i.e. not as an interval*)
   let nonzero = Ty.diff Cint.any_na Cint.ff in
   let def = Arrow.mk non_int Cint.bool in
   (* C conditions follow C truthiness: 0 is false, any other integer is true. *)
@@ -164,7 +165,7 @@ end
 
 
 (* For the new type algebra *)
-let parsed_types =
+let load_parsed_types () =
   let types_dir = Type_parser.find_types_dir () in
   let ty_files =
     Sys.readdir types_dir
@@ -178,6 +179,10 @@ let parsed_types =
     let types = Type_parser.load_file ~rf_aliases f in
     Rstt.Builder.StrMap.union (fun _k _v1 v2 -> Some v2) acc types
   ) Rstt.Builder.StrMap.empty ty_files
+
+let parsed_types, parsed_types_penv =
+  Mlsem.Types.PEnv.sequential_handler Mlsem.Types.PEnv.empty
+    (fun () -> load_parsed_types ()) ()
 
 let build_vars m = 
   let add_var name ty acc =

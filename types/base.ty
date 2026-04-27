@@ -1,6 +1,6 @@
 // Alias used by polymorphic builtins (scalar R vectors' element types)
 any_scalar = int | dbl | lgl | chr | clx | raw
-any_prim = p(int) | p(dbl) | p(lgl) | p(chr) | p(clx) | p(raw)
+prim = p(int) | p(dbl) | p(lgl) | p(chr) | p(clx) | p(raw)
 expr = {lang|sym}
 any_r_not_vec = env | null | sym | list | lang | (any -> any) | expr
 any_sexp = any_r_not_vec | vec
@@ -27,12 +27,12 @@ xlength: t(v[int('a)](any)) -> c_int('a)
 envlength: t(env) -> c_int
 
 // there is also a special case for VECSXP (list) that is coded in OCaml
-allocVector: (t('a & any_prim, c_int('b)) -> v[int('b)]('a)) & (t(list, 'b) -> list)
+allocVector: (t('a & prim, c_int('b)) -> v[int('b)]('a)) & (t(list, 'b) -> list)
 allocSExp: t('a & any_r_not_vec) -> 'a
 install: t(c_string) -> sym
 
 // when the names are statically known, we can return a more precise type (handled on the OCaml side)
-mkNamed: (t('a & any_prim, *c_string) -> v('a)) & (t(list, *c_string) -> list)
+mkNamed: (t('a & prim, *c_string) -> v('a)) & (t(list, *c_string) -> list)
 
 VECTOR_ELT: t({ 'r}, c_int) -> 'r
 SET_VECTOR_ELT: t({ 'r}, c_int, 'a) -> { 'r | 'a}
@@ -138,12 +138,12 @@ setAttrib: t(any_sexp, sym, any) -> any_sexp
 []<-: t(*'a, c_int, 'a) -> *'a
 []: t(*'a, c_int) -> 'a
 
-PROTECT_INDEX = c_int
+PROTECT_INDEX: c_int
 
 PROTECT: t('a) -> 'a
 UNPROTECT: t(c_int) -> c_void
-REPROTECT: t(any_sexp, PROTECT_INDEX) -> c_void
-PROTECT_WITH_INDEX: t(any_sexp, *PROTECT_INDEX) -> c_void
+REPROTECT: t(any_sexp, c_int) -> c_void
+PROTECT_WITH_INDEX: t(any_sexp, *c_int) -> c_void
 R_PreserveObject: t(any_sexp) -> c_void
 R_ReleaseObject: t(any_sexp) -> c_void
 

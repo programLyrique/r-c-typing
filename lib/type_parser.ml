@@ -77,6 +77,8 @@ let build_types ti_map env type_list =
     in
     let ty = build ti_map ty in
     let ti_map = if kind = Alias then TIdMap.add id ty ti_map else ti_map in
+    (* Register the alias for the printer *)
+    if kind = Alias then Mlsem.Types.PEnv.register sym ty; 
     (StrMap.add sym ty ty_env, ti_map, env)
     ) (Builder.StrMap.empty, ti_map, env) type_list
 
@@ -102,6 +104,9 @@ let load_file ?(rf_aliases=false) filename =
   let ti_map = Builder.TIdMap.empty in
   let type_map, _,_ = build_types ti_map Builder.empty_env parsed_types in
   if rf_aliases then add_rf_aliases type_map else type_map
+
+let with_penv thunk =
+  Mlsem.Types.PEnv.sequential_handler Mlsem.Types.PEnv.empty thunk () |> fst
 
 
 let mk_arg l =
@@ -160,6 +165,7 @@ let open Builder in
 
 
 let%test "build from file" =
+  with_penv @@ fun () ->
   let open Builder in
   let filename = "test_types.txt" in
   let oc = open_out filename in
@@ -202,6 +208,7 @@ let find_types_base_ty () =
   Filename.concat (find_types_dir ()) "base.ty"
 
 let%test "load file" = 
+  with_penv @@ fun () ->
     let open Builder in
     let filename = find_types_base_ty () in
     
