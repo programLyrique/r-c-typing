@@ -45,14 +45,18 @@ let set_vector_elt_ty name =
 
 let tobool, tobool_t =
   let v = MVariable.create Immut (Some "tobool") in
-  let non_int = Ty.diff Ty.any Cint.any_na in
+  let non_int_or_ptr = Ty.diff Ty.any (Ty.cup Cint.any_na Cptr.any) in
   (* In rstt, c_true is defined as c(1), not as c(1..) | c(..-1) i.e. not as an interval*)
   let nonzero = Ty.diff Cint.any_na Cint.ff in
-  let def = Arrow.mk non_int Cint.bool in
+  let nonnull = Ty.diff Cptr.any Cptr.null in
+  let def = Arrow.mk non_int_or_ptr Cint.bool in
   (* C conditions follow C truthiness: 0 is false, any other integer is true. *)
-  let tt = Arrow.mk nonzero Cint.tt in
-  let ff = Arrow.mk Cint.ff Cint.ff in
-  let ty = Ty.conj [def;tt;ff] in
+  let tt_int = Arrow.mk nonzero Cint.tt in
+  let ff_int = Arrow.mk Cint.ff Cint.ff in
+  (* Pointers *)
+  let tt_ptr = Arrow.mk nonnull Cint.tt in
+  let ff_ptr = Arrow.mk Cptr.null Cint.ff in
+  let ty = Ty.conj [def;tt_int;ff_int;tt_ptr;ff_ptr] in
   v, ty
 
 
