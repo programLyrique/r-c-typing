@@ -192,7 +192,7 @@ CDR: t(lang) -> any_sexp
 &&__2: (t(c_false, c_false) | t(c_true, c_false) | t(c_false, c_true) -> c_false) & (t(c_true, c_true) -> c_true)
 ==__2: t(any, any) -> c_bool
 !=__2: t(any, any) -> c_bool
-!__1: (t(c_true) -> c_false) & (t(c_false) -> c_true)
+!__1: (t(c_true) -> c_false) & (t(c_false) -> c_true) & (t(c(..-1) | c(1..)) -> c_false) & (t(c_null) -> c_true) & (t(*any \ c_null) -> c_false)
 <__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
 >__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
 <=__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)

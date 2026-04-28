@@ -4,3 +4,7 @@ size_bound: ∀'a,'b. vec[int(i('b & (..10)))] & 'a -> vec[int(i('b & (..10)))] 
 
 bail_if: (c_int_na, c_string) -> ()
 
+cond_on_int: ∀'a. c_false & 'a -> c_false & 'a
+
+isNull: *c_int_na \ c_null -> c_false
+
