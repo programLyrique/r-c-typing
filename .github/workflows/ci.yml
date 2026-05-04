@@ -13,7 +13,7 @@ jobs:
       PRIVATE_REPO_PAT: ${{ secrets.PRIVATE_REPO_PAT }}
     steps:
       # Checkout repository
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Set up OCaml environment
       - name: Set up OCaml
@@ -31,14 +31,14 @@ jobs:
 
       # Cache OPAM downloaded archives (optional, small speedup)
       - name: Cache OPAM downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.opam/download-cache
           key: ${{ runner.os }}-opam-downloads
 
       # # Cache the entire OPAM switch (compiled packages + pins)
       # - name: Cache OPAM switch
-      #   uses: actions/cache@v4
+      #   uses: actions/cache@v5
       #   with:
       #     path: |
       #       ~/.opam
@@ -50,7 +50,7 @@ jobs:
       # --- Rust caching ---
 
       - name: Cache Rust dependencies for tree-sitter-cli
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -146,7 +146,7 @@ jobs:
 
       # Upload coverage report as artifact
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: _coverage
@@ -154,7 +154,7 @@ jobs:
       # Optionally: comment coverage on PR
       - name: Comment coverage on PR
         if: github.event_name == 'pull_request'
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           message: |
             **Coverage report generated**

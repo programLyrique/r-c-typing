@@ -21,6 +21,15 @@ ENV PATH="/home/opam/.cargo/bin:${PATH}"
 RUN opam update --yes && eval $(opam env) && \
     opam install ocamlfind dune cmdliner.1.0.4 --yes
 
+# Cache-bust the opam pin layer below when any upstream HEAD changes. Without
+# this, BuildKit caches the RUN purely on its command string, so subsequent
+# builds keep reusing a stale clone — masking new commits to sstt/MLsem/rstt.
+# The GitHub API response body includes the commit SHA, so its hash changes
+# whenever the branch advances.
+ADD https://api.github.com/repos/E-Sh4rk/sstt/commits/main  /tmp/refs/sstt
+ADD https://api.github.com/repos/E-Sh4rk/MLsem/commits/main /tmp/refs/mlsem
+ADD https://api.github.com/repos/E-Sh4rk/rstt/commits/main  /tmp/refs/rstt
+
 # sstt and MLsem are now public — no PAT needed.
 RUN eval $(opam env) && \
     opam pin add sstt      "git+https://github.com/E-Sh4rk/sstt.git"   --yes && \
