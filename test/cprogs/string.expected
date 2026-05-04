@@ -8,7 +8,7 @@ get_c_string_from_str: (chr[^(int \ 0)] -> c_string) & (chr0 | v0(clx | dbl | in
 
 is_blank_string: (^(chr \ "") -> c_false) & ("" | null -> c_true)
 
-to_char: ∀'a,'b. ((env | lang | list | null | v0('b) | (any -> any)) & 'a | 'a & 'b & (chr | (env | lang | list | null | v0('b) | (any -> any))) -> na_string | 'b) & ((sym | v[^(1..)]('b)) & 'a | 'a & 'b & (chr | (sym | v[^(1..)]('b))) -> chr1 | 'b) & (chr & 'a -> 'a) & ((env | lang | list | null | vec0 | (any -> any)) & 'a -> na_string) & ((sym | vec[^(1..)]) & 'a -> chr1)
+to_char: ∀'a,'b. ((env | lang | list | null | v0('b) | (any -> any)) & 'a | 'a & 'b & (chr | (env | lang | list | null | v0('b) | (any -> any))) -> na_string | 'b) & (chr & 'a -> 'a) & ((env | lang | list | null | sym | vec0 | vec[^(1..)] | (any -> any)) & 'a -> chr) & ((env | lang | list | null | vec0 | (any -> any)) & 'a -> na_string)
 
 make_url_names: () -> chr9
 
