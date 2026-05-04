@@ -122,14 +122,14 @@ let rec typeof_const c =
   let open Rstt in 
   match c with 
   | CChar _ ->  Cenums.char
-  | CStr v -> Cstring.singl v
+  | CStr v -> Cptr.singl_string v
   | CDbl _ -> Cenums.double
   | CInt v -> Cint.singl v
   | CBool v -> if v then Cint.tt else Cint.ff
-  | CNull -> Null.any
+  | CNull -> Cptr.null
   | CNa -> Cint.na
-  | CArray [] -> Cptr.mk Defs.any_c
-  | CArray (elem::_) -> Cptr.mk (typeof_const elem)
+  | CArray [] -> Cptr.mk_nonstring Defs.any_c
+  | CArray (elem::_) -> Cptr.mk_nonstring (typeof_const elem)
 
 
 module StrMap = Map.Make(String)
@@ -155,8 +155,8 @@ let typeof_ctype ct =
     | Float -> Cenums.double
     | Char -> Cenums.char
     | Bool -> Cint.bool
-    | Ptr Char -> Cstring.any
-    | Ptr ty -> Cptr.mk (aux resolving ty)
+    | Ptr Char -> Cptr.string
+    | Ptr ty -> Cptr.mk_nonstring (aux resolving ty)
     | SEXP -> Defs.any_sexp
     | Any -> Ty.any
     | Typeref name ->

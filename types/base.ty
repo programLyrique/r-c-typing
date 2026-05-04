@@ -136,7 +136,7 @@ getAttrib: t(any_sexp, sym) -> any_sexp
 setAttrib: t(any_sexp, sym, any) -> any_sexp
 
 []<-: t(*'a, c_int, 'a) -> *'a
-[]: t(*'a, c_int) -> 'a
+[]: (t(*'a, c_int) -> 'a) & (t(c_string, c_int) -> c_char)
 
 PROTECT_INDEX: c_int
 
@@ -149,7 +149,7 @@ R_ReleaseObject: t(any_sexp) -> c_void
 
 // Arithmetic
 
-+__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na)
++__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na) & (t(c_string, c_int) -> c_string)
 
 -__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na)
 
@@ -168,7 +168,7 @@ R_ReleaseObject: t(any_sexp) -> c_void
 ++__1: (t(c_int) -> c_int) & (t(c_double) -> c_double) & (t(any) -> any)
 --__1: (t(c_int) -> c_int) & (t(c_double) -> c_double) & (t(any) -> any)
 
-*__1: t(*'a) -> 'a
+*__1: (t(*'a) -> 'a) & (t(c_string) -> c_char)
 &__1: t('a) -> *'a
 
 abs: t(c_int) -> c(0..) 
@@ -238,7 +238,7 @@ warningcall: (t(any, any) -> c_void) & (t(any, any, any) -> c_void) & (t(any, an
 isFunction: (t(any -> any) -> c_true) & (t(~(any -> any)) -> c_false)
 
 // R API: evaluation
-R_ToplevelExec: t((t(*any) -> any), *any) -> c_bool
+R_ToplevelExec: t(any, *any) -> c_bool
 R_tryEval: t(any_sexp, env, *c_int) -> any_sexp
 R_CheckUserInterrupt: t() -> c_void
 

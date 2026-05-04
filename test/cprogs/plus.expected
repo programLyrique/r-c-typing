@@ -16,5 +16,5 @@ r_plus_scalar: ((int, int) -> int1) & ((dbl, dbl) | (dbl, int) | (int, dbl) -> d
 
 r_plus_all: ∀'a,'b. ((int[int(i(int & 'b))], int[int(i(int & 'b))]) -> int[int(i(int & 'b))]) & ((dbl[int(i(int & 'a))], dbl[int(i(int & 'a))]) | (dbl[int(i(int & 'a))], int[int(i(int & 'a))]) | (int[int(i(int & 'a))], dbl[int(i(int & 'a))]) -> dbl[int(i(int & 'a))])
 
-R_integer_plus: (c_int_na, c(..-1), *c_bool) | (c_int_na, c(1..), *c_bool) | (c_int_na, c_na | c_false, *c_bool) -> c_int_na
+R_integer_plus: (c_int_na, c(..-1), *c_bool \ c_null) | (c_int_na, c(..-1), c_null) | (c_int_na, c(1..), *c_bool \ c_null) | (c_int_na, c(1..), c_null) | (c_int_na, c_na | c_false, *c_bool) -> c_int_na
 

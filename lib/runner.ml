@@ -94,18 +94,23 @@ let register_enum_constants ty : (Variable.t * Ty.t) list =
   in
   aux ty
 
-let print_visible kind visible v tys =
-  if visible then
+let print_visible ?(debug=false) kind visible v tys =
+  if visible then begin
     (match kind with
     | `Default ->
-        Format.printf "%a: @[<h>%a@]@.@." 
+        Format.printf "%a: @[<h>%a@]@.@."
     | `SimpleC ->
-        Format.printf "c(%a): @[<h>%a@]@.@." 
+        Format.printf "c(%a): @[<h>%a@]@.@."
     | `DotC ->
-        Format.printf ".C(%a): @[<h>%a@]@.@." 
+        Format.printf ".C(%a): @[<h>%a@]@.@."
     | `Define ->
-        Format.printf "define %a: @[<h>%a@]@.@.") 
-      Variable.pp v TyScheme.pp_short tys
+        Format.printf "define %a: @[<h>%a@]@.@.")
+      Variable.pp v TyScheme.pp_short tys ;
+    if debug then begin
+      let _, gty = TyScheme.get tys in
+      Format.printf "  raw: @[<h>%a@]@.@." Ty.pp_raw (GTy.ub gty)
+    end
+  end
 
 let with_inference_timeout timeout thunk =
   match timeout with
@@ -169,7 +174,7 @@ let infer_ast ?fallback visible opts (idenv, env, decl) (ast : Ast.e) =
           (*Format.printf "%a: upper bound= %a@.@." Variable.pp v  Ty.pp typ ;*)
           (* We only keep the upper bound as type for v and add it to the environment *)
           let tys = TyScheme.mk vars (GTy.mk typ) in
-          print_visible `Default visible v tys;
+          print_visible ~debug:opts.debug `Default visible v tys;
           (StrMap.add name v idenv, Env.add v tys env, decl))
     else
       idenv, env, decl
@@ -225,7 +230,7 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
           MVariable.create Immut (Some name)
       in
       if opts.debug && visible then
-        print_visible `Define visible v ty;
+        print_visible ~debug:opts.debug `Define visible v ty;
       (StrMap.add name v idenv, Env.add v ty env, decl)
   | _, PAst.TypeDecl (name, ty) ->
       let env =
@@ -257,7 +262,7 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
         let v = Defs.BuiltinVar.register_dynamic name ty in
         let tys = ty |> GTy.mk |> TyScheme.mk_mono in
         if opts.debug && visible then
-          print_visible `Default visible v tys;
+          print_visible ~debug:opts.debug `Default visible v tys;
         (StrMap.add name v idenv, Env.replace v tys env, decl)
       end
   | _,PAst.Fundef (ret_ty, name, params, _) when convention=Some(Package.C) ->
@@ -265,14 +270,14 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
       let ty = C_interface.infer_dotC ~typedef_map:decl ret_ty params |> GTy.mk |> TyScheme.mk_mono in
       if has_ty_binding name then begin
         (match find_existing_binding name idenv env with
-         | Some (v, tys) -> print_visible `DotC visible v tys
+         | Some (v, tys) -> print_visible ~debug:opts.debug `DotC visible v tys
          | None -> ());
         (idenv, env, decl)
       end else if is_declaration past && StrMap.mem name idenv then
         (idenv, env, decl)
       else
         let v = MVariable.create Immut (Some name) in
-        print_visible `DotC visible v ty;
+        print_visible ~debug:opts.debug `DotC visible v ty;
         (StrMap.add name v idenv, Env.add v ty env, decl)
     with Failure msg ->
       if visible then
@@ -282,19 +287,19 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
     let ty = C_interface.infer_cfun ~typedef_map:decl ret_ty params |> GTy.mk |>  TyScheme.mk_mono in
     if has_ty_binding name then begin
       (match find_existing_binding name idenv env with
-       | Some (v, tys) -> print_visible `SimpleC visible v tys
+       | Some (v, tys) -> print_visible ~debug:opts.debug `SimpleC visible v tys
        | None -> ());
       (idenv, env, decl)
     end else if is_declaration past && StrMap.mem name idenv then
       (idenv, env, decl)
     else
       let v = MVariable.create Immut (Some name) in
-      print_visible `SimpleC visible v ty;
+      print_visible ~debug:opts.debug `SimpleC visible v ty;
       (StrMap.add name v idenv, Env.add v ty env, decl)
   | _, PAst.Fundef (ret_ty, name, params, _) when is_declaration past ->
     if has_ty_binding name then begin
       (match find_existing_binding name idenv env with
-       | Some (v, tys) -> print_visible `Default visible v tys
+       | Some (v, tys) -> print_visible ~debug:opts.debug `Default visible v tys
        | None -> ());
       (idenv, env, decl)
     end else if StrMap.mem name idenv then
@@ -302,11 +307,11 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
     else
       let ty = C_interface.infer_cfun ~typedef_map:decl ret_ty params |> GTy.mk |> TyScheme.mk_mono in
       let v = MVariable.create Immut (Some name) in
-      print_visible `Default visible v ty;
+      print_visible ~debug:opts.debug `Default visible v ty;
       (StrMap.add name v idenv, Env.add v ty env, decl)
   | _, PAst.Fundef (_, name, _, _) when has_ty_binding name ->
     (match find_existing_binding name idenv env with
-     | Some (v, tys) -> print_visible `Default visible v tys
+     | Some (v, tys) -> print_visible ~debug:opts.debug `Default visible v tys
      | None -> ());
     (idenv, env, decl)
   | _ ->

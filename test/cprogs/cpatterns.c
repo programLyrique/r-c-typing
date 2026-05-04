@@ -49,3 +49,11 @@ int declared_then_defined(int x);
 int declared_then_defined(int x) {
     return x + 1;
 }
+
+void check_interrupt_fn(void *dummy) {
+  R_CheckUserInterrupt();
+}
+
+int pending_interrupt(void) {
+  return !(R_ToplevelExec(check_interrupt_fn, NULL));
+}

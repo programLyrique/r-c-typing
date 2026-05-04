@@ -4,11 +4,13 @@ create_str_from_chr: () -> "world"
 
 create_str_from_concat: () -> "hello world"
 
-get_c_string_from_str: (chr[^(int \ 0)] -> c_string) & (chr0 | v0(clx | dbl | int | lgl | raw) | v[^(int \ 0)](clx | dbl | int | lgl | raw) -> null)
+get_c_string_from_str: (chr[^(int \ 0)] -> c_string \ c_null) & (chr0 | v0(clx | dbl | int | lgl | raw) | v[^(int \ 0)](clx | dbl | int | lgl | raw) -> c_null)
 
 is_blank_string: (^(chr \ "") -> c_false) & ("" | null -> c_true)
 
 to_char: ∀'a,'b. ((env | lang | list | null | v0('b) | (any -> any)) & 'a | 'a & 'b & (chr | (env | lang | list | null | v0('b) | (any -> any))) -> na_string | 'b) & (chr & 'a -> 'a) & ((env | lang | list | null | sym | vec0 | vec[^(1..)] | (any -> any)) & 'a -> chr) & ((env | lang | list | null | vec0 | (any -> any)) & 'a -> na_string)
 
 make_url_names: () -> chr9
+
+R_parse: (chr, any_sexp) | (env | lang | list | null | sym | vec0 | vec[^(1..)] | (any -> any), any_sexp) -> ()
 

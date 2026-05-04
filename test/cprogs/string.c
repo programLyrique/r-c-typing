@@ -61,17 +61,17 @@ SEXP make_url_names()
 
 // From the jsonlite package (parse.c)
 // Currently fails because we encode C strings differently than pointers
-// SEXP R_parse(SEXP x, SEXP bigint_as_char) {
-//       const char* json = translateCharUTF8(asChar(x));
-//       const int bigint = asLogical(bigint_as_char);
+SEXP R_parse(SEXP x, SEXP bigint_as_char) {
+      const char* json = translateCharUTF8(asChar(x));
+      const int bigint = asLogical(bigint_as_char);
 
-//       if(json[0] == '\xEF' && json[1] == '\xBB' && json[2] == '\xBF'){
-//         warningcall(R_NilValue, "JSON string contains (illegal) UTF8 byte-order-mark!");
-//         json = json + 3;
-//       }
+      if(json[0] == '\xEF' && json[1] == '\xBB' && json[2] == '\xBF'){
+        warningcall(R_NilValue, "JSON string contains (illegal) UTF8 byte-order-mark!");
+        json = json + 3;
+      }
 
-//       if(json[0] == '\x1E'){
-//         json = json + 1;
-//       }
-//       // more
-// }
+      if(json[0] == '\x1E'){
+        json = json + 1;
+      }
+      // more
+}
