@@ -485,9 +485,10 @@ let map f e =
     pointer dependencies. *)
 let rec extract_calls_from_expr ?(fun_names=StrSet.empty) (_pos, e') =
   let extract = extract_calls_from_expr ~fun_names in
-  let extract_arg (_pos, e') =
+  let rec extract_arg (_pos, e') =
     match e' with
     | Id name when StrSet.mem name fun_names -> [name]
+    | Cast (_, inner) -> extract_arg inner
     | _ -> extract (_pos, e')
   in
   match e' with
@@ -546,6 +547,17 @@ let%test "function pointer passed as argument" =
     [mk_e (Id "check_interrupt_fn"); mk_e (Const CNull)])) in
   let calls = extract_calls_from_expr ~fun_names expr in
   calls = ["R_ToplevelExec"; "check_interrupt_fn"]
+
+let%test "cast function pointer passed as argument" =
+  let pos = Mlsem.Common.Position.dummy in
+  let mk_e e' = (pos, e') in
+  let fun_names = StrSet.of_list ["set_user_option"; "R_curl_callback_ssl_ctx"] in
+  let expr = mk_e (Call (mk_e (Id "set_user_option"),
+    [mk_e (Id "CURLOPT_SSL_CTX_FUNCTION");
+     mk_e (Cast (Ast.Typeref "curl_ssl_ctx_callback",
+                 mk_e (Id "R_curl_callback_ssl_ctx")))])) in
+  let calls = extract_calls_from_expr ~fun_names expr in
+  calls = ["set_user_option"; "R_curl_callback_ssl_ctx"]
 
 let%test "non-function id argument not extracted" =
   let pos = Mlsem.Common.Position.dummy in
