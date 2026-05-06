@@ -1,9 +1,6 @@
-head:
-untypeable: untypeable projection
-argument: *x1 & 'I3 where x1 = { value : c_int_na ; next : *x1 }
-tail:
-untypeable: untypeable projection
-argument: *x1 & 'I5 where x1 = { value : c_int_na ; next : *x1 }
-root:
-untypeable: untypeable projection
-argument: *x1 & 'I7 where x1 = { value : c_int_na ; left : *x1 ; right : *x1 }
+head: ∀'a. *{ value : c_int_na & 'a ; next : x1 } -> 'a where x1 = *{ value : c_int_na ; next : x1 }
+
+tail: ∀'a. *{ value : c_int_na ; next : *x1 & 'a } -> 'a where x1 = { value : c_int_na ; next : *x1 }
+
+root: ∀'a. *{ value : c_int_na & 'a ; left : x1 ; right : x1 } -> 'a where x1 = *{ value : c_int_na ; left : x1 ; right : x1 }
+

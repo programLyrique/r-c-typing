@@ -693,11 +693,22 @@ and aux_not_bin_expression (e : expression_not_binary) =
     failwith "Not supported yet: expresion_not_binary"
 
 and aux_field_expression (field_expr: field_expression) =
-  (* Do we really care if it is . or -> here? *)
-  let expr, _, (loc2, field_name) = field_expr in
+  (* Desugar [p->x] as a deref followed by field projection: the typer's
+     FieldRead projects from a record value, not from a pointer. Without
+     this rewrite, [p->x] reaches typing as FieldRead(p, x) with p typed
+     as a pointer-to-record intersected with a fresh inference variable,
+     which cannot be projected and yields "untypeable projection". The
+     synthesized dereference makes pointer-to-record field access work. *)
+  let expr, op, (loc2, field_name) = field_expr in
   let e = aux_expression expr in
   let pos = Position.join (fst e) (loc_to_pos loc2) in
-  (pos, A.FieldAccess (e,  field_name))
+  let base = match op with
+    | `DOT _ -> e
+    | `DASHGT (loc_arrow, _) ->
+        let deref_pos = Position.join (fst e) (loc_to_pos loc_arrow) in
+        (deref_pos, A.Unop ("*", e))
+  in
+  (pos, A.FieldAccess (base, field_name))
 and aux_update_expression (e: update_expression) =
   (* For typing purposes, we don't care about whether it is pre or post incr/decr*)
   let (op,e) = match e with

@@ -323,7 +323,15 @@ let rec aux_e env (pos,e) =
       )
   | VarAssign ((loc1, Unop (_op, e1)) ,e2) -> (* Currently, remove the * or & operator *)
       let _,_,_,e = aux_e env (loc1, VarAssign(e1, e2)) in e
-  | VarAssign ((_, FieldAccess (e1, field)) ,e2) -> 
+  | VarAssign ((loc1, FieldAccess ((_, Unop ("*", inner)), _field)) ,e2) ->
+      (* Counterpart to the parser's arrow-as-deref desugaring on the
+         assignment LHS. The typer's RecUpd updates a record value and
+         would fail on a pointer-dereferenced base. Mirror the existing
+         star-LHS lowering and recurse as a write to the pointer variable
+         itself. Same imprecision as that case (the field is not tracked),
+         but type-safe and avoids an Unsat in the tallying solver. *)
+      let _,_,_,e = aux_e env (loc1, VarAssign (inner, e2)) in e
+  | VarAssign ((_, FieldAccess (e1, field)) ,e2) ->
       Ast.FieldUpdate (aux_e env e1, field, aux_e env e2)
   | VarAssign (_,_) -> failwith ("Unexpected left-hand side in assignment. Got: " ^ show_e (pos,e))
   | FieldAccess (e, field) -> Ast.FieldRead (aux_e env e, field)

@@ -2,3 +2,11 @@ f: { x : c_int_na ; y : c_int_na } -> ()
 
 g: () -> { x : c_int_na ; y : c_int_na }
 
+h: *{ x : c_int_na ; y : c_int_na } -> ()
+
+h2: *{ x : c_int_na ; y : c_int_na } -> ()
+
+i: *{ x : c_int_na ; y : c_int_na } -> ()
+
+i2: *{ x : c_int_na ; y : c_int_na } -> ()
+
