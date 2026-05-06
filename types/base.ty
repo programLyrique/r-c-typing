@@ -48,9 +48,9 @@ ScalarLogical: (t(c(0)) -> v[1](ff)) & (t(c_na) -> v[1](lgl \ ^lgl)) & (t(c_int 
 na_string = p(chr \ ^chr)
 mkString: t(c_string('a)) -> v[1](chr('a))
 ScalarString: t(p(chr('a))) -> v[1](chr('a))
-mkChar: t(c_string('a)) -> p(chr('a))
-mkCharLen: t(c_string('a), c_int) -> p(chr('a))
-mkCharCE: t(c_string('a), any) -> p(chr('a)) // the 2nd argument is the encoding
+mkChar: t(c_string('a) | c_null) -> p(chr('a))
+mkCharLen: t(c_string('a) | c_null, c_int) -> p(chr('a))
+mkCharCE: t(c_string('a) | c_null, any) -> p(chr('a)) // the 2nd argument is the encoding
 mkCharLenCE: t(c_string('a), c_int, any) -> p(chr('a))
 R_CHAR: (t(p(chr('a))) -> c_string('a)) & (t(p(chr \ ^chr)) -> c("NA"))
 CHAR: (t(p(chr('a))) -> c_string('a)) & (t(p(chr \ ^chr)) -> c("NA"))
@@ -147,11 +147,11 @@ PROTECT_WITH_INDEX: t(any_sexp, *c_int) -> c_void
 R_PreserveObject: t(any_sexp) -> c_void
 R_ReleaseObject: t(any_sexp) -> c_void
 
-// Arithmetic
+// Arithmetic (including pointer arithmetic for strings)
 
 +__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na) & (t(c_string, c_int) -> c_string)
 
--__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na)
+-__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na) & (t(c_string, c_int) -> c_string) & (t(c_string, c_string) -> c_int)
 
 *__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na)
 
@@ -192,7 +192,7 @@ CDR: t(lang) -> any_sexp
 &&__2: (t(c_false, c_false) | t(c_true, c_false) | t(c_false, c_true) -> c_false) & (t(c_true, c_true) -> c_true)
 ==__2: t(any, any) -> c_bool
 !=__2: t(any, any) -> c_bool
-!__1: (t(c_true) -> c_false) & (t(c_false) -> c_true) & (t(c(..-1) | c(1..)) -> c_false) & (t(c_null) -> c_true) & (t(*any \ c_null) -> c_false)
+!__1: (t(c_true) -> c_false) & (t(c_false) -> c_true) & (t(c(..-1) | c(1..)) -> c_false) & (t(c_null) -> c_true) & (t(*any \ c_null) -> c_false) & (t(c_string \ c_null) -> c_false)
 <__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
 >__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
 <=__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)

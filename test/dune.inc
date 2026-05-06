@@ -299,3 +299,14 @@
  (deps    cprogs/pairlist.c cprogs/pairlist.expected)
  (action  (diff cprogs/pairlist.expected pairlist.output)))
 
+(rule
+ (alias   runtest)
+ (deps    (glob_files ../types/*.ty) cprogs/r-api.c)
+ (action  (with-stdout-to r-api.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/r-api.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/r-api.c cprogs/r-api.expected)
+ (action  (diff cprogs/r-api.expected r-api.output)))
+

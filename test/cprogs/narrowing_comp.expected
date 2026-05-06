@@ -14,3 +14,7 @@ C_escape_chars_one: ∀'a. 'a & (any | chr) -> 'a & (any | chr)
 
 C_escape_chars2: ∀'a,'b,'c. (chr0 & 'a -> chr0 & 'a) & (chr[int(i(int & 'b & 'c & ~0))] & 'a -> chr[int(i(int & 'c))])
 
+strstr: (c_string, c_string) -> c_string
+
+R_split_string: (chr, chr) -> chr2
+

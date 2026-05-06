@@ -75,18 +75,21 @@ SEXP C_escape_chars2(SEXP x) {
   return out;
 }
 
-// #include <string.h>
+//#include <string.h>
 
-// SEXP R_split_string(SEXP string, SEXP split){
-//   const char * str = CHAR(STRING_ELT(string, 0));
-//   cetype_t enc = Rf_getCharCE(STRING_ELT(string, 0));
-//   const char * cut = CHAR(STRING_ELT(split, 0));
-//   char * out = strstr(str, cut);
-//   if(!out)
-//     return string;
-//   SEXP res = PROTECT(Rf_allocVector(STRSXP, 2));
-//   SET_STRING_ELT(res, 0, Rf_mkCharLenCE(str, out - str, enc));
-//   SET_STRING_ELT(res, 1, Rf_mkCharCE(out + strlen(cut), enc));
-//   UNPROTECT(1);
-//   return res;
-// }
+char * strstr(const char *haystack, const char *needle);
+
+SEXP R_split_string(SEXP string, SEXP split){
+  const char * str = CHAR(STRING_ELT(string, 0));
+  cetype_t enc = Rf_getCharCE(STRING_ELT(string, 0));
+  const char * cut = CHAR(STRING_ELT(split, 0));
+  char * out = strstr(str, cut);
+  char * out = cut;
+  if(!out)
+    return string;
+  SEXP res = PROTECT(Rf_allocVector(STRSXP, 2));
+  SET_STRING_ELT(res, 0, Rf_mkCharLenCE(str, out - str, enc));
+  SET_STRING_ELT(res, 1, Rf_mkCharCE(out + strlen(cut), enc));
+  UNPROTECT(1);
+  return res;
+}
