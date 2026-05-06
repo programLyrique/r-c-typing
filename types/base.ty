@@ -272,8 +272,8 @@ inherits: t(any, c_string) -> c_bool // to improve when supporting classes
 
 // External pointers 
 // TODO: add a specific type 
-R_ExternalPtrAddr: t(any_sexp) -> *any
-R_MakeExternalPtr: t(*any, any_sexp, any_sexp) -> any_sexp
+R_ExternalPtrAddr: (t(externalptr('a)) -> *'a) & (t(externalptr(empty)) -> c_null)
+R_MakeExternalPtr: (t(*'a, any_sexp, any_sexp) -> externalptr('a)) & (t(c_null, any_sexp, any_sexp) -> externalptr(empty))
 
 // C functions
 
