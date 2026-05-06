@@ -2,11 +2,13 @@ f: { x : c_int_na ; y : c_int_na } -> ()
 
 g: () -> { x : c_int_na ; y : c_int_na }
 
-h: *{ x : c_int_na ; y : c_int_na } -> ()
+h: *{ x : c_int_na ; y : c_int_na } \ c_null -> ()
 
-h2: *{ x : c_int_na ; y : c_int_na } -> ()
+h2: *{ x : c_int_na ; y : c_int_na } \ c_null -> ()
 
 i: *{ x : c_int_na ; y : c_int_na } -> ()
 
 i2: *{ x : c_int_na ; y : c_int_na } -> ()
+
+ap_free: *{ n : c_int_na ; C : *(*c_double) ; c : *(*c_double) ; s : *c_int_na ; f : *c_int_na ; na : c_int_na ; runs : c_int_na ; cost : c_double ; rtime : any } \ c_null -> ()
 

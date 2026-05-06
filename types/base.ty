@@ -168,7 +168,7 @@ R_ReleaseObject: t(any_sexp) -> c_void
 ++__1: (t(c_int) -> c_int) & (t(c_double) -> c_double) & (t(any) -> any)
 --__1: (t(c_int) -> c_int) & (t(c_double) -> c_double) & (t(any) -> any)
 
-*__1: (t(*'a) -> 'a) & (t(c_string) -> c_char)
+*__1: (t(*'a \ c_null) -> 'a) & (t(c_string) -> c_char)
 &__1: t('a) -> *'a
 
 abs: t(c_int) -> c(0..) 
