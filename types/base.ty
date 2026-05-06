@@ -13,8 +13,8 @@ isReal: (t(v(dbl)) -> c_true) & (t(~v(dbl)) -> c_false)
 isLogical: (t(v(lgl)) -> c_true) & (t(~v(lgl)) -> c_false)
 IS_SCALAR: (t(v[1]('b)) -> c_true) & (t(v[int \ 1]('b)) -> c_false)
 
-INTEGER: t(v(int)) -> *c_int
-INTEGER_RO: t(v(int)) -> *c_int
+INTEGER: (t(v(^int)) -> *c_int) & (t(v(int)) -> *c_int_na)
+INTEGER_RO: (t(v(^int)) -> *c_int) & (t(v(int)) -> *c_int_na)
 REAL: t(v(dbl)) -> *c_double
 REAL_RO: t(v(dbl)) -> *c_double
 LOGICAL: t(v(lgl)) -> *c_int
@@ -227,7 +227,7 @@ LANGSXP: lang
 ENVSXP: env
 ANYSXP: any_sexp
 DOTSXP: any
-EXTPTRSXP: any // we should have a specific type for it
+EXTPTRSXP: externalptr
 
 // R API: error/warning
 Rf_error: any -> empty // redundant with error but like fail. The best would be to generate 2 versions of the function and pick the one which type checks?

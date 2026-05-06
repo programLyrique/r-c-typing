@@ -103,6 +103,7 @@ module BuiltinVar = struct
       ("LISTSXP", Lang.any |> Attr.mk_anyclass);
       ("LANGSXP", Lang.any |> Attr.mk_anyclass);
       ("ENVSXP", Rstt.Env.any |> Attr.mk_anyclass);
+      ("EXTPTRSXP", ExternalPtr.any |> Attr.mk_anyclass);
       ("ANYSXP", Attr.any);
       ("DOTSXP", Ty.any); (* TODO: replace by the actual type: a list with an any tail*)
       (* Booleans*)

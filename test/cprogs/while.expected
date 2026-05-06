@@ -1,4 +1,4 @@
-test_while: ∀'a. int & 'a -> int & 'a
+test_while: ∀'a. (^int & 'a -> ^int & 'a) & (int & 'a -> int & 'a)
 
 sum_while: dbl -> dbl1
 

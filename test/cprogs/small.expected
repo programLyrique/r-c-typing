@@ -1,4 +1,4 @@
-change_int: ∀'a. int & 'a -> int & 'a
+change_int: ∀'a. (^int & 'a -> ^int & 'a) & (int & 'a -> int & 'a)
 
 errorIntScalar: int1 -> ()
 
