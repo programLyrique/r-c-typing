@@ -431,10 +431,10 @@ let rec aux_e env (pos,e) =
   | VarDeclare (_, _) -> failwith "Declaration must have an identifier" (*Should be unreachable*)
   in
     mk_e env eid e
-and process_call env f args = 
-  (* Set calls modify in place in the R C API, but for typing reason, 
+and process_call env f args =
+  (* Set calls modify in place in the R C API, but for typing reason,
   we make it create a new value and then assign to the original variable. *)
-  let e = match (f, args) with 
+  let e = match (f, args) with
   | (loc1,Id "SET_VECTOR_ELT"),(_, Id v)::_ ->
    Ast.VarAssign (var env v,
       (mk_e env (Eid.unique_with_pos loc1) (Ast.Call (
@@ -442,6 +442,17 @@ and process_call env f args =
         List.map (aux_e env) args
       )))
     )
+  | (_, Id "sizeof"), [(arg_pos, Id name)]
+    when Ast.DeclMap.mem name env.decl
+      && Option.is_none (lookup_binding env name) ->
+      (* Tree-sitter has no symbol table, so it parses [sizeof(AP)] as
+         [sizeof(EXPR(AP))] even when AP is a typedef-name. Rewrite to
+         [sizeof((AP)0)] — the shape the parser builds for the parens-around-
+         type form — so the typedef flows through resolve_ctype instead of
+         being looked up as a value and reported as "unbound variable: AP". *)
+      let zero = (arg_pos, Const (CInt 0)) in
+      let cast = (arg_pos, Cast (Ast.Typeref name, zero)) in
+      Ast.Call (aux_e env f, [aux_e env cast])
   | _ -> Ast.Call (aux_e env f, List.map (aux_e env) args) in
   e
 and transform env (pos, topl_unit) = 

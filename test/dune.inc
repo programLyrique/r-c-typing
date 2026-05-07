@@ -321,3 +321,14 @@
  (deps    cprogs/variadic.c cprogs/variadic.expected)
  (action  (diff cprogs/variadic.expected variadic.output)))
 
+(rule
+ (alias   runtest)
+ (deps    (glob_files ../types/*.ty) cprogs/sizeof_typedef.c)
+ (action  (with-stdout-to sizeof_typedef.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/sizeof_typedef.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/sizeof_typedef.c cprogs/sizeof_typedef.expected)
+ (action  (diff cprogs/sizeof_typedef.expected sizeof_typedef.output)))
+
