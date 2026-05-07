@@ -338,6 +338,21 @@ and top_level_block_items ~parser_callbacks ~top_level_item ~top_level_block_ite
     (top_level_block_item_dispatch ~parser_callbacks ~top_level_item ~top_level_block_item)
     defines items
 
+and recover_cplusplus_linkage_items ~parser_callbacks ~top_level_item ~top_level_block_item defines body =
+  (* Tree-sitter parses the common guarded linkage wrapper
+     [#ifdef __cplusplus extern "C" { #endif ... #ifdef __cplusplus } #endif]
+     as a [Link_spec] whose declaration list contains the C declarations.
+     In C mode the [__cplusplus] branch is false, but those declarations are
+     not semantically inside the conditional after preprocessing. Recover only
+     that structural parser artifact, and keep dropping any other C++-only
+     branch content. *)
+  let linkage_items =
+    List.filter (function `Link_spec _ -> true | _ -> false) body
+  in
+  top_level_block_items
+    ~parser_callbacks ~top_level_item ~top_level_block_item
+    defines linkage_items
+
 and top_level_else_branch ~parser_callbacks ~top_level_item ~top_level_block_item defines else_branch =
   match else_branch with
   | `Prep_else (_else_tok, body) ->
@@ -359,6 +374,9 @@ and top_level_else_branch ~parser_callbacks ~top_level_item ~top_level_block_ite
       in
       if take_body then
         top_level_block_items ~parser_callbacks ~top_level_item ~top_level_block_item defines body
+      else if name = "__cplusplus" && Option.is_none else_opt then
+        recover_cplusplus_linkage_items
+          ~parser_callbacks ~top_level_item ~top_level_block_item defines body
       else (
         match else_opt with
         | None -> (defines, [])
@@ -375,6 +393,9 @@ and top_level_item_dispatch ~parser_callbacks ~top_level_item ~top_level_block_i
       in
       if take_body then
         top_level_block_items ~parser_callbacks ~top_level_item ~top_level_block_item defines body
+      else if name = "__cplusplus" && Option.is_none else_opt then
+        recover_cplusplus_linkage_items
+          ~parser_callbacks ~top_level_item ~top_level_block_item defines body
       else (
         match else_opt with
         | None -> (defines, [])

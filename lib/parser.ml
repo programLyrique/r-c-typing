@@ -1304,6 +1304,11 @@ and aux_top_level_item_non_preproc defines (item : top_level_item) =
           all_decls
       in
       (defines, items)
+  | `Link_spec (_, _, body) ->
+      (match body with
+       | `Func_defi func_def -> aux_top_level_item_non_preproc defines (`Func_defi func_def)
+       | `Decl decl -> aux_top_level_item_non_preproc defines (`Decl decl)
+       | `Decl_list (_, items, _) -> aux_top_level_block_items defines items)
   | `Prep_ifdef _ | `Prep_if _ | `Prep_def _ | `Prep_func_def _ | `Prep_incl _ ->
       failwith "internal error: preprocessor item reached non-preprocessor top-level handler"
   | _ ->
@@ -1434,6 +1439,23 @@ let%test "empty declaration prefix macro only matches standalone token" =
   &&
   match to_ast res with
   | [(_, A.Fundef (Ast.Int, "CURL_EXTERN_value", [], (_, A.Seq [])))] -> true
+  | _ -> false
+
+let%test "direct C++ linkage specification exposes enclosed declarations" =
+  let res = parse_string "extern \"C\" { int c_api(void); }\n" in
+  res.stat.error_count = 0
+  &&
+  match to_ast res with
+  | [(_, A.Fundef (Ast.Int, "c_api", [], (_, A.Seq [])))] -> true
+  | _ -> false
+
+let%test "skipped cplusplus guard recovers linkage declarations" =
+  let res =
+    parse_string
+      "#ifdef __cplusplus\nextern \"C\" {\n#endif\nCURL_EXTERN CURL *curl_easy_init(void);\n#ifdef __cplusplus\n}\n#endif\n"
+  in
+  match to_ast res with
+  | [(_, A.Fundef (Ast.Ptr (Ast.Typeref "CURL"), "curl_easy_init", [], (_, A.Seq [])))] -> true
   | _ -> false
 
 let%test "variadic declaration emits a Fundef ending in Vararg" =
