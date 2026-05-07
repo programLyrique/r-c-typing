@@ -39,33 +39,34 @@ void i2(struct Point* p) {
 }
 
 
-// from package clue 
-typedef struct{
-  int        n; 
-  double   **C; 
-  double   **c; 
-  int       *s; 
-  int       *f; 
-  int       na; 
-  int     runs; 
-  double  cost; 
-  time_t rtime; 
-} AP;
+// Currently takes too long to type: 1min43s on a PC (2026)
+// // from package clue 
+// typedef struct{
+//   int        n; 
+//   double   **C; 
+//   double   **c; 
+//   int       *s; 
+//   int       *f; 
+//   int       na; 
+//   int     runs; 
+//   double  cost; 
+//   time_t rtime; 
+// } AP;
 
 
-void ap_free(AP *p)
-{
-    int i;
+// void ap_free(AP *p)
+// {
+//     int i;
 
-    free(p->s);
-    free(p->f);
+//     free(p->s);
+//     free(p->f);
 
-    for(i = 1; i <= p->n; i++){
-      free(p->C[i]);
-      free(p->c[i]);
-    }
+//     for(i = 1; i <= p->n; i++){
+//       free(p->C[i]);
+//       free(p->c[i]);
+//     }
     
-    free(p->C);
-    free(p->c);
-    free(p);
-}
+//     free(p->C);
+//     free(p->c);
+//     free(p);
+// }

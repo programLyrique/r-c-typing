@@ -295,6 +295,23 @@ let system_include callbacks (_loc, path) =
         Hashtbl.add processed_headers full_path ();
         Printf.printf "Processing system header: %s\n" full_path;
         let cst = callbacks.parse_file full_path in
+        (* Tree-sitter exposes parse failures on [stat.error_count] / [errors]
+           rather than as CST nodes, so silent ERRORs would otherwise turn into
+           empty Include items downstream and look like "the header had nothing
+           to declare." Surface them explicitly with a sample location so the
+           degradation is visible. *)
+        if !warn_unsupported && cst.stat.error_count > 0 then begin
+          let sample =
+            match cst.errors with
+            | e :: _ ->
+                let r = e.Tree_sitter_error.start_pos.row + 1 in
+                Printf.sprintf " (first at line %d)" r
+            | [] -> ""
+          in
+          Printf.eprintf
+            "Parse errors in system header %s: %d node(s) dropped%s\n"
+            full_path cst.stat.error_count sample
+        end;
         match cst.program with
         | None -> []
         | Some tree ->
