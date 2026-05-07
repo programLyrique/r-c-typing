@@ -310,3 +310,14 @@
  (deps    cprogs/r-api.c cprogs/r-api.expected)
  (action  (diff cprogs/r-api.expected r-api.output)))
 
+(rule
+ (alias   runtest)
+ (deps    (glob_files ../types/*.ty) cprogs/variadic.c)
+ (action  (with-stdout-to variadic.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/variadic.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/variadic.c cprogs/variadic.expected)
+ (action  (diff cprogs/variadic.expected variadic.output)))
+

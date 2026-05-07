@@ -66,7 +66,11 @@ type const =
   | Switch of e * e list  (* expression on which to switch, list of cases/default *)
   | Cast of Ast.ctype * e (* Type cast expression *)
   [@@deriving show]
- and param = Ast.ctype * string
+ and param =
+   | Param of Ast.ctype * string
+   | Vararg (** Marks the variadic [...] position in a C function signature.
+                Detected by [C_interface.is_variadic_params] and friends to
+                type the function as [any -> ret]. *)
   [@@deriving show]
  and e = Position.t * e'
   [@@deriving show]
@@ -85,11 +89,14 @@ type definitions = top_level_unit list
 
 module StrSet = Set.Make(String)
 
-(** Extract parameter names from a function definition 
-  Types will be added back to the Ast.Function. This is just to check if some variables 
-  in the body are defined as parameters. *)
-let bv_params params = 
-  List.map snd params |> StrSet.of_list
+(** Extract parameter names from a function definition.
+    Types will be added back to the Ast.Function. This is just to check if some
+    variables in the body are defined as parameters. [Vararg] binds no name. *)
+let bv_params params =
+  List.filter_map (function
+    | Param (_, name) -> Some name
+    | Vararg -> None) params
+  |> StrSet.of_list
 
 (** Extract variables from an expression*)
 let rec bv_e in_lhs_assign (_,e) = 
@@ -449,7 +456,11 @@ and transform env (pos, topl_unit) =
     let eid = List.fold_left add_var env.id (StrSet.elements body_vars) in
     let env = {env with id=eid} in
     let e = List.fold_left (add_def param_vars eid) (aux_e env body) (StrSet.elements body_vars) in
-    let params = List.map (fun (ty,name) -> resolve_ctype env.decl ty, var env name) params in
+    let params =
+      List.filter_map (function
+        | Param (ty, name) -> Some (resolve_ctype env.decl ty, var env name)
+        | Vararg -> None) params
+    in
     let ret_ty = resolve_ctype env.decl ret_ty in
     (env.decl, Ast.Function (name, ret_ty, params, e))
   | TypeDecl (name, ty) -> (Ast.DeclMap.add name ty env.decl, Ast.Noop)

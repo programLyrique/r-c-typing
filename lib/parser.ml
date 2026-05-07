@@ -37,17 +37,54 @@ let print_top_level_item (item: top_level_item) =
   Raw_tree.to_channel stdout tree
 
 let process_res res = res
+
+let empty_decl_prefix_macros = [
+  "CURL_EXTERN";
+]
+
+let is_c_ident_char = function
+  | 'A'..'Z' | 'a'..'z' | '0'..'9' | '_' -> true
+  | _ -> false
+
+let token_matches_at source i token =
+  let source_len = String.length source in
+  let token_len = String.length token in
+  i + token_len <= source_len
+  && String.sub source i token_len = token
+  && (i = 0 || not (is_c_ident_char source.[i - 1]))
+  && (i + token_len = source_len || not (is_c_ident_char source.[i + token_len]))
+
+let sanitize_empty_decl_prefix_macros source =
+  let len = String.length source in
+  let buf = Buffer.create len in
+  let rec loop i =
+    if i >= len then
+      ()
+    else
+      match List.find_opt (token_matches_at source i) empty_decl_prefix_macros with
+      | Some token ->
+          let token_len = String.length token in
+          Buffer.add_string buf (String.make token_len ' ');
+          loop (i + token_len)
+      | None ->
+          Buffer.add_char buf source.[i];
+          loop (i + 1)
+  in
+  loop 0;
+  Buffer.contents buf
+
 (**
   Parse a file using FrontC and return the AST
 
   @param filename The path to the C file to parse
 *)
 let parse_file filename = 
-  let res = Parse.file filename  in
+  let source = In_channel.with_open_text filename In_channel.input_all in
+  let res = Parse.string (sanitize_empty_decl_prefix_macros source) in
   process_res res
 
 let parse_string s = 
-  let res = Parse.string s in 
+  let res = Parse.string (sanitize_empty_decl_prefix_macros s) in 
   process_res res
 
 
@@ -393,32 +430,32 @@ let aux_type_definition ((_, _, type_def_ty, (first_decl, rest_decls), _, _) : t
   in
   aux_one first_decl :: List.map (fun (_, td) -> aux_one td) rest_decls
 
-(** Raised by [aux_param] when it encounters a variadic parameter ([...]).
-    Callers that process a whole function declaration catch this and drop
-    the function from the output, emitting a warning that names the
-    function — the warning is better attached to the function as a whole
-    than to one anonymous parameter position. *)
-exception Variadic_function
-
-let aux_param (p: anon_choice_param_decl_4ac2852) =
+let aux_param (p: anon_choice_param_decl_4ac2852) : A.param =
   match p with
   | `Param_decl (decl_spec, Some (`Decl decl), _) ->
     let ty = aux_decl_spec decl_spec in
     let level, name = aux_decl_name decl in
-    (Ast.build_ptr level ty, name)
+    A.Param (Ast.build_ptr level ty, name)
   | `Param_decl (decl_spec, None, _) ->
     let ty = aux_decl_spec decl_spec in
-    (ty, "anon_param_" ^ string_of_int (gen_id ()))
-  | `Vari_param _ -> raise Variadic_function
+    A.Param (ty, "anon_param_" ^ string_of_int (gen_id ()))
+  | `Vari_param _ -> A.Vararg
   | _ -> Boilerplate.map_anon_choice_param_decl_4ac2852 () p |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: parameter declaration"
+
+(** Drop bare [void] parameters (the C [f(void)] = "no parameters" form).
+    [Vararg] is preserved. *)
+let drop_void_params =
+  List.filter (function
+    | A.Param (Ast.Void, _) -> false
+    | _ -> true)
 
 (** Extract parameter list from a [parameter_list] CST node. *)
 let aux_extract_params ((_loc1, content, _loc2) : parameter_list) : A.param list =
   match content with
   | `Opt_choice_param_decl_rep_COMMA_choice_param_decl (Some (p1, params)) ->
       let all = (aux_param p1) :: (List.map (fun (_, p) -> aux_param p) params) in
-      List.filter (fun (ty, _) -> ty <> Ast.Void) all
+      drop_void_params all
   | _ -> []
 
 (** Check whether a [declarator] contains a function declarator. *)
@@ -432,8 +469,7 @@ let rec aux_params (decl: declarator) : int * A.param list =
   match decl with
   | `Func_decl (_, (_loc1, `Opt_choice_param_decl_rep_COMMA_choice_param_decl (Some (p1, params)), _loc2), _,_) ->
      let all = (aux_param p1) :: (List.map (fun (_, p) -> aux_param p) params) in
-     (* In C, f(void) means no parameters — filter out void params *)
-     0, List.filter (fun (ty, _) -> ty <> Ast.Void) all
+     0, drop_void_params all
   | `Poin_decl (_,_,_,_,decl) -> let level, params = aux_params decl in (level + 1, params)
   | _ -> (0, [])
 
@@ -1160,23 +1196,16 @@ and aux_top_level_item_non_preproc defines (item : top_level_item) =
   match item with
   | `Func_defi (_, decl_spec, _, decl, body) ->
       let _,name = aux_decl_name decl in
-      (try
-        (* the part with the parameters can also carry the information about pointers for the return type! *)
-        let level, params = aux_params decl in
-        let return_type = Ast.build_ptr level (aux_decl_spec decl_spec) in
-        let body = aux_body body in
-        let body =
-          match return_type with
-          | Ast.Void -> ensure_void_return body
-          | _ -> body
-        in
-        (defines, [Mlsem.Common.Position.dummy, A.Fundef (return_type, name, params, body)])
-      with Variadic_function ->
-        if !warn_unsupported then
-          Printf.eprintf
-            "Not supported yet: variadic parameter (...) in function `%s`; skipping function\n"
-            name;
-        (defines, []))
+      (* the part with the parameters can also carry the information about pointers for the return type! *)
+      let level, params = aux_params decl in
+      let return_type = Ast.build_ptr level (aux_decl_spec decl_spec) in
+      let body = aux_body body in
+      let body =
+        match return_type with
+        | Ast.Void -> ensure_void_return body
+        | _ -> body
+      in
+      (defines, [Mlsem.Common.Position.dummy, A.Fundef (return_type, name, params, body)])
   | `Empty_decl (type_spec, _tok) ->
       let s = aux_type_spec type_spec in
       (match s with
@@ -1207,39 +1236,25 @@ and aux_top_level_item_non_preproc defines (item : top_level_item) =
                 begin match (try Some (aux_decl_name name_decl) with _ -> None) with
                 | None -> None
                 | Some (level, name) ->
-                    try
+                    (try
                       let params = aux_extract_params param_list in
                       let ret_ty = Ast.build_ptr level base_ty in
                       Some (Mlsem.Common.Position.dummy,
                             A.Fundef (ret_ty, name, params,
                                       (Mlsem.Common.Position.dummy, A.Seq [])))
-                    with
-                    | Variadic_function ->
-                        if !warn_unsupported then
-                          Printf.eprintf
-                            "Not supported yet: variadic parameter (...) in declaration of `%s`; skipping\n"
-                            name;
-                        None
-                    | _ -> None
+                    with _ -> None)
                 end
             | `Poin_decl (_, _, _, _, inner_decl) when has_func_decl inner_decl ->
                 begin match (try Some (aux_decl_name inner_decl) with _ -> None) with
                 | None -> None
                 | Some (_, name) ->
-                    try
+                    (try
                       let level, params = aux_params inner_decl in
                       let ret_ty = Ast.build_ptr (level + 1) base_ty in
                       Some (Mlsem.Common.Position.dummy,
                             A.Fundef (ret_ty, name, params,
                                       (Mlsem.Common.Position.dummy, A.Seq [])))
-                    with
-                    | Variadic_function ->
-                        if !warn_unsupported then
-                          Printf.eprintf
-                            "Not supported yet: variadic parameter (...) in declaration of `%s`; skipping\n"
-                            name;
-                        None
-                    | _ -> None
+                    with _ -> None)
                 end
             | _ -> None
             end
@@ -1404,6 +1419,41 @@ let%test "linux predefined macros are enabled by default" =
   match to_ast res with
   | [(_, A.Fundef (_, "f", _, _))] -> true
   | _ -> false
+
+let%test "empty declaration prefix macro is ignored before parsing" =
+  let res = parse_string "CURL_EXTERN CURL *curl_easy_init(void);\n" in
+  res.stat.error_count = 0
+  &&
+  match to_ast res with
+  | [(_, A.Fundef (Ast.Ptr (Ast.Typeref "CURL"), "curl_easy_init", [], (_, A.Seq [])))] -> true
+  | _ -> false
+
+let%test "empty declaration prefix macro only matches standalone token" =
+  let res = parse_string "int CURL_EXTERN_value(void);\n" in
+  res.stat.error_count = 0
+  &&
+  match to_ast res with
+  | [(_, A.Fundef (Ast.Int, "CURL_EXTERN_value", [], (_, A.Seq [])))] -> true
+  | _ -> false
+
+let%test "variadic declaration emits a Fundef ending in Vararg" =
+  let prev = !warn_unsupported in
+  Fun.protect
+    ~finally:(fun () -> set_warn_unsupported prev)
+    (fun () ->
+      set_warn_unsupported false;
+      let res =
+        parse_string
+          "int curl_easy_getinfo(int curl, int info, ...);\n"
+      in
+      res.stat.error_count = 0
+      &&
+      match to_ast res with
+      | [(_, A.Fundef (Ast.Int, "curl_easy_getinfo", params, (_, A.Seq [])))] ->
+          (match List.rev params with
+           | A.Vararg :: _ -> true
+           | _ -> false)
+      | _ -> false)
 
 let%test "quoted include is ignored instead of crashing" =
   let res =

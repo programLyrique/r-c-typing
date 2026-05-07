@@ -8,22 +8,27 @@ open Mlsem.Types
 open PAst
 
 
+let is_variadic_params params = List.exists (function Vararg -> true | _ -> false) params
+
 
 (* Is it a C function with no SEXP type as parameter or return type?
-And with simple types. If there are structs, we still want to infer it with its body 
+And with simple types. If there are structs, we still want to infer it with its body
 because the struct could contain SEXPs...*)
 let is_simple_c_function past =
-  match past with 
-  | Fundef(ret_ty, _, params, _) -> 
+  match past with
+  | Fundef(ret_ty, _, params, _) ->
     let ret = match ret_ty with
       | Ast.SEXP -> false
-      | Ast.Struct _ -> false 
+      | Ast.Struct _ -> false
       | _ -> true
     in
-    let params = List.for_all (fun (ty, _) -> match ty with
-        | Ast.SEXP -> false
-        | Ast.Struct _ -> false 
-        | _ -> true) params
+    let params = List.for_all (function
+        | Vararg -> true
+        | Param (ty, _) ->
+            match ty with
+            | Ast.SEXP -> false
+            | Ast.Struct _ -> false
+            | _ -> true) params
   in
    ret && params
   | _ -> false
@@ -41,10 +46,23 @@ let is_simple_c_function past =
    "untypeable projection". *)
 let infer_cfun ?(typedef_map = Ast.DeclMap.empty) return_ty params =
   let resolve = PAst.resolve_ctype typedef_map in
-  let arg_types = List.map (fun (ty, _) -> Ast.typeof_ctype (resolve ty)) params in
-  let arg_tuple = Tuple.mk arg_types in
   let ret_ty = Ast.typeof_ctype (resolve return_ty) in
-  Arrow.mk arg_tuple ret_ty |> Rstt.Attr.mk_anyclass
+  (* Variadic functions ([...]) are typed as [any -> ret]: any caller-side
+     argument tuple is a subtype of [any], so all call shapes type-check.
+     Imprecise on the fixed-arg side but it lets variadic libc/R API
+     functions (printf, Rprintf, fprintf, snprintf, fcntl, …) be reachable
+     instead of being silently dropped. *)
+  let arg_ty =
+    if is_variadic_params params then Ty.any
+    else
+      let arg_types =
+        List.filter_map (function
+          | Param (ty, _) -> Some (Ast.typeof_ctype (resolve ty))
+          | Vararg -> None) params
+      in
+      Tuple.mk arg_types
+  in
+  Arrow.mk arg_ty ret_ty |> Rstt.Attr.mk_anyclass
 
 
 let dotC_typeof typedef_map ct =
@@ -71,10 +89,16 @@ let dotC_typeof typedef_map ct =
 
 
 let infer_dotC ?(typedef_map = Ast.DeclMap.empty) ret_ty params =
-  let arg_types = List.map (fun (ty, _) -> dotC_typeof typedef_map ty) params in
-  let arg_tuple = Tuple.mk arg_types in
   if ret_ty != Ast.Void then
     failwith "Return type of .C functions must be void.";
+  if is_variadic_params params then
+    failwith "Variadic parameters are not supported in the .C interface.";
+  let arg_types =
+    List.filter_map (function
+      | Param (ty, _) -> Some (dotC_typeof typedef_map ty)
+      | Vararg -> None) params
+  in
+  let arg_tuple = Tuple.mk arg_types in
   (* Same attribute wrapping as [infer_cfun] — see comment there. *)
   Arrow.mk arg_tuple Rstt.Cenums.void |> Rstt.Attr.mk_anyclass
 
@@ -107,10 +131,10 @@ let%test "infer_dotC infers supported .C parameters from a PAst function" =
   let past =
     mk_test_fundef
       ~params:
-        [ Ast.Ptr Ast.Int, "ints";
-          Ast.Ptr Ast.Float, "dbls";
-          Ast.Ptr (Ast.Ptr Ast.Char), "strings";
-          Ast.Ptr Ast.Char, "bytes" ]
+        [ Param (Ast.Ptr Ast.Int, "ints");
+          Param (Ast.Ptr Ast.Float, "dbls");
+          Param (Ast.Ptr (Ast.Ptr Ast.Char), "strings");
+          Param (Ast.Ptr Ast.Char, "bytes") ]
       "native_entry"
   in
   let open Rstt in
@@ -131,14 +155,14 @@ let%test "infer_dotC infers supported .C parameters from a PAst function" =
 
 let%test "infer_dotC rejects non-void return type from a PAst function" =
   let past =
-    mk_test_fundef ~ret_ty:Ast.Int ~params:[Ast.Ptr Ast.Int, "ints"] "native_entry"
+    mk_test_fundef ~ret_ty:Ast.Int ~params:[Param (Ast.Ptr Ast.Int, "ints")] "native_entry"
   in
   infer_dotC_failure past = Some "Return type of .C functions must be void."
 
 
 let%test "infer_dotC rejects unsupported .C parameter types from a PAst function" =
   let past =
-    mk_test_fundef ~params:[Ast.Int, "value"] "native_entry"
+    mk_test_fundef ~params:[Param (Ast.Int, "value")] "native_entry"
   in
   let expected =
     Printf.sprintf
@@ -152,19 +176,27 @@ let%test "is_simple_c_function accepts scalar pointer-only C entry points" =
   is_simple_c_function
     (mk_simple_test_fundef
        ~ret_ty:Ast.Void
-       ~params:[Ast.Ptr Ast.Int, "x"; Ast.Float, "y"]
+       ~params:[Param (Ast.Ptr Ast.Int, "x"); Param (Ast.Float, "y")]
        "native_entry")
+
+
+let%test "is_simple_c_function accepts variadic functions when fixed args are simple" =
+  is_simple_c_function
+    (mk_simple_test_fundef
+       ~ret_ty:Ast.Int
+       ~params:[Param (Ast.Ptr Ast.Char, "fmt"); Vararg]
+       "my_printf")
 
 
 let%test "is_simple_c_function rejects SEXP structs and non-functions" =
   not
     (is_simple_c_function
-     (mk_simple_test_fundef ~ret_ty:Ast.SEXP ~params:[Ast.Ptr Ast.Int, "x"] "sexp_entry"))
+     (mk_simple_test_fundef ~ret_ty:Ast.SEXP ~params:[Param (Ast.Ptr Ast.Int, "x")] "sexp_entry"))
   && not
        (is_simple_c_function
        (mk_simple_test_fundef
              ~ret_ty:Ast.Void
-             ~params:[Ast.Struct ("payload", [Ast.Int, "field"]), "x"]
+             ~params:[Param (Ast.Struct ("payload", [Ast.Int, "field"]), "x")]
              "struct_entry"))
   && not (is_simple_c_function (GlobalVar ("g", Ast.Int)))
 
@@ -176,8 +208,26 @@ let%test "infer_cfun resolves typedef aliases before building the function type"
     |> Ast.DeclMap.add "int_ptr_t" (Ast.Ptr Ast.Int)
   in
   Ty.equiv
-    (infer_cfun ~typedef_map (Ast.Typeref "sexp_t") [Ast.Typeref "int_ptr_t", "arg"])
-    (infer_cfun Ast.SEXP [Ast.Ptr Ast.Int, "arg"])
+    (infer_cfun ~typedef_map (Ast.Typeref "sexp_t") [Param (Ast.Typeref "int_ptr_t", "arg")])
+    (infer_cfun Ast.SEXP [Param (Ast.Ptr Ast.Int, "arg")])
+
+
+let%test "infer_cfun types variadic functions as any -> ret" =
+  let actual =
+    infer_cfun Ast.Int [Param (Ast.Ptr Ast.Char, "fmt"); Vararg]
+  in
+  let expected =
+    Arrow.mk Ty.any (Ast.typeof_ctype Ast.Int) |> Rstt.Attr.mk_anyclass
+  in
+  Ty.equiv actual expected
+
+
+let%test "infer_dotC rejects variadic functions" =
+  let past =
+    mk_test_fundef ~params:[Param (Ast.Ptr Ast.Int, "ints"); Vararg] "native_entry"
+  in
+  infer_dotC_failure past
+    = Some "Variadic parameters are not supported in the .C interface."
 
 
 let%test "infer_dotC resolves typedef aliases for supported pointer arguments" =
@@ -188,8 +238,8 @@ let%test "infer_dotC resolves typedef aliases for supported pointer arguments" =
   in
   Ty.equiv
     (infer_dotC ~typedef_map Ast.Void
-       [Ast.Typeref "int_ptr_t", "ints"; Ast.Typeref "char_ptr_ptr_t", "names"])
-    (infer_dotC Ast.Void [Ast.Ptr Ast.Int, "ints"; Ast.Ptr (Ast.Ptr Ast.Char), "names"])
+       [Param (Ast.Typeref "int_ptr_t", "ints"); Param (Ast.Typeref "char_ptr_ptr_t", "names")])
+    (infer_dotC Ast.Void [Param (Ast.Ptr Ast.Int, "ints"); Param (Ast.Ptr (Ast.Ptr Ast.Char), "names")])
 
 
 let%test "infer_dotC_from_past rejects non-function top-level items" =

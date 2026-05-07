@@ -181,7 +181,7 @@ let parse_preproc_function_def helpers (func_def : preproc_function_def) =
       Option.fold ~none:[] ~some:(fun (p1, others) ->
         aux_prep_param p1 :: List.map (fun (_, p) -> aux_prep_param p) others
       ) params
-      |> List.map (fun p -> (Ast.Any, p))
+      |> List.map (fun p -> A.Param (Ast.Any, p))
     in
     let body = match body with
         | None -> (U.locs_to_pos end_param loc2, A.Return None)
