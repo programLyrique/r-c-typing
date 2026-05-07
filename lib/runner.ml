@@ -26,6 +26,12 @@ type cmd_options = {
      Graphviz .dot format to [path]. Cycles are colored, files clustered,
      entry points marked. *)
   call_graph : string option;
+  (* When true, print a "  timing: <seconds> s" line on every terminal path
+     of [infer_ast] (success, timeout, untypeable, internal Not_found) so
+     slow functions can be spotted in the per-package output. Indented to
+     match the existing [  fallback:] convention so [parse_output.R] keeps
+     treating it as continuation. Off by default. *)
+  log_inference_times : bool;
 }
 
 let make_substring_pred = function
@@ -94,22 +100,28 @@ let register_enum_constants ty : (Variable.t * Ty.t) list =
   in
   aux ty
 
-let print_visible ?(debug=false) kind visible v tys =
+(** [extra ()] is called between the type line (and optional [raw:] debug
+    line) and the trailing blank separator, so callers can inject indented
+    continuation lines (e.g. ["  timing: …"]) inside the same per-function
+    block. Defaults to no-op so existing call sites are unchanged. *)
+let print_visible ?(debug=false) ?(extra=fun () -> ()) kind visible v tys =
   if visible then begin
     (match kind with
     | `Default ->
-        Format.printf "%a: @[<h>%a@]@.@."
+        Format.printf "%a: @[<h>%a@]@."
     | `SimpleC ->
-        Format.printf "c(%a): @[<h>%a@]@.@."
+        Format.printf "c(%a): @[<h>%a@]@."
     | `DotC ->
-        Format.printf ".C(%a): @[<h>%a@]@.@."
+        Format.printf ".C(%a): @[<h>%a@]@."
     | `Define ->
-        Format.printf "define %a: @[<h>%a@]@.@.")
+        Format.printf "define %a: @[<h>%a@]@.")
       Variable.pp v TyScheme.pp_short tys ;
     if debug then begin
       let _, gty = TyScheme.get tys in
-      Format.printf "  raw: @[<h>%a@]@.@." Ty.pp_raw (GTy.ub gty)
-    end
+      Format.printf "  raw: @[<h>%a@]@." Ty.pp_raw (GTy.ub gty)
+    end;
+    extra ();
+    Format.printf "@."
   end
 
 let with_inference_timeout timeout thunk =
@@ -135,6 +147,11 @@ let infer_ast ?fallback visible opts (idenv, env, decl) (ast : Ast.e) =
     match ast with
     | _,_,_,Ast.Function (name, _, _, _) -> name,MVariable.create Immut (Some name)
     | _ -> failwith "Expected a function definition at the top level."
+  in
+  let started = Unix.gettimeofday () in
+  let log_timing () =
+    if opts.log_inference_times && visible then
+      Format.printf "  timing: %.6f s@." (Unix.gettimeofday () -. started)
   in
   let mlsem_ast = Ast.to_mlsem ast in
   if opts.mlsem && visible then
@@ -174,7 +191,7 @@ let infer_ast ?fallback visible opts (idenv, env, decl) (ast : Ast.e) =
           (*Format.printf "%a: upper bound= %a@.@." Variable.pp v  Ty.pp typ ;*)
           (* We only keep the upper bound as type for v and add it to the environment *)
           let tys = TyScheme.mk vars (GTy.mk typ) in
-          print_visible ~debug:opts.debug `Default visible v tys;
+          print_visible ~debug:opts.debug ~extra:log_timing `Default visible v tys;
           (StrMap.add name v idenv, Env.add v tys env, decl))
     else
       idenv, env, decl
@@ -183,12 +200,14 @@ let infer_ast ?fallback visible opts (idenv, env, decl) (ast : Ast.e) =
       Format.printf "%s:@.timeout: inference/checking exceeded %.6g seconds@." name seconds;
       if not opts.mlsem && opts.debug then
         Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp mlsem_ast ;
+      log_timing ();
       apply_fallback ()
   | System.Checker.Untypeable err ->
       Format.printf "%s:@.untypeable: %s@." name err.title;
       err.descr |> Option.iter (Format.printf "%s@." ) ;
       if not opts.mlsem && opts.debug  then (* Still print the mlsem ast*)
         Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp mlsem_ast ;
+      log_timing ();
       apply_fallback ()
   | Not_found ->
       (* Refinement/reconstruction occasionally raises Not_found when an
@@ -200,6 +219,7 @@ let infer_ast ?fallback visible opts (idenv, env, decl) (ast : Ast.e) =
         Format.eprintf "%s@." (Printexc.get_backtrace ()) ;
       if not opts.mlsem && opts.debug then
         Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp mlsem_ast ;
+      log_timing ();
       apply_fallback ()
 
 (** past: the parsed AST *)

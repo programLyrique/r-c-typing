@@ -96,6 +96,15 @@ let call_graph_opt =
   in
   Arg.(value & opt (some string) None & info ["call-graph"] ~docv:"FILE" ~doc)
 
+let log_inference_times_opt =
+  let doc =
+    "Log the wall-clock time of each function's body inference on a \
+     '  timing: <seconds> s' line below the result. The line is indented to \
+     match the existing 'fallback:' convention so per-function CSV parsing \
+     is unaffected. Off by default."
+  in
+  Arg.(value & flag & info ["log-inference-times"] ~doc)
+
 let path_arg =
   let doc = "C source file to parse or package directory to analyze" in
   Arg.(required & pos 0 (some string) None & info [] ~docv:"PATH" ~doc)
@@ -116,8 +125,9 @@ let cmd =
      and+ timeout = timeout_opt
      and+ fallback_c_signature = fallback_c_sig_opt
      and+ call_graph = call_graph_opt
+     and+ log_inference_times = log_inference_times_opt
     and+ path = path_arg in
-    PEnv.sequential_handler Defs.parsed_types_penv (fun path -> main {cst; past; ast; mlsem ; typing = not no_typing ; debug ; filter; timeout; fallback_c_signature; call_graph} include_dirs path) path |> fst)
+    PEnv.sequential_handler Defs.parsed_types_penv (fun path -> main {cst; past; ast; mlsem ; typing = not no_typing ; debug ; filter; timeout; fallback_c_signature; call_graph; log_inference_times} include_dirs path) path |> fst)
      
 
 let () = exit (Cmd.eval cmd)
