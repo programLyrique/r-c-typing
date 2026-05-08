@@ -1,0 +1,5 @@
+Package: filterclosure
+Title: Test package filter call graph closure
+Version: 0.0.1
+Description: Exercises package -f filtering rooted at a non-entry function.
+License: MIT

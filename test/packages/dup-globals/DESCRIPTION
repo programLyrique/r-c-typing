@@ -1,0 +1,13 @@
+Package: dupglobals
+Title: Regression: Duplicate File-Scope Global Names Across Files
+Version: 0.1.0
+Authors@R:
+    person("Test", "Author", email = "test@example.com", role = c("aut", "cre"))
+Description: Regression fixture for two .c files declaring file-scope
+    globals named "scan" with different struct types. Mirrors what
+    utf8 has across check_wordscan.c and check_graphscan.c. The runner
+    treats duplicate plain Definition globals as per-file internals so
+    the package no longer crashes with "Top-level mutable variable has
+    an incompatible type."
+License: MIT
+Encoding: UTF-8

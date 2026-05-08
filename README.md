@@ -72,6 +72,10 @@ Show the parsed AST for functions whose name contains "from":
 dune exec r-c-typing -- --past -f from test/cprogs/string.c
 ```
 
+For a single C file, `-f/--filter` is an output filter: non-matching
+functions may still be processed so later functions can use their types, but
+only matching symbols are printed.
+
 Run inference for a single file:
 
 ```bash
@@ -84,6 +88,18 @@ Run inference for an R package directory:
 dune exec r-c-typing -- test/packages/testpkg
 ```
 
+For an R package directory, the default root set is the package's native
+entry points discovered from `.C`, `.Call`, and `.External` calls. Passing
+`-f/--filter SUBSTRING` changes the root set to all package C functions whose
+names contain `SUBSTRING`; only those roots and their transitive callees are
+typed and printed.
+
+For example, this analyzes just the closure rooted at matching functions:
+
+```bash
+dune exec r-c-typing -- -f r_is_scalar_logical path/to/vctrs
+```
+
 ## Useful flags
 
 | Flag                                  | Description                                                                                                                                                                                                                                                                                                              |
@@ -93,7 +109,7 @@ dune exec r-c-typing -- test/packages/testpkg
 | `--log-inference-times`               | After each function's result, emit an indented `  timing: <seconds> s` line giving the wall-clock time of its body inference. Indentation matches the `fallback:` convention so the per-function CSV format used by the `r-typing` pipeline is unaffected. Off by default.                                              |
 | `--debug`                             | Print intermediate AST/inference information.                                                                                                                                                                                                                                                                            |
 | `--past`, `--ast`, `--mlsem`, `--cst` | Print the corresponding intermediate form.                                                                                                                                                                                                                                                                               |
-| `-f/--filter SUBSTRING`               | Restrict printed output to symbols whose name contains `SUBSTRING`.                                                                                                                                                                                                                                                      |
+| `-f/--filter SUBSTRING`               | For a single C file, restrict printed output to symbols whose name contains `SUBSTRING`. For a package directory, use matching package C functions as call-graph roots and type/print only those roots and their transitive callees.                                                                                     |
 
 ## Type definitions
 

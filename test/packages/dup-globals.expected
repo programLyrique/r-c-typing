@@ -1,0 +1,11 @@
+Entry points detected: Call=2, C=0, Fortran=0, External=0
+Entry points for .Call convention:
+  set_word_count
+  set_edges
+
+Entry points for .C convention:
+
+set_word_count: c_int_na -> ()
+
+set_edges: c_double -> ()
+

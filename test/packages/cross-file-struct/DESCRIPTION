@@ -1,0 +1,14 @@
+Package: crossfilestruct
+Title: Regression: Cross-File Struct Resolution For Globals
+Version: 0.1.0
+Authors@R:
+    person("Test", "Author", email = "test@example.com", role = c("aut", "cre"))
+Description: Regression for two .c files declaring the same struct global,
+    where only one file has the struct body in scope. Mirrors what vctrs has
+    in rlang/globals.c (declares "struct r_globals_syms r_syms" without
+    including the struct body) and rlang/attrib.h (which actually defines
+    the body). With per-file processing in source order, the file lacking
+    the body could register the global with an empty record, then later
+    file's full struct could not upgrade the existing closed-record binding.
+License: MIT
+Encoding: UTF-8

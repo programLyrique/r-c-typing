@@ -1,0 +1,10 @@
+Entry points detected: Call=1, C=0, Fortran=0, External=0
+Entry points for .Call convention:
+  entry_root
+
+Entry points for .C convention:
+
+target_leaf: ∀'a. 'a & (any | chr) -> 'a & (any | chr)
+
+target_root: ∀'a. 'a & (any | chr) -> 'a & (any | chr)
+

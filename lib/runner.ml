@@ -45,6 +45,12 @@ let make_substring_pred = function
           true
         with Not_found -> false
 
+let call_graph_node_names call_graph =
+  let names = ref [] in
+  Call_graph.Callgraph.iter_nodes call_graph (fun name ->
+    names := name :: !names);
+  List.rev !names
+
 (* idenv: str -> Variable.t 
    env: typing environment: Variable.t -> TyScheme.ty 
 *)
@@ -429,7 +435,7 @@ let run_on_files opts filenames ?entry_points idenv env =
       let past = Parser.to_ast cst in
       (filename, past)
     ) filenames in
-  let call_graph = Call_graph.of_past_list (List.map snd pasts) in
+  let full_call_graph = Call_graph.of_past_list (List.map snd pasts) in
   let entry_names = match entry_points with
     | None -> []
     | Some entries ->
@@ -438,9 +444,24 @@ let run_on_files opts filenames ?entry_points idenv env =
         | Package.Call | Package.C | Package.External -> Some func_name
         | _ -> None)
   in
-  let call_graph = match entry_points with
-    | None -> call_graph
-    | Some _ -> Call_graph.keep_reachable call_graph entry_names in
+  let filter_roots =
+    match opts.filter with
+    | None -> None
+    | Some _ ->
+        let visible_name = make_substring_pred opts.filter in
+        Some (List.filter visible_name (call_graph_node_names full_call_graph))
+  in
+  let root_names =
+    match filter_roots with
+    | Some roots -> roots
+    | None -> entry_names
+  in
+  let call_graph =
+    match entry_points, filter_roots with
+    | _, Some roots -> Call_graph.keep_reachable full_call_graph roots
+    | None, None -> full_call_graph
+    | Some _, None -> Call_graph.keep_reachable full_call_graph entry_names
+  in
   (* Optional: dump the call graph for inspection (after [keep_reachable]).
      A name -> source-file map is built from [pasts] for per-file clustering. *)
   (match opts.call_graph with
@@ -456,7 +477,7 @@ let run_on_files opts filenames ?entry_points idenv env =
        List.iter (fun (filename, items) ->
          List.iter (scan filename) items) pasts;
        let file_of_node n = H.find_opt file_of n in
-       let dot = Call_graph.to_dot ~file_of_node ~entry_points:entry_names call_graph in
+       let dot = Call_graph.to_dot ~file_of_node ~entry_points:root_names call_graph in
        let oc = open_out path in
        output_string oc dot;
        close_out oc;
@@ -470,7 +491,11 @@ let run_on_files opts filenames ?entry_points idenv env =
         | _ -> None
       ) past
     ) pasts in
-  let visible_name = make_substring_pred opts.filter in
+  let visible_name =
+    match filter_roots with
+    | None -> make_substring_pred opts.filter
+    | Some _ -> (fun name -> Call_graph.Callgraph.has_node call_graph name)
+  in
   let definition_files =
     List.fold_left
       (fun acc (filename, past) ->

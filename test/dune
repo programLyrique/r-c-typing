@@ -60,4 +60,20 @@
  (action
   (diff packages/cross-file-struct.expected cross-file-struct.output)))
 
+(rule
+ (alias runtest)
+ (deps
+  (glob_files ../types/*.ty)
+  (source_tree packages/filter-closure))
+ (action
+  (with-stdout-to
+   filter-closure.output
+   (run %{exe:package_test.exe} packages/filter-closure target_root))))
+
+(rule
+ (alias runtest)
+ (deps packages/filter-closure.expected filter-closure.output)
+ (action
+  (diff packages/filter-closure.expected filter-closure.output)))
+
 (include dune.inc)
