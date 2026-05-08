@@ -28,4 +28,36 @@
  (action
   (diff packages/testpkg.expected testpkg.output)))
 
+(rule
+ (alias runtest)
+ (deps
+  (glob_files ../types/*.ty)
+  (source_tree packages/dup-globals))
+ (action
+  (with-stdout-to
+   dup-globals.output
+   (run %{exe:package_test.exe} packages/dup-globals))))
+
+(rule
+ (alias runtest)
+ (deps packages/dup-globals.expected dup-globals.output)
+ (action
+  (diff packages/dup-globals.expected dup-globals.output)))
+
+(rule
+ (alias runtest)
+ (deps
+  (glob_files ../types/*.ty)
+  (source_tree packages/cross-file-struct))
+ (action
+  (with-stdout-to
+   cross-file-struct.output
+   (run %{exe:package_test.exe} packages/cross-file-struct))))
+
+(rule
+ (alias runtest)
+ (deps packages/cross-file-struct.expected cross-file-struct.output)
+ (action
+  (diff packages/cross-file-struct.expected cross-file-struct.output)))
+
 (include dune.inc)

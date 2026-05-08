@@ -1,2 +1,5 @@
 _build
 _opam
+private_repo_pat.txt
+mlsem_recording.json
+_coverage/

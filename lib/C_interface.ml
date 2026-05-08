@@ -198,7 +198,7 @@ let%test "is_simple_c_function rejects SEXP structs and non-functions" =
              ~ret_ty:Ast.Void
              ~params:[Param (Ast.Struct ("payload", [Ast.Int, "field"]), "x")]
              "struct_entry"))
-  && not (is_simple_c_function (GlobalVar ("g", Ast.Int)))
+  && not (is_simple_c_function (GlobalVar (Extern, "g", Ast.Int)))
 
 
 let%test "infer_cfun resolves typedef aliases before building the function type" =
@@ -243,6 +243,6 @@ let%test "infer_dotC resolves typedef aliases for supported pointer arguments" =
 
 
 let%test "infer_dotC_from_past rejects non-function top-level items" =
-  match infer_dotC_failure (Mlsem.Common.Position.dummy, GlobalVar ("g", Ast.Int)) with
+  match infer_dotC_failure (Mlsem.Common.Position.dummy, GlobalVar (Extern, "g", Ast.Int)) with
   | Some "Expected a function definition." -> true
   | _ -> false

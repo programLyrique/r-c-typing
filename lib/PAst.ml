@@ -23,6 +23,11 @@ type const =
  | CArray of const list
  [@@deriving show]
 
+ type global_linkage =
+  | Extern
+  | Static
+  | Definition
+  [@@deriving show]
 
  type top_level_unit' =
   | Fundef of Ast.ctype * string * param list * e
@@ -32,12 +37,11 @@ type const =
         [Ast.Enum] ctype) as well as typedef aliases (payload is the aliased
         ctype). Both flow through a single arm downstream because they behave
         identically: add [name -> ctype] to [DeclMap]. *)
-  | GlobalVar of string * Ast.ctype
+  | GlobalVar of global_linkage * string * Ast.ctype
     (** File-scope variable declaration or definition. Payload is the
-        identifier and its declared type. Any initializer is dropped here;
-        only the declared type seeds the identifier's binding in
-        [Runner.infer_def]. Covers both [extern] declarations and in-file
-        definitions. *)
+        linkage, identifier, and declared type. Any initializer is dropped
+        here; only the declared type seeds the identifier's binding in
+        [Runner.infer_def]. *)
   | Define of string * const
   | Include of top_level_unit list (* items parsed from an included external header *)
   [@@deriving show]
@@ -79,7 +83,7 @@ let top_level_unit_name top =
   match top with
   | _, Fundef (_, name, _, _) -> name
   | _, TypeDecl (name, _) -> name
-  | _, GlobalVar (name, _) -> name
+  | _, GlobalVar (_, name, _) -> name
   | _, Define (name, _) -> name
   | _, Include _ -> ""
 
@@ -142,6 +146,64 @@ let rec bv_e in_lhs_assign (_,e) =
   | Cast (_, e) -> bv_e in_lhs_assign e
   | VarDeclare (_, (_, Id s)) -> StrSet.singleton s
   | VarDeclare (_, _) -> failwith "Declaration must have an identifier" (*Should be unreachable*)
+
+(** Extract variables declared by C declarations in an expression.
+    Unlike [bv_e], this does not treat assignment targets as declarations:
+    [global_arr[i] = v] writes an existing object, while [int x;] creates a
+    local binding. *)
+let rec declared_locals_e (_, e) =
+  match e with
+  | VarDeclare (_, (_, Id s)) -> StrSet.singleton s
+  | VarDeclare (_, _) -> failwith "Declaration must have an identifier"
+  | Break | Next | Const _ | Id _ -> StrSet.empty
+  | Unop (_, e1) | FieldAccess (e1, _) | Return (Some e1)
+  | Cast (_, e1) | Default e1 -> declared_locals_e e1
+  | Return None -> StrSet.empty
+  | Binop (_, (e1, e2)) | VarAssign (e1, e2)
+  | Case (e1, e2) | Comma (e1, e2) ->
+      StrSet.union (declared_locals_e e1) (declared_locals_e e2)
+  | Ite (cond, then_, else_) ->
+      StrSet.union
+        (declared_locals_e cond)
+        (StrSet.union (declared_locals_e then_) (declared_locals_e else_))
+  | Call (f, args) ->
+      List.fold_left
+        (fun acc arg -> StrSet.union acc (declared_locals_e arg))
+        (declared_locals_e f)
+        args
+  | If (cond, then_, else_) ->
+      let acc =
+        declared_locals_e cond
+        |> StrSet.union (declared_locals_e then_)
+      in
+      (match else_ with
+       | None -> acc
+       | Some e -> StrSet.union acc (declared_locals_e e))
+  | While (cond, body) ->
+      StrSet.union (declared_locals_e cond) (declared_locals_e body)
+  | For (init, cond, incr, body) ->
+      let acc = declared_locals_e init in
+      let acc =
+        match cond with
+        | None -> acc
+        | Some e -> StrSet.union acc (declared_locals_e e)
+      in
+      let acc =
+        match incr with
+        | None -> acc
+        | Some e -> StrSet.union acc (declared_locals_e e)
+      in
+      StrSet.union acc (declared_locals_e body)
+  | Switch (e, cases) ->
+      List.fold_left
+        (fun acc case -> StrSet.union acc (declared_locals_e case))
+        (declared_locals_e e)
+        cases
+  | Seq exprs ->
+      List.fold_left
+        (fun acc e -> StrSet.union acc (declared_locals_e e))
+        StrSet.empty
+        exprs
 
 module StrMap = Map.Make(String)
 
@@ -272,13 +334,11 @@ let add_var env str =
   StrMap.add str v env
 
 
-(* Wrap [e] in a [Declare] for body variable [str], unless [str] is already
+(* Wrap [e] in a [Declare] for local variable [str], unless [str] is already
    bound as a parameter (parameters are lambda-bound, so no local Declare is
-   needed). The param set is passed explicitly rather than reading from an
-   [env.id] map because [env.id] now also carries file-scope globals, and a
-   body-var that happens to shadow a global must still be locally declared.
-   TODO: we already have explicit declarations in C so we should rather use
-   them instead of detecting variables *)
+   needed). Locals come from explicit C declarations, so a declared local can
+   intentionally shadow a file-scope global, but a write to a global does not
+   create a synthetic local. *)
 let add_def params eid e str =
   let v = StrMap.find str eid in
   if StrSet.mem str params then e
@@ -463,10 +523,10 @@ and transform env (pos, topl_unit) =
     let param_vars = bv_params params in
     let pid = List.fold_left add_var env.id (StrSet.elements param_vars) in
     let env = {env with id=pid} in
-    let body_vars = bv_e false body in
-    let eid = List.fold_left add_var env.id (StrSet.elements body_vars) in
+    let local_vars = declared_locals_e body in
+    let eid = List.fold_left add_var env.id (StrSet.elements local_vars) in
     let env = {env with id=eid} in
-    let e = List.fold_left (add_def param_vars eid) (aux_e env body) (StrSet.elements body_vars) in
+    let e = List.fold_left (add_def param_vars eid) (aux_e env body) (StrSet.elements local_vars) in
     let params =
       List.filter_map (function
         | Param (ty, name) -> Some (resolve_ctype env.decl ty, var env name)

@@ -370,6 +370,23 @@ and aux_decl_spec decl_spec =
   let (_, type_spec, _) = decl_spec in
   aux_type_spec type_spec
 
+and aux_global_linkage decl_spec =
+  let before, _, after = decl_spec in
+  let is_static = function
+    | `Stor_class_spec (`Static _) -> true
+    | _ -> false
+  in
+  let is_extern = function
+    | `Stor_class_spec (`Extern _) -> true
+    | _ -> false
+  in
+  if List.exists is_static before || List.exists is_static after then
+    A.Static
+  else if List.exists is_extern before || List.exists is_extern after then
+    A.Extern
+  else
+    A.Definition
+
 (* For pointers, arrays, parenthesized and function-style abstract declarators.
    Arrays decay to pointers in expression contexts, so they add one pointer
    level like [Abst_poin_decl]. For function declarators we cannot model the
@@ -406,6 +423,42 @@ let rec aux_decl_name (decl : declarator) : int * string =
   | `Paren_decl (_, _, decl, _) -> aux_decl_name decl
   | _ -> Boilerplate.map_declarator () decl |> Tree_sitter_run.Raw_tree.to_channel stderr ;
     failwith "Not supported yet: function name"
+
+(* True when [decl] is a parenthesized-pointer declarator wrapping any name,
+   i.e. the function-pointer marker "(\*name)". *)
+let rec is_parenthesized_pointer_declarator (decl : declarator) =
+  match decl with
+  | `Paren_decl (_, _, `Poin_decl _, _) -> true
+  | `Attr_decl (decl, _) -> is_parenthesized_pointer_declarator decl
+  | _ -> false
+
+(* If [decl] is the declarator of a function-pointer global, return the inner
+   identifier name. Recognised shapes are
+   [Poin_decl* (Func_decl (Paren_decl (Poin_decl _), ...))]
+   and the same with [Attr_decl] wrappers. The outer [Poin_decl]s come from
+   pointer-typed return values like [r_obj\* (\*fp)(...)]. *)
+let rec function_pointer_global_name (decl : declarator) =
+  match decl with
+  | `Poin_decl (_, _, _, _, inner) -> function_pointer_global_name inner
+  | `Attr_decl (inner, _) -> function_pointer_global_name inner
+  | `Func_decl (inner, _, _, _) when is_parenthesized_pointer_declarator inner ->
+      (try Some (snd (aux_decl_name inner)) with _ -> None)
+  | _ -> None
+
+(* If [decl] is the [declaration_declarator] of a function-pointer global
+   declaration without initialiser, return the inner identifier name. The
+   recognised shapes are
+   [Func_decl_decl(Paren_decl(Poin_decl _), ...)]  for "(*fp)(...)" and
+   [Poin_decl(_, _, _, _, Func_decl(Paren_decl(Poin_decl _), ...))] for
+   pointer-returning forms like "r_obj* (*fp)(...)". *)
+let function_pointer_declaration_declarator_name
+    (decl : declaration_declarator) =
+  match decl with
+  | `Func_decl_decl (name_decl, _, _, _)
+    when is_parenthesized_pointer_declarator name_decl ->
+      (try Some (snd (aux_decl_name name_decl)) with _ -> None)
+  | `Poin_decl (_, _, _, _, inner) -> function_pointer_global_name inner
+  | _ -> None
 
 let rec aux_type_declarator (td : type_declarator) : int * string =
   match td with
@@ -1228,12 +1281,15 @@ and aux_top_level_item_non_preproc defines (item : top_level_item) =
       (defines, aux_type_definition type_def)
   | `Decl (decl_spec, first_decl, more_decls, _semi) ->
       let base_ty = aux_decl_spec decl_spec in
+      let linkage = aux_global_linkage decl_spec in
       let try_func_of_decl (decl: anon_choice_opt_ms_call_modi_decl_decl_opt_gnu_asm_exp_2fa2f9e) =
         match decl with
         | `Opt_ms_call_modi_decl_decl_opt_gnu_asm_exp (_, declr, _) ->
             begin match declr with
             | `Func_decl_decl (name_decl, param_list, _, _) ->
-                begin match (try Some (aux_decl_name name_decl) with _ -> None) with
+                if is_parenthesized_pointer_declarator name_decl then
+                  None
+                else begin match (try Some (aux_decl_name name_decl) with _ -> None) with
                 | None -> None
                 | Some (level, name) ->
                     (try
@@ -1244,7 +1300,15 @@ and aux_top_level_item_non_preproc defines (item : top_level_item) =
                                       (Mlsem.Common.Position.dummy, A.Seq [])))
                     with _ -> None)
                 end
-            | `Poin_decl (_, _, _, _, inner_decl) when has_func_decl inner_decl ->
+            | `Poin_decl (_, _, _, _, inner_decl)
+              when has_func_decl inner_decl
+                && Option.is_none
+                     (function_pointer_declaration_declarator_name declr) ->
+                (* "int* foo(int)" — function returning a pointer. We
+                   distinguish it from "r_obj* (*fp)(...)" which is a
+                   function-pointer global with pointer return type:
+                   the latter is dropped here so [try_global_of_decl] can
+                   pick it up as a [GlobalVar]. *)
                 begin match (try Some (aux_decl_name inner_decl) with _ -> None) with
                 | None -> None
                 | Some (_, name) ->
@@ -1268,31 +1332,53 @@ and aux_top_level_item_non_preproc defines (item : top_level_item) =
       let try_global_of_decl (decl: anon_choice_opt_ms_call_modi_decl_decl_opt_gnu_asm_exp_2fa2f9e) =
         let emit level name =
           let ty = Ast.build_ptr level base_ty in
-          Some (Mlsem.Common.Position.dummy, A.GlobalVar (name, ty))
+          Some (Mlsem.Common.Position.dummy, A.GlobalVar (linkage, name, ty))
+        in
+        let emit_function_pointer level name =
+          let ty = Ast.build_ptr level Ast.Any in
+          Some (Mlsem.Common.Position.dummy, A.GlobalVar (linkage, name, ty))
         in
         match decl with
         | `Init_decl (declr, _, _init) ->
             (* [Init_decl] takes a [declarator], which uses [`Func_decl] for
                function shapes. The parser for function definitions uses the
-               other branch; here we reach this only for initialized globals. *)
-            (match declr with
-             | `Func_decl _ -> None
-             | `Poin_decl (_, _, _, _, inner) when has_func_decl inner -> None
-             | `Id _ | `Poin_decl _ | `Array_decl _ | `Paren_decl _ | `Attr_decl _ ->
-                 (try let (level, name) = aux_decl_name declr in emit level name
-                  with _ -> None))
+               other branch; here we reach this only for initialized globals.
+               A function-pointer global with an initializer like
+               [r_obj* (*fp)(r_obj*) = NULL;] parses as
+               [Poin_decl(Func_decl(Paren_decl(Poin_decl(Id "fp")), ...))]
+               (the outer Poin_decl comes from the [r_obj*] return type).
+               [function_pointer_global_name] handles all the wrapping shapes;
+               emit the binding with [level=1] so it is bound as an opaque
+               [*Any] and later assignments to [fp] succeed instead of falling
+               back to an [Immut] binding via [PAst.var]. *)
+            (match function_pointer_global_name declr with
+             | Some name -> emit_function_pointer 1 name
+             | None ->
+                 (match declr with
+                  | `Func_decl _ -> None
+                  | `Poin_decl (_, _, _, _, inner) when has_func_decl inner -> None
+                  | `Id _ | `Poin_decl _ | `Array_decl _ | `Paren_decl _ | `Attr_decl _ ->
+                      (try let (level, name) = aux_decl_name declr in emit level name
+                       with _ -> None)))
         | `Opt_ms_call_modi_decl_decl_opt_gnu_asm_exp (_, declr, _) ->
             (* [declaration_declarator] uses [`Func_decl_decl] for functions
                and prototypes. Those were handled by [try_func_of_decl]; any
-               that survive a failed match there (e.g. variadic) are dropped. *)
-            (match declr with
-             | `Func_decl_decl _ -> None
-             | `Poin_decl (_, _, _, _, inner) when has_func_decl inner -> None
-             | `Id _ | `Poin_decl _ | `Array_decl _ | `Paren_decl _ | `Attr_decl _ ->
-                 (try
-                   let (level, name, is_fp) = aux_decl2_name declr in
-                   if is_fp then None else emit level name
-                  with _ -> None))
+               that survive a failed match there (e.g. variadic) are dropped.
+               Function-pointer globals with possibly pointer-typed return —
+               either "(*fp)(...)" or "r_obj* (*fp)(...)" — are caught up
+               front so the [Poin_decl ... has_func_decl] arm below does not
+               drop them as if they were function declarations. *)
+            (match function_pointer_declaration_declarator_name declr with
+             | Some name -> emit_function_pointer 1 name
+             | None ->
+                 (match declr with
+                  | `Func_decl_decl _ -> None
+                  | `Poin_decl (_, _, _, _, inner) when has_func_decl inner -> None
+                  | `Id _ | `Poin_decl _ | `Array_decl _ | `Paren_decl _ | `Attr_decl _ ->
+                      (try
+                        let (level, name, is_fp) = aux_decl2_name declr in
+                        if is_fp then emit_function_pointer level name else emit level name
+                       with _ -> None)))
       in
       let all_decls = first_decl :: List.map snd more_decls in
       let items =

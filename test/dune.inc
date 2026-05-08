@@ -279,6 +279,17 @@
 
 (rule
  (alias   runtest)
+ (deps    (glob_files ../types/*.ty) cprogs/global-write.c)
+ (action  (with-stdout-to global-write.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/global-write.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/global-write.c cprogs/global-write.expected)
+ (action  (diff cprogs/global-write.expected global-write.output)))
+
+(rule
+ (alias   runtest)
  (deps    (glob_files ../types/*.ty) cprogs/sexprec-alias.c)
  (action  (with-stdout-to sexprec-alias.output
               (run %{exe:typing_test.exe} %{dep:cprogs/sexprec-alias.c}))))
@@ -331,4 +342,14 @@
  (alias   runtest)
  (deps    cprogs/sizeof_typedef.c cprogs/sizeof_typedef.expected)
  (action  (diff cprogs/sizeof_typedef.expected sizeof_typedef.output)))
+(rule
+ (alias   runtest)
+ (deps    (glob_files ../types/*.ty) cprogs/global-fnptr.c)
+ (action  (with-stdout-to global-fnptr.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/global-fnptr.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/global-fnptr.c cprogs/global-fnptr.expected)
+ (action  (diff cprogs/global-fnptr.expected global-fnptr.output)))
 

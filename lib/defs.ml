@@ -122,16 +122,36 @@ let dynamic : (string, Variable.t * Ty.t) Hashtbl.t = Hashtbl.create 64
    a later, more precise declaration upgrade a fallback binding (e.g. a
    [Ty.any] placeholder installed by [PAst.var]'s unknown-name path gets
    replaced when the real [extern SEXP foo;] declaration is seen). *)
-let register_dynamic name ty : Variable.t =
+let register_dynamic_binding ?(mut = false) name ty : Variable.t * Ty.t =
   match Hashtbl.find_opt dynamic name with
   | Some (v, existing) ->
-      if Ty.leq ty existing && not (Ty.equiv ty existing) then
+      let ty =
+        if Ty.leq ty existing && not (Ty.equiv ty existing) then ty
+        else existing
+      in
+      let needs_mutable_rebind =
+        if not mut then false
+        else
+          match MVariable.kind v with
+          | MVariable.AnnotMut existing -> not (Ty.equiv existing ty)
+          | _ -> true
+      in
+      if needs_mutable_rebind then begin
+        let v = MVariable.create (MVariable.AnnotMut ty) (Some name) in
         Hashtbl.replace dynamic name (v, ty);
-      v
+        v, ty
+      end else begin
+        Hashtbl.replace dynamic name (v, ty);
+        v, ty
+      end
   | None ->
-      let v = MVariable.create Immut (Some name) in
+      let kind = if mut then MVariable.AnnotMut ty else Immut in
+      let v = MVariable.create kind (Some name) in
       Hashtbl.add dynamic name (v, ty);
-      v
+      v, ty
+
+let register_dynamic ?mut name ty : Variable.t =
+  fst (register_dynamic_binding ?mut name ty)
 
 let find_builtin (v : Variable.t) =
   let name = Variable.get_name v in

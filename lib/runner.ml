@@ -4,6 +4,7 @@ module System = Mlsem.System
 module MVariable = Mlsem.Lang.MVariable
 
 module StrMap = Map.Make(String)
+module StrSet = Set.Make(String)
 
 exception Inference_timeout of float
 
@@ -153,9 +154,6 @@ let infer_ast ?fallback visible opts (idenv, env, decl) (ast : Ast.e) =
     if opts.log_inference_times && visible then
       Format.printf "  timing: %.6f s@." (Unix.gettimeofday () -. started)
   in
-  let mlsem_ast = Ast.to_mlsem ast in
-  if opts.mlsem && visible then
-    Format.printf "%a@." Mlsem.System.Ast.pp mlsem_ast;
   if opts.debug then
     Format.printf "Type inference for function %s@." name;
   (* [fallback] is a thunk that produces the declared C signature when body
@@ -178,13 +176,23 @@ let infer_ast ?fallback visible opts (idenv, env, decl) (ast : Ast.e) =
           (StrMap.add name v idenv, Env.add v tys env, decl)
         with Failure _ -> (idenv, env, decl))
   in
+  let mlsem_ast = ref None in
+  let mlsem_ast_for_dump () =
+    match !mlsem_ast with
+    | Some a -> a
+    | None -> failwith "mlsem AST not built"
+  in
   try
+    let m = Ast.to_mlsem ast in
+    mlsem_ast := Some m;
+    if opts.mlsem && visible then
+      Format.printf "%a@." Mlsem.System.Ast.pp m;
     if opts.typing then
         with_inference_timeout opts.timeout (fun () ->
-          let _env = extend_env mlsem_ast env in
-          let renvs = System.Refinement.refinements env mlsem_ast in
-          let reconstructed = System.Reconstruction.infer env renvs mlsem_ast in
-          let typ = System.Checker.typeof_def env reconstructed mlsem_ast in
+          let _env = extend_env m env in
+          let renvs = System.Refinement.refinements env m in
+          let reconstructed = System.Reconstruction.infer env renvs m in
+          let typ = System.Checker.typeof_def env reconstructed m in
           let tys = TyScheme.norm_and_simpl typ in
           let (vars, typ) = TyScheme.get tys in
           let typ = GTy.ub typ in
@@ -199,14 +207,14 @@ let infer_ast ?fallback visible opts (idenv, env, decl) (ast : Ast.e) =
   | Inference_timeout seconds ->
       Format.printf "%s:@.timeout: inference/checking exceeded %.6g seconds@." name seconds;
       if not opts.mlsem && opts.debug then
-        Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp mlsem_ast ;
+        Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp (mlsem_ast_for_dump ());
       log_timing ();
       apply_fallback ()
   | System.Checker.Untypeable err ->
       Format.printf "%s:@.untypeable: %s@." name err.title;
       err.descr |> Option.iter (Format.printf "%s@." ) ;
       if not opts.mlsem && opts.debug  then (* Still print the mlsem ast*)
-        Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp mlsem_ast ;
+        Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp (mlsem_ast_for_dump ());
       log_timing ();
       apply_fallback ()
   | Not_found ->
@@ -218,12 +226,19 @@ let infer_ast ?fallback visible opts (idenv, env, decl) (ast : Ast.e) =
       if opts.debug then
         Format.eprintf "%s@." (Printexc.get_backtrace ()) ;
       if not opts.mlsem && opts.debug then
-        Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp mlsem_ast ;
+        Format.printf "MLsem AST:@.%a@." Mlsem.System.Ast.pp (mlsem_ast_for_dump ());
+      log_timing ();
+      apply_fallback ()
+  | Invalid_argument msg ->
+      (* mlsem reconstruction asserts [Cannot assign to an immutable variable]
+         and similar internal invariants. Treat as untypeable so the function
+         is reported by name and the rest of the package still gets processed. *)
+      Format.printf "%s:@.untypeable: invalid mlsem AST: %s@." name msg;
       log_timing ();
       apply_fallback ()
 
 (** past: the parsed AST *)
-let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=false) visible_name opts (idenv, env, decl)  past =
+let rec infer_def ?internal_scope ?(force_internal_global=false) ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=false) visible_name opts (idenv, env, decl)  past =
   let name = PAst.top_level_unit_name past in
   let visible = visible_name name in
 
@@ -238,7 +253,7 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
          simple C-function inference and priority to already-defined symbols. *)
       List.fold_left
         (fun acc item ->
-          infer_def ~simple_c_fun:true ~skip_if_defined:true (fun _ -> false) opts acc item)
+          infer_def ?internal_scope ~force_internal_global ~simple_c_fun:true ~skip_if_defined:true (fun _ -> false) opts acc item)
         (idenv, env, decl)
         items
   | _, PAst.Define (name, value) ->
@@ -258,7 +273,7 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
         |> List.fold_left (fun env (v, ty) -> Env.add v (TyScheme.mk_mono (GTy.mk ty)) env) env
       in
       (idenv, env, Ast.DeclMap.add name ty decl)
-  | _, PAst.GlobalVar (name, ctype) ->
+  | _, PAst.GlobalVar (linkage, name, ctype) ->
       (* File-scope variable. A [.ty] binding always wins (manually-curated
          types must not be overridden). For every other pre-existing binding
          we overwrite: in well-formed C, repeated declarations have the same
@@ -271,19 +286,36 @@ let rec infer_def ?(simple_c_fun=false) ?(convention=None) ?(skip_if_defined=fal
          across translation units (shared [extern] in a header included from
          several .c files). [Env.add] asserts the variable is unbound and
          would crash the package on the second sighting. *)
-      if has_ty_binding name then
+      let is_internal =
+        force_internal_global
+        ||
+        match linkage with
+        | PAst.Static -> true
+        | PAst.Extern | PAst.Definition -> false
+      in
+      if not is_internal && has_ty_binding name then
         (idenv, env, decl)
       else begin
+        let storage_name =
+          if is_internal then
+            begin
+              let scope = Option.value ~default:"<file>" internal_scope in
+              scope ^ "::" ^ name
+            end
+          else
+            name
+        in
         let resolved = PAst.resolve_ctype decl ctype in
         let ty =
           try Ast.typeof_ctype resolved
           with Failure _ -> Ty.any
         in
-        let v = Defs.BuiltinVar.register_dynamic name ty in
+        let v, ty = Defs.BuiltinVar.register_dynamic_binding ~mut:true storage_name ty in
         let tys = ty |> GTy.mk |> TyScheme.mk_mono in
+        let env = MVariable.add_to_env v tys (Env.rm v env) in
         if opts.debug && visible then
           print_visible ~debug:opts.debug `Default visible v tys;
-        (StrMap.add name v idenv, Env.replace v tys env, decl)
+        (StrMap.add name v idenv, env, decl)
       end
   | _,PAst.Fundef (ret_ty, name, params, _) when convention=Some(Package.C) ->
     (try
@@ -377,7 +409,12 @@ let run_on_file opts filename idenv env =
     in
     Printf.printf "%s\n" (PAst.show_definitions visible_past)
   end;
-  let idenv, env, _ = List.fold_left (infer_def visible_name opts) (idenv, env, Ast.DeclMap.empty) past in
+  let idenv, env, _ =
+    List.fold_left
+      (infer_def ~internal_scope:filename visible_name opts)
+      (idenv, env, Ast.DeclMap.empty)
+      past
+  in
   (idenv, env)
 
 let run_on_files opts filenames ?entry_points idenv env =
@@ -434,15 +471,96 @@ let run_on_files opts filenames ?entry_points idenv env =
       ) past
     ) pasts in
   let visible_name = make_substring_pred opts.filter in
+  let definition_files =
+    List.fold_left
+      (fun acc (filename, past) ->
+        List.fold_left
+          (fun acc item ->
+            match item with
+            | _, PAst.GlobalVar (PAst.Definition, name, _) ->
+                let files =
+                  StrMap.find_opt name acc
+                  |> Option.value ~default:StrSet.empty
+                in
+                StrMap.add name (StrSet.add filename files) acc
+            | _ -> acc)
+          acc
+          past)
+      StrMap.empty
+      pasts
+  in
+  let conflicted_definitions =
+    StrMap.fold
+      (fun name files acc ->
+        if StrSet.cardinal files > 1 then StrSet.add name acc else acc)
+      definition_files
+      StrSet.empty
+  in
+  (* Pre-collect [TypeDecl]s across every file (recursing into [Include] items)
+     before processing [GlobalVar]s. Otherwise globals declared in a file with
+     no visible struct body — e.g. [globals.c] writing [struct r_globals_syms
+     r_syms;] without including the header that defines the struct — register
+     [r_syms] as an empty record. A later registration in another file with
+     the full struct cannot upgrade the variable: its stored ty' is frozen at
+     creation, the closed empty record and the closed populated record are not
+     in a subtype relation, and [register_dynamic_binding] keeps the existing
+     type. Building [decl] up front guarantees every [resolve_ctype] call
+     sees the full declaration map. *)
+  let rec collect_type_decls decl item =
+    match item with
+    | _, PAst.TypeDecl (name, ty) ->
+        let ty = PAst.resolve_ctype decl ty in
+        Ast.DeclMap.add name ty decl
+    | _, PAst.Include items ->
+        List.fold_left collect_type_decls decl items
+    | _ -> decl
+  in
+  let decl =
+    List.fold_left
+      (fun decl (_filename, past) ->
+        List.fold_left collect_type_decls decl past)
+      Ast.DeclMap.empty
+      pasts
+  in
   (* First apply non-function top-level units (structs, defines) in source order. *)
-  let idenv, env, decl =
-    List.concat_map snd pasts
-    |> List.fold_left
-         (fun acc item ->
-           match item with
-           | _, PAst.Fundef _ -> acc
-           | _ -> infer_def visible_name opts acc item)
-         (idenv, env, Ast.DeclMap.empty)
+  let idenv, env, decl, internal_idenvs =
+    List.fold_left
+      (fun (idenv, env, decl, internal_idenvs) (filename, past) ->
+        List.fold_left
+          (fun (idenv, env, decl, internal_idenvs) item ->
+            match item with
+            | _, PAst.Fundef _ -> (idenv, env, decl, internal_idenvs)
+            | _, PAst.GlobalVar (PAst.Static, _, _) ->
+                let file_idenv =
+                  StrMap.find_opt filename internal_idenvs
+                  |> Option.value ~default:StrMap.empty
+                in
+                let file_idenv, env, decl =
+                  infer_def ~internal_scope:filename ~force_internal_global:true visible_name opts
+                    (file_idenv, env, decl) item
+                in
+                (idenv, env, decl, StrMap.add filename file_idenv internal_idenvs)
+            | _, PAst.GlobalVar (PAst.Definition, _, _) when
+                StrSet.mem (PAst.top_level_unit_name item) conflicted_definitions ->
+                let file_idenv =
+                  StrMap.find_opt filename internal_idenvs
+                  |> Option.value ~default:StrMap.empty
+                in
+                let file_idenv, env, decl =
+                  infer_def ~internal_scope:filename ~force_internal_global:true visible_name opts
+                    (file_idenv, env, decl) item
+                in
+                (idenv, env, decl, StrMap.add filename file_idenv internal_idenvs)
+            | _ ->
+                let idenv, env, decl =
+                  infer_def ~internal_scope:filename visible_name opts
+                    (idenv, env, decl) item
+                in
+                (idenv, env, decl, internal_idenvs))
+          (idenv, env, decl, internal_idenvs)
+          past)
+      (idenv, env, decl, StrMap.empty)
+      pasts
   in
 
   (* Sort function definitions by call graph. *)
@@ -463,9 +581,25 @@ let run_on_files opts filenames ?entry_points idenv env =
   let entry_points = StrMap.of_list (Option.value ~default:[] entry_points) in
   let idenv, env, _ =
     List.fold_left
-      (fun acc (_, item) -> 
+      (fun (idenv, env, decl) (filename, item) ->
         let convention = StrMap.find_opt (PAst.top_level_unit_name item) entry_points in
-        infer_def ~convention visible_name opts acc item)
+        let file_idenv =
+          StrMap.find_opt filename internal_idenvs
+          |> Option.value ~default:StrMap.empty
+        in
+        let idenv_for_file =
+          StrMap.union (fun _ local _global -> Some local) file_idenv idenv
+        in
+        let idenv', env, decl =
+          infer_def ~internal_scope:filename ~convention visible_name opts
+            (idenv_for_file, env, decl) item
+        in
+        let idenv =
+          match StrMap.find_opt (PAst.top_level_unit_name item) idenv' with
+          | Some v -> StrMap.add (PAst.top_level_unit_name item) v idenv
+          | None -> idenv
+        in
+        (idenv, env, decl))
       (idenv, env, decl)
       sorted_pasts
   in
