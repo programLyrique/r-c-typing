@@ -63,6 +63,11 @@ strdup: t(any) -> c_string
 fdopen: t(any, any) -> any
 fprintf: (t(any, any) -> c_int) & (t(any, any, any) -> c_int) & (t(any, any, any, any) -> c_int)
 fclose: t(any) -> c_int
+fopen: t(any, any) -> any
+fflush: t(any) -> c_int
+fwrite: t(any, any, any, any) -> c_int
+// snprintf is variadic; enumerate common arities (buf, size, fmt[, args...])
+snprintf: (t(any, any, any) -> c_int) & (t(any, any, any, any) -> c_int) & (t(any, any, any, any, any) -> c_int) & (t(any, any, any, any, any, any) -> c_int)
 
 // POSIX misc
 errno: c_int
@@ -87,6 +92,21 @@ DBL_MAX: c_double
 DBL_MIN: c_double
 
 
-// C stdlib string 
+// C stdlib string
 strlen: t(c_string) -> c_int
 strcmp: t(c_string, c_string) -> c_int // TODO: we should make it work on string singletons also, to be able to check for equality at least
+strncmp: t(c_string, c_string, any) -> c_int
+strcpy: t(any, any) -> c_string
+
+// C stdlib math
+fmin: t(c_double, c_double) -> c_double
+
+// POSIX sockets / netdb
+socket: t(any, any, any) -> c_int
+bind: t(any, any, any) -> c_int
+getaddrinfo: t(any, any, any, any) -> c_int
+freeaddrinfo: t(any) -> c_void
+htonl: t(any) -> c_int
+htons: t(any) -> c_int
+FD_ZERO: t(any) -> c_void
+INADDR_ANY: c_int
