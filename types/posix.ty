@@ -71,9 +71,10 @@ setpgid: t(any, any) -> c_int
 prctl: t(any, any) -> c_int
 
 // C stdlib memory management
-malloc: t(c_int) -> *any
-calloc: t(c_int, c_int) -> *any
-realloc: t(*any, c_int) -> *any
+// c_int_na and not c_int because we currently type int arg of functions as c_int_na. 
+malloc: t(c_int_na) -> *any
+calloc: t(c_int_na, c_int) -> *any
+realloc: t(*any, c_int_na) -> *any
 free: t(*any) -> c_void
 
 // C stdlib time
