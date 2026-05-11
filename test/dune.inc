@@ -353,3 +353,14 @@
  (deps    cprogs/global-fnptr.c cprogs/global-fnptr.expected)
  (action  (diff cprogs/global-fnptr.expected global-fnptr.output)))
 
+(rule
+ (alias   runtest)
+ (deps    (glob_files ../types/*.ty) cprogs/pointer.c)
+ (action  (with-stdout-to pointer.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/pointer.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/pointer.c cprogs/pointer.expected)
+ (action  (diff cprogs/pointer.expected pointer.output)))
+

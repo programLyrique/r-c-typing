@@ -10,3 +10,5 @@ i: *{ x : c_int_na ; y : c_int_na } -> ()
 
 i2: *{ x : c_int_na ; y : c_int_na } -> ()
 
+ap_create_problem: (*c_double, c_int) -> *{ n : c_int_na ; C : *(*c_double) ; c : *(*c_double) ; s : *c_int_na ; f : *c_int_na ; na : c_int_na ; runs : c_int_na ; cost : c_double ; rtime : any }
+

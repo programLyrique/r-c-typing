@@ -388,16 +388,16 @@ let rec aux_e env (pos,e) =
         aux_e env (loc1, Id "[]<-"),
         (List.map (aux_e env) args) @ [aux_e env e2]
       )
-  | VarAssign ((loc1, Unop (_op, e1)) ,e2) -> (* Currently, remove the * or & operator *)
-      let _,_,_,e = aux_e env (loc1, VarAssign(e1, e2)) in e
-  | VarAssign ((loc1, FieldAccess ((_, Unop ("*", inner)), _field)) ,e2) ->
-      (* Counterpart to the parser's arrow-as-deref desugaring on the
-         assignment LHS. The typer's RecUpd updates a record value and
-         would fail on a pointer-dereferenced base. Mirror the existing
-         star-LHS lowering and recurse as a write to the pointer variable
-         itself. Same imprecision as that case (the field is not tracked),
-         but type-safe and avoids an Unsat in the tallying solver. *)
-      let _,_,_,e = aux_e env (loc1, VarAssign (inner, e2)) in e
+  | VarAssign ((_loc1, Unop (_op, _)) as lhs ,e2) ->
+      (* For [*p = e2] (and [&p = e2]), lower to [let tmp = *p in tmp := e2].
+         The read forces [p] to be a pointer to a type carrying e2's value;
+         the assignment lands on a fresh local so [p] itself is not rebound.
+         Imprecise (the new pointee value is not tracked at later reads),
+         but type-safe. *)
+      let read_e = aux_e env lhs in
+      let tmp = MVariable.create MVariable.Mut (Some "_deref") in
+      let assign_e = fresh_e env (Ast.VarAssign (tmp, aux_e env e2)) in
+      Ast.Let (tmp, read_e, assign_e)
   | VarAssign ((_, FieldAccess (e1, field)) ,e2) ->
       Ast.FieldUpdate (aux_e env e1, field, aux_e env e2)
   | VarAssign (_,_) -> failwith ("Unexpected left-hand side in assignment. Got: " ^ show_e (pos,e))
