@@ -364,3 +364,14 @@
  (deps    cprogs/pointer.c cprogs/pointer.expected)
  (action  (diff cprogs/pointer.expected pointer.output)))
 
+(rule
+ (alias   runtest)
+ (deps    (glob_files ../types/*.ty) cprogs/const_fold.c)
+ (action  (with-stdout-to const_fold.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/const_fold.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/const_fold.c cprogs/const_fold.expected)
+ (action  (diff cprogs/const_fold.expected const_fold.output)))
+

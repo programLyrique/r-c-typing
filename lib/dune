@@ -5,6 +5,7 @@
   defs
   in_channel_ext
   parser_utils
+  const_eval
   preprocessor
   parser
   PAst

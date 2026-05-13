@@ -66,7 +66,7 @@ let () =
   in
   expect_type_decl
     "Color"
-    (Ast.Enum ("Color", [("RED", Some 0); ("GREEN", Some 4); ("BLUE", Some 5); ("CYAN", None)]))
+    (Ast.Enum ("Color", [("RED", Some 0); ("GREEN", Some 4); ("BLUE", Some 5); ("CYAN", Some 7)]))
     enum_defs;
   expect_type_decl
     "Direction"
@@ -74,6 +74,6 @@ let () =
     enum_defs;
   expect_type_decl
     "Mask"
-    (Ast.Enum ("Mask", [("MASK_READ", Some 1); ("MASK_WRITE", None); ("MASK_RW", None)]))
+    (Ast.Enum ("Mask", [("MASK_READ", Some 1); ("MASK_WRITE", Some 2); ("MASK_RW", Some 3)]))
     enum_defs;
   print_endline "Enum declarations parsed successfully";

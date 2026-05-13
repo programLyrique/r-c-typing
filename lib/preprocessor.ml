@@ -269,17 +269,38 @@ let parse_preproc_define (_callbacks : parser_callbacks) (prepoc : preproc_def) 
         None
       end else
       begin
-        try
+        let try_const_eval () =
+          match Const_eval.eval_define_string raw_value with
+          | Some (Const_eval.VInt i) ->
+              let c = A.CInt i in
+              Const_eval.remember name (Const_eval.VInt i);
+              Some (U.loc_to_pos loc1, A.Define (name, c))
+          | Some (Const_eval.VFloat f) ->
+              let c = A.CFloat f in
+              Const_eval.remember name (Const_eval.VFloat f);
+              Some (U.loc_to_pos loc1, A.Define (name, c))
+          | None -> None
+        in
+        begin try
           match parse_define_value raw_value with
           | Some c -> Some (U.loc_to_pos loc1, A.Define (name, c))
           | None ->
-              if !warn_unsupported then
-                Printf.printf "Not supported yet: #define %s with empty/invalid value\n" name;
-              None
+              begin match try_const_eval () with
+              | Some _ as r -> r
+              | None ->
+                  if !warn_unsupported then
+                    Printf.printf "Not supported yet: #define %s with empty/invalid value\n" name;
+                  None
+              end
         with Failure _ ->
-          if !warn_unsupported then
-            Printf.printf "Not supported yet: #define %s with non-literal value `%s`\n" name raw_value;
-          None
+          begin match try_const_eval () with
+          | Some _ as r -> r
+          | None ->
+              if !warn_unsupported then
+                Printf.printf "Not supported yet: #define %s with non-literal value `%s`\n" name raw_value;
+              None
+          end
+        end
       end
 
 let system_include callbacks (_loc, path) =
@@ -464,12 +485,14 @@ let with_test_state f =
   let saved_predefined = !predefined_defines in
   let saved_include_dirs = !include_dirs in
   let saved_define_constants = !define_constants in
+  let saved_const_eval = !(Const_eval.constants) in
   Fun.protect
     ~finally:(fun () ->
       warn_unsupported := saved_warn;
       predefined_defines := saved_predefined;
       include_dirs := saved_include_dirs;
       define_constants := saved_define_constants;
+      Const_eval.constants := saved_const_eval;
       reset_processed_headers ();
       A.reset_define_aliases ())
     (fun () ->
@@ -477,6 +500,7 @@ let with_test_state f =
       reset_processed_headers ();
       A.reset_define_aliases ();
       reset_define_constants ();
+      Const_eval.reset ();
       f ())
 
 
@@ -600,9 +624,10 @@ let%test "top_level_items records string constants and identifier aliases" =
     && A.resolve_alias "HELLO" = "GREETING")
 
 
-let%test "top_level_items skips predefined fallback constants and rejects non literals" =
+let%test "top_level_items skips predefined fallback constants and folds arithmetic" =
   with_test_state (fun () ->
-    preprocess_source_with_defines StrSet.empty "#define PRIu64 12\n#define SUM (1 + 2)\n" = []
+    let items = preprocess_source_with_defines StrSet.empty "#define PRIu64 12\n#define SUM (1 + 2)\n" in
+    strip_positions items = [A.Define ("SUM", A.CInt 3)]
     && resolve_defined_string "PRIu64" = Some "lu")
 
 

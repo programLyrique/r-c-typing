@@ -238,75 +238,66 @@ and aux_struct struc =
      We keep the struct tag and resolve it later through DeclMap. *)
   | `Id_opt_field_decl_list ((_loc, name), None) -> Ast.Struct (name, [])
 
-and eval_enum_constant_expression (expr : expression) : int option =
-  match expr with
-  | `Choice_cond_exp expr -> eval_enum_constant_not_binary expr
-  | `Bin_exp _ -> None
-
-and eval_enum_constant_not_binary (expr : expression_not_binary) : int option =
-  match expr with
-  | `Num_lit (_, s) ->
-      (try Some (parse_c_int_literal s) with Failure _ -> None)
-  | `Char_lit char_lit -> Some (int_of_char_literal char_lit)
-  | `True _ -> Some 1
-  | `False _ -> Some 0
-  | `Null _ -> Some 0
-  | `Paren_exp ((_lp, _), `Exp sub_expr, (_rp, _)) ->
-      eval_enum_constant_expression sub_expr
-  | `Paren_exp _ -> None
-  | `Un_exp (`PLUS _, sub_expr) -> eval_enum_constant_expression sub_expr
-  | `Un_exp (`DASH _, sub_expr) ->
-      eval_enum_constant_expression sub_expr |> Option.map Int.neg
-  | `Cast_exp ((_lp, _), _ty, _rp, sub_expr) ->
-      eval_enum_constant_expression sub_expr
-  | _ -> None
-
-and aux_enum_enumerator counter ((name_tok, explicit_value) : enumerator) =
+and aux_enum_enumerator local_env counter ((name_tok, explicit_value) : enumerator) =
+  let module CE = Const_eval in
   let name = token_to_string name_tok in
-  let computed_value, next_counter =
+  let computed_value, next_counter, local_env' =
     match explicit_value with
     | Some (_, expr) ->
-        begin match eval_enum_constant_expression expr with
-        | Some value -> (Some value, EnumKnown value)
-        | None ->
+        begin match CE.eval_c_expression ~local_env expr with
+        | Some (CE.VInt value) ->
+            CE.remember name (CE.VInt value);
+            (Some value, EnumKnown value,
+             CE.StrMap.add name (CE.VInt value) local_env)
+        | Some (CE.VFloat _) | None ->
             if !warn_unsupported then
               Printf.eprintf
                 "Warning: enum enumerator %s has a non-constant initializer; value left unknown\n"
                 name;
-            (None, EnumUnknown)
+            (None, EnumUnknown, local_env)
         end
     | None ->
         begin match counter with
-        | EnumInit -> (Some 0, EnumKnown 0)
+        | EnumInit ->
+            CE.remember name (CE.VInt 0);
+            (Some 0, EnumKnown 0,
+             CE.StrMap.add name (CE.VInt 0) local_env)
         | EnumKnown previous ->
             let value = previous + 1 in
-            (Some value, EnumKnown value)
-        | EnumUnknown -> (None, EnumUnknown)
+            CE.remember name (CE.VInt value);
+            (Some value, EnumKnown value,
+             CE.StrMap.add name (CE.VInt value) local_env)
+        | EnumUnknown -> (None, EnumUnknown, local_env)
         end
   in
-  ((name, computed_value), next_counter)
+  ((name, computed_value), next_counter, local_env')
 
-and aux_enum_collect counter acc = function
-  | [] -> (List.rev acc, counter)
+and aux_enum_collect local_env counter acc = function
+  | [] -> (List.rev acc, counter, local_env)
   | item :: rest ->
       begin match item with
       | `Enum_COMMA (enumerator, _) ->
-          let enumerator, counter = aux_enum_enumerator counter enumerator in
-          aux_enum_collect counter (enumerator :: acc) rest
+          let enumerator, counter, local_env =
+            aux_enum_enumerator local_env counter enumerator
+          in
+          aux_enum_collect local_env counter (enumerator :: acc) rest
       | `Prep_if_in_enum_list _ | `Prep_ifdef_in_enum_list _ | `Prep_call_COMMA _ ->
           if !warn_unsupported then
             Printf.printf
               "Not supported yet: preprocessor directives inside enum declarations\n";
-          aux_enum_collect counter acc rest
+          aux_enum_collect local_env counter acc rest
       end
 
 and aux_enum_fields name enum_list =
   let _, leading_items, trailing_item, _ = enum_list in
-  let enumerators, counter = aux_enum_collect EnumInit [] leading_items in
+  let local_env = Const_eval.StrMap.empty in
+  let enumerators, counter, local_env =
+    aux_enum_collect local_env EnumInit [] leading_items
+  in
   let enumerators =
     match trailing_item with
     | Some (`Enum enumerator) ->
-        let enumerator, _ = aux_enum_enumerator counter enumerator in
+        let enumerator, _, _ = aux_enum_enumerator local_env counter enumerator in
         enumerators @ [enumerator]
     | Some (`Prep_if_in_enum_list_no_comma _)
     | Some (`Prep_ifdef_in_enum_list_no_comma _)
