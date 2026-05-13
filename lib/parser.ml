@@ -1404,8 +1404,8 @@ and aux_top_level_block_item_non_preproc defines (item : block_item) =
   | `Attr_stmt attr_stmt -> aux_top_level_item_non_preproc defines (`Attr_stmt attr_stmt)
   | `Type_defi type_def -> aux_top_level_item_non_preproc defines (`Type_defi type_def)
   | `Empty_decl empty_decl -> aux_top_level_item_non_preproc defines (`Empty_decl empty_decl)
-  | `Prep_call prep_call -> aux_top_level_item_non_preproc defines (`Prep_call prep_call)
-  | `Prep_if _ | `Prep_ifdef _ | `Prep_incl _ | `Prep_def _ | `Prep_func_def _ ->
+  | `Prep_if _ | `Prep_ifdef _ | `Prep_incl _ | `Prep_def _ | `Prep_func_def _
+  | `Prep_call _ ->
       failwith "internal error: preprocessor block item reached non-preprocessor handler"
   | `Stmt _ ->
       if !warn_unsupported then begin

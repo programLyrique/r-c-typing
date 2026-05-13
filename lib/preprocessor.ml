@@ -469,6 +469,31 @@ and top_level_item_dispatch ~parser_callbacks ~top_level_item ~top_level_block_i
         Boilerplate.map_top_level_item () (`Prep_incl include_item) |> Raw_tree.to_channel stdout
       end;
       (defines, [])
+  | `Prep_call (directive_tok, arg_opt, _nl) ->
+      (* Tree-sitter emits [Prep_call] for any preprocessor directive it has no
+         specific grammar rule for: [#endif] stranded by mispaired
+         [#ifdef]/[#endif] (most commonly the [extern "C"] linkage guards seen
+         in CRAN headers), plus [#pragma], [#warning], [#error], [#line],
+         [#ident], [#include_next], [#undef], etc. Most of these are inert for
+         type checking and we drop them silently; [#undef] is the exception —
+         silently dropping it would leave a previously [#define]'d macro
+         visible for the rest of the file, so warn about it explicitly. *)
+      let directive =
+        U.token_to_string directive_tok
+        |> String.trim
+        |> fun s ->
+          if String.length s > 0 && s.[0] = '#'
+          then String.trim (String.sub s 1 (String.length s - 1))
+          else s
+      in
+      if directive = "undef" && !warn_unsupported then begin
+        let arg = match arg_opt with
+          | Some (_, s) -> " " ^ String.trim s
+          | None -> ""
+        in
+        Printf.printf "Not supported yet: #undef%s\n" arg
+      end;
+      (defines, [])
   | _ ->
       top_level_item defines item
 
@@ -484,6 +509,8 @@ and top_level_item_dispatch ~parser_callbacks ~top_level_item ~top_level_block_i
       top_level_item_dispatch ~parser_callbacks ~top_level_item ~top_level_block_item defines (`Prep_def prep_def)
   | `Prep_func_def prep_func_def ->
       top_level_item_dispatch ~parser_callbacks ~top_level_item ~top_level_block_item defines (`Prep_func_def prep_func_def)
+  | `Prep_call prep_call ->
+      top_level_item_dispatch ~parser_callbacks ~top_level_item ~top_level_block_item defines (`Prep_call prep_call)
     | _ ->
       top_level_block_item defines item
 
@@ -663,6 +690,66 @@ let%test "top_level_items selects branches for ifdef ifndef and elif" =
 let%test "top_level_items ignores non-system includes" =
   with_test_state (fun () ->
     preprocess_source_with_defines StrSet.empty "#include \"local.h\"\n" = [])
+
+
+let%test "top_level_items silently drops stray and unsupported directives" =
+  with_test_state (fun () ->
+    let source =
+      "#endif\n#pragma once\n#warning hello\n#error oops\n#line 42 \"x.c\"\n#ident \"$Id$\"\n"
+    in
+    preprocess_source_with_defines StrSet.empty source = [])
+
+
+let contains_substring ~haystack ~needle =
+  let nlen = String.length needle in
+  let hlen = String.length haystack in
+  if nlen = 0 then true
+  else if nlen > hlen then false
+  else
+    let rec scan i =
+      if i + nlen > hlen then false
+      else if String.sub haystack i nlen = needle then true
+      else scan (i + 1)
+    in
+    scan 0
+
+
+let capture_stdout f =
+  flush stdout;
+  let saved = Unix.dup Unix.stdout in
+  let read_fd, write_fd = Unix.pipe () in
+  Unix.dup2 write_fd Unix.stdout;
+  Unix.close write_fd;
+  let result = Fun.protect
+    ~finally:(fun () ->
+      flush stdout;
+      Unix.dup2 saved Unix.stdout;
+      Unix.close saved)
+    f
+  in
+  let buf = Buffer.create 256 in
+  let chunk = Bytes.create 1024 in
+  let rec drain () =
+    match Unix.read read_fd chunk 0 (Bytes.length chunk) with
+    | 0 -> ()
+    | n -> Buffer.add_subbytes buf chunk 0 n; drain ()
+    | exception Unix.Unix_error (Unix.EAGAIN, _, _) -> ()
+  in
+  Unix.set_nonblock read_fd;
+  drain ();
+  Unix.close read_fd;
+  (result, Buffer.contents buf)
+
+
+let%test "top_level_items warns on #undef while still dropping it" =
+  with_test_state (fun () ->
+    set_warn_unsupported true;
+    let items, output =
+      capture_stdout (fun () ->
+        preprocess_source_with_defines StrSet.empty "#undef FOO\n")
+    in
+    items = []
+    && contains_substring ~haystack:output ~needle:"Not supported yet: #undef FOO")
 
 
 let%test "system includes are parsed once and cached" =
