@@ -67,6 +67,8 @@ PRINTNAME: t(sym) -> p(chr)
 STRING_PTR_RO: t(v(chr)) -> *p(chr)
 STRING_PTR: t(v(chr)) -> *p(chr)
 
+Rprintf: any -> c_void // variadic
+
 // Environments
 R_GlobalEnv: env
 R_EmptyEnv: env
@@ -264,6 +266,7 @@ R_alloc: t(c_int, c_int) -> *any
 R_isort: t(*c_int_na, c_int) -> c_void
 shallow_duplicate: t('a) -> 'a
 duplicate: t('a) -> 'a
+Rf_match: (t(vec | null, v['n]('a), c_int) -> v['n](^int)) & (t(vec | null, null, c_int) -> v[0](^int)) 
 
 // Coercion
 coerceVector: t(any, 'a) -> 'a//TODO: not all coercions are possible!

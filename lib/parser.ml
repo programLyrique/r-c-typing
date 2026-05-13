@@ -40,6 +40,7 @@ let process_res res = res
 
 let empty_decl_prefix_macros = [
   "CURL_EXTERN";
+  "r_no_return";
 ]
 
 let is_c_ident_char = function
@@ -54,6 +55,30 @@ let token_matches_at source i token =
   && (i = 0 || not (is_c_ident_char source.[i - 1]))
   && (i + token_len = source_len || not (is_c_ident_char source.[i + token_len]))
 
+(* True iff position [i] in [source] is the macro-name slot of a [#define]
+   directive: scan back across whitespace, then across [#define], to a line
+   start (or to file start). Used to keep [sanitize_empty_decl_prefix_macros]
+   from stripping the token in lines like [#define r_no_return ...], which
+   would otherwise reshape the directive (e.g. turning it into a function-like
+   macro of whatever followed). *)
+let preceded_by_define source i =
+  let rec skip_ws j =
+    if j < 0 then j
+    else
+      match source.[j] with
+      | ' ' | '\t' -> skip_ws (j - 1)
+      | _ -> j
+  in
+  let directive = "#define" in
+  let dlen = String.length directive in
+  let after_ws = skip_ws (i - 1) in
+  let end_of_directive = after_ws + 1 in
+  let start_of_directive = end_of_directive - dlen in
+  start_of_directive >= 0
+  && String.sub source start_of_directive dlen = directive
+  && (start_of_directive = 0
+      || (let c = source.[start_of_directive - 1] in c = '\n' || c = ' ' || c = '\t'))
+
 let sanitize_empty_decl_prefix_macros source =
   let len = String.length source in
   let buf = Buffer.create len in
@@ -62,11 +87,11 @@ let sanitize_empty_decl_prefix_macros source =
       ()
     else
       match List.find_opt (token_matches_at source i) empty_decl_prefix_macros with
-      | Some token ->
+      | Some token when not (preceded_by_define source i) ->
           let token_len = String.length token in
           Buffer.add_string buf (String.make token_len ' ');
           loop (i + token_len)
-      | None ->
+      | _ ->
           Buffer.add_char buf source.[i];
           loop (i + 1)
   in
@@ -1553,6 +1578,28 @@ let%test "variadic declaration emits a Fundef ending in Vararg" =
            | A.Vararg :: _ -> true
            | _ -> false)
       | _ -> false)
+
+let%test "variadic function-like macro emits a Fundef ending in Vararg" =
+  let prev = !warn_unsupported in
+  Fun.protect
+    ~finally:(fun () -> set_warn_unsupported prev)
+    (fun () ->
+      set_warn_unsupported false;
+      let res =
+        parse_string
+          "int sink(const char* fmt, ...);\n\
+           #define wrap(FMT, ...) sink(FMT, __VA_ARGS__)\n"
+      in
+      match to_ast res with
+      | tops ->
+          List.exists
+            (function
+              | _, A.Fundef (_, "wrap", params, _) ->
+                  (match List.rev params with
+                   | A.Vararg :: _ -> true
+                   | _ -> false)
+              | _ -> false)
+            tops)
 
 let%test "quoted include is ignored instead of crashing" =
   let res =

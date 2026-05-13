@@ -161,47 +161,86 @@ and eval_preproc_binary defines (bin_expr : preproc_binary_expression) : int =
   | `Prep_exp_LTLT_prep_exp (l, _, r) -> eval l lsl eval r
   | `Prep_exp_GTGT_prep_exp (l, _, r) -> eval l asr eval r
 
-exception VariadicParameter of string
+let rec strip_outer_parens s =
+  let s = String.trim s in
+  let len = String.length s in
+  if len >= 2 && s.[0] = '(' && s.[len - 1] = ')' then
+    strip_outer_parens (String.sub s 1 (len - 2))
+  else s
+
+let is_c_identifier s =
+  let n = String.length s in
+  n > 0
+  && (match s.[0] with 'A'..'Z' | 'a'..'z' | '_' -> true | _ -> false)
+  && (let rec ok i =
+        i = n
+        ||
+        (match s.[i] with
+         | 'A'..'Z' | 'a'..'z' | '0'..'9' | '_' -> ok (i + 1)
+         | _ -> false)
+      in ok 1)
 
 let parse_preproc_function_def helpers (func_def : preproc_function_def) =
   let ((loc1, _), name, params, body, (loc2, _)) = func_def in
   let name = U.token_to_string name in
   let _, params, (end_param, _) = params in
-  let aux_prep_param (p : anon_choice_stmt_id_d3c4b5f) =
+  (* Mirror how C variadic parameters are handled in [Parser.aux_param]
+     ([`Vari_param _ -> A.Vararg]): a [...] in a function-like macro becomes
+     [A.Vararg] so the macro types as [any -> ret] (see
+     [PAst.param.Vararg]'s doc comment and [C_interface.is_variadic_params]).
+
+     When body parsing yields no usable [`Top_level_stmt] (most common cause:
+     simple wrapper macros like [#define KEEP(x) (x)] whose body is a bare
+     expression that tree-sitter cannot reparse standalone as a translation
+     unit), fall back to a declaration-style [Seq []] body. Combined with the
+     [--fallback-c-signature] pipeline default, the macro still binds at
+     [any -> any] instead of being dropped — preventing the cascade of
+     "unbound variable" errors at call sites. *)
+  let aux_prep_param (p : anon_choice_stmt_id_d3c4b5f) : A.param =
     match p with
-    | `Id (_, s) -> s
-    | `DOTDOTDOT (loc, _) ->
-        raise
-          (VariadicParameter
-             ("Not supported yet: variadic parameter in preprocessor function at "
-             ^ U.string_of_loc_start loc))
+    | `Id (_, s) -> A.Param (Ast.Any, s)
+    | `DOTDOTDOT _ -> A.Vararg
   in
   try
     let params =
       Option.fold ~none:[] ~some:(fun (p1, others) ->
         aux_prep_param p1 :: List.map (fun (_, p) -> aux_prep_param p) others
       ) params
-      |> List.map (fun p -> A.Param (Ast.Any, p))
     in
+    let param_names =
+      List.filter_map (function A.Param (_, n) -> Some n | A.Vararg -> None) params
+    in
+    let pos_body = U.locs_to_pos end_param loc2 in
+    let declaration_body = (pos_body, A.Seq []) in
+    let identity_body name_id = (pos_body, A.Return (Some (pos_body, A.Id name_id))) in
     let body = match body with
-        | None -> (U.locs_to_pos end_param loc2, A.Return None)
+      | None -> (pos_body, A.Return None)
       | Some (_loc3, comp) ->
-          let res = helpers.parse_string comp in
-          match res.program with
-          | None -> failwith ("Failed to parse preprocessor function body for " ^ name)
-          | Some tu ->
-              Printf.printf "List length: %d\n" (List.length tu);
-              let items = List.filter_map (fun item ->
-                match item with
-                | `Top_level_stmt stmt -> Some (helpers.top_level_statement stmt)
-                | _ ->
-                    if !warn_unsupported then begin
-                      Printf.printf "Not supported yet: top level item in define";
-                      Boilerplate.map_top_level_item () item |> Raw_tree.to_channel stdout
-                    end;
-                    None
-              ) tu in
-              List.hd items
+          (* Identity-macro detection: bodies like [(x)] or just [x] where
+             [x] is the (only) parameter — common pattern for [KEEP]-style
+             wrappers in rlang. Emit a real identity function so callers
+             type as [a -> a] rather than the looser [any -> any] fallback. *)
+          let stripped = strip_outer_parens comp in
+          if is_c_identifier stripped && List.mem stripped param_names then
+            identity_body stripped
+          else
+            let res = helpers.parse_string comp in
+            match res.program with
+            | None -> declaration_body
+            | Some tu ->
+                let items = List.filter_map (fun item ->
+                  match item with
+                  | `Top_level_stmt stmt -> Some (helpers.top_level_statement stmt)
+                  | _ ->
+                      if !warn_unsupported then begin
+                        Printf.printf "Not supported yet: top level item in define";
+                        Boilerplate.map_top_level_item () item |> Raw_tree.to_channel stdout
+                      end;
+                      None
+                ) tu in
+                (match items with
+                 | item :: _ -> item
+                 | [] -> declaration_body)
     in
     Some (U.locs_to_pos loc1 loc2, A.Fundef (Ast.Any, name, params, body))
   with
@@ -209,33 +248,10 @@ let parse_preproc_function_def helpers (func_def : preproc_function_def) =
       if !warn_unsupported then
         Printf.printf "Not supported yet: failed to parse preprocessor function body for %s: %s\n" name msg;
       None
-  | VariadicParameter msg ->
-      if !warn_unsupported then
-        Printf.printf "%s\n" msg;
-      None
 
 let parse_preproc_define (_callbacks : parser_callbacks) (prepoc : preproc_def) : A.top_level_unit option =
   let ((loc1, _), name_tok, value_opt, _nl) = prepoc in
   let name = U.token_to_string name_tok in
-  let rec strip_outer_parens s =
-    let s = String.trim s in
-    let len = String.length s in
-    if len >= 2 && s.[0] = '(' && s.[len - 1] = ')' then
-      strip_outer_parens (String.sub s 1 (len - 2))
-    else s
-  in
-  let is_c_identifier s =
-    let n = String.length s in
-    n > 0
-    && (match s.[0] with 'A'..'Z' | 'a'..'z' | '_' -> true | _ -> false)
-    && (let rec ok i =
-          i = n
-          ||
-          (match s.[i] with
-           | 'A'..'Z' | 'a'..'z' | '0'..'9' | '_' -> ok (i + 1)
-           | _ -> false)
-        in ok 1)
-  in
   let parse_char_literal s =
     let len = String.length s in
     if len = 3 && s.[0] = '\'' && s.[2] = '\'' then Some (A.CChar s.[1])
