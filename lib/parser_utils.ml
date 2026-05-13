@@ -53,7 +53,13 @@ let normalize_int_literal s =
 
 let parse_c_int_literal s =
   let core = s |> strip_int_suffix |> normalize_int_literal in
-  int_of_string core
+  try int_of_string core
+  with Failure _ ->
+    (* OCaml int is 63-bit, so values like 0xffffffffffffffff overflow
+       int_of_string. Reinterpret via Int64 with C's modular semantics
+       (the result is unspecified at the C level too, so any 63-bit
+       representative is acceptable for typing purposes). *)
+    Int64.to_int (Int64.of_string core)
 
 let decode_c_escape_sequence s =
   let fail () = failwith ("Invalid C escape sequence: " ^ s) in
@@ -194,6 +200,13 @@ let%test "parse_c_int_literal handles suffixes hexadecimal and octal" =
   parse_c_int_literal "42UL" = 42
   && parse_c_int_literal "0x10" = 16
   && parse_c_int_literal "077" = 63
+
+let%test "parse_c_int_literal handles 64-bit hex literals via Int64" =
+  (* Int64.to_int truncates modulo 2^63 on 64-bit OCaml: the high bit is
+     dropped. Exact value matters less than not raising. *)
+  parse_c_int_literal "0xffffffffffffffff" = -1
+  && parse_c_int_literal "0xffffffffffffffffu" = -1
+  && parse_c_int_literal "0x8000000000000000" = 0
 
 
 let%test "decode_c_escape_sequence handles simple hexadecimal unicode and octal escapes" =

@@ -281,9 +281,16 @@ let parse_preproc_define (_callbacks : parser_callbacks) (prepoc : preproc_def) 
               Some (U.loc_to_pos loc1, A.Define (name, c))
           | None -> None
         in
+        let mirror_const_eval = function
+          | A.CInt i -> Const_eval.remember name (Const_eval.VInt i)
+          | A.CFloat f -> Const_eval.remember name (Const_eval.VFloat f)
+          | _ -> ()
+        in
         begin try
           match parse_define_value raw_value with
-          | Some c -> Some (U.loc_to_pos loc1, A.Define (name, c))
+          | Some c ->
+              mirror_const_eval c;
+              Some (U.loc_to_pos loc1, A.Define (name, c))
           | None ->
               begin match try_const_eval () with
               | Some _ as r -> r
