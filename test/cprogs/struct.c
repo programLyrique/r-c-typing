@@ -104,3 +104,18 @@ AP *ap_create_problem(double *t, int n)
     p->f = NULL;
     return p;
 }
+
+/* Regression for an upstream sstt Tallying.Unsat that previously escaped
+ * Reconstruction.refine. Minimised from utf8's utf8lite_text_iter_make:
+ * the three assignments below — pointer-field copy, pointer + sibling-int,
+ * sibling-int copy — together produced the unsatisfiable constraint set
+ * that the local handlers in tallying.ml did not catch.
+ */
+struct UnsatA { int *p; int a; };
+struct UnsatB { int *p; int x; };
+
+void unsat_iter(struct UnsatB *b, struct UnsatA *a) {
+    b->p = a->p;
+    b->p = b->p + a->a;
+    b->x = a->a;
+}

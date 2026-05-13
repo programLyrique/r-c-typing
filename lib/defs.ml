@@ -133,11 +133,11 @@ let register_dynamic_binding ?(mut = false) name ty : Variable.t * Ty.t =
         if not mut then false
         else
           match MVariable.kind v with
-          | MVariable.AnnotMut existing -> not (Ty.equiv existing ty)
+          | MVariable.AnnotMut existing -> not (GTy.equiv existing (GTy.mk ty))
           | _ -> true
       in
       if needs_mutable_rebind then begin
-        let v = MVariable.create (MVariable.AnnotMut ty) (Some name) in
+        let v = MVariable.create (MVariable.AnnotMut (GTy.mk ty)) (Some name) in
         Hashtbl.replace dynamic name (v, ty);
         v, ty
       end else begin
@@ -145,7 +145,7 @@ let register_dynamic_binding ?(mut = false) name ty : Variable.t * Ty.t =
         v, ty
       end
   | None ->
-      let kind = if mut then MVariable.AnnotMut ty else Immut in
+      let kind = if mut then MVariable.AnnotMut (GTy.mk ty) else Immut in
       let v = MVariable.create kind (Some name) in
       Hashtbl.add dynamic name (v, ty);
       v, ty

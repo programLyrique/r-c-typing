@@ -14,7 +14,7 @@ isFunction: ((any -> any) -> c_true) & (~(any -> any) -> c_false)
 
 isPrimitive: ((any -> any) -> c_true) & (env | lang | list | null | sym | vec -> c_false)
 
-isList: (env | list | sym | vec | (any -> any) -> c_false) & (lang | (null | vec & ~chr & ~clx & ~dbl & ~int & ~lgl & ~raw) -> c_true)
+isList: (env | list | sym | vec | (any -> any) -> c_false) & (lang | null -> c_true)
 
-isNewList: (env | lang | sym | vec | (any -> any) -> c_false) & (list | (null | vec & ~chr & ~clx & ~dbl & ~int & ~lgl & ~raw) -> c_true)
+isNewList: (env | lang | sym | vec | (any -> any) -> c_false) & (list | null -> c_true)
 

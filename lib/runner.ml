@@ -227,7 +227,9 @@ let infer_ast ?fallback visible opts (idenv, env, decl) (ast : Ast.e) =
       (* Refinement/reconstruction occasionally raises Not_found when an
          identifier referenced in the body isn't bound in the env (e.g. R C
          API macros, file-scope globals). Treat as untypeable so the rest of
-         the package still gets processed. *)
+         the package still gets processed.
+         Fixed upstream; keep this catcher as a safety net for older
+         mlsem/sstt pins. *)
       Format.printf "%s:@.untypeable: internal error: Not_found@." name;
       if opts.debug then
         Format.eprintf "%s@." (Printexc.get_backtrace ()) ;
@@ -240,6 +242,29 @@ let infer_ast ?fallback visible opts (idenv, env, decl) (ast : Ast.e) =
          and similar internal invariants. Treat as untypeable so the function
          is reported by name and the rest of the package still gets processed. *)
       Format.printf "%s:@.untypeable: invalid mlsem AST: %s@." name msg;
+      log_timing ();
+      apply_fallback ()
+  | exn when
+      let slot = Printexc.exn_slot_name exn in
+      let has_sub s sub =
+        let ls = String.length s and lsub = String.length sub in
+        let rec loop i =
+          if i + lsub > ls then false
+          else if String.sub s i lsub = sub then true
+          else loop (i + 1)
+        in
+        loop 0
+      in
+      has_sub slot "Tallying" && has_sub slot "Unsat"
+    ->
+      (* Upstream sstt's [Sstt__Tallying.Make(VS).Unsat] occasionally escapes
+         [Reconstruction.refine] instead of being caught locally inside
+         tallying.ml. Treat as untypeable so the rest of the package still
+         gets processed.
+         Fixed upstream; keep this catcher as a safety net for older
+         mlsem/sstt pins. *)
+      Format.printf "%s:@.untypeable: mlsem tallying Unsat (%s)@." name
+        (Printexc.to_string exn);
       log_timing ();
       apply_fallback ()
 
