@@ -5,8 +5,8 @@ expr = {lang|sym}
 any_r_not_vec = env | null | sym | list | lang | (any -> any) | expr
 any_sexp = any_r_not_vec | vec
 
-error: empty -> any
-fail: any -> empty
+error: any -> empty
+fail: empty -> any
 
 isInteger: (t(v(int)) -> c_true) & (t(~v(int)) -> c_false)
 isReal: (t(v(dbl)) -> c_true) & (t(~v(dbl)) -> c_false)
@@ -28,6 +28,7 @@ envlength: t(env) -> c_int
 
 // there is also a special case for VECSXP (list) that is coded in OCaml
 allocVector: (t('a & prim, c_int('b)) -> v[int('b)]('a)) & (t(list, 'b) -> list)
+R_allocResizableVector: (t('a & prim, c_int('b)) -> v[int('b)]('a)) & (t(list, 'b) -> list) // we might have to support the special case as for the function above, but not the case yet
 allocSExp: t('a & any_r_not_vec) -> 'a
 install: t(c_string) -> sym
 
@@ -35,7 +36,7 @@ install: t(c_string) -> sym
 mkNamed: (t('a & prim, *c_string) -> v('a)) & (t(list, *c_string) -> list)
 
 VECTOR_ELT: t({ 'r}, c_int) -> 'r
-SET_VECTOR_ELT: t({ 'r}, c_int, 'a) -> { 'r | 'a}
+SET_VECTOR_ELT: (t({ 'r}, c_int, 'a) -> { 'r | 'a}) & (t(expr, c_int, lang | sym) -> expr)
 
 isVector: (t(v('a) | expr | list) -> c_true) & (t(any_r_not_vec \ (list & expr)) -> c_false)
 isVectorList: (t(list | expr) -> c_true) & (t(v('a) | any_r_not_vec \ (list | expr)) -> c_false)

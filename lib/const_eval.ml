@@ -231,6 +231,16 @@ let eval_define_string (raw : string) : value option =
   | _ -> None
 
 
+(* Plug ourselves into [PAst]'s enum-int lookup hook. [PAst.process_call]
+   uses it to rewrite SEXPTYPE-int arguments to their named binding (e.g.
+   [Rf_allocVector(R_TYPE_integer, n)] -> [Rf_allocVector(INTSXP, n)]). *)
+let () =
+  A.set_enum_int_lookup (fun name ->
+    match lookup name with
+    | Some (VInt n) -> Some n
+    | _ -> None)
+
+
 let%test "VInt arithmetic" =
   let raw_add = eval_define_string "1 + 2" in
   let raw_shift = eval_define_string "1 << 3" in

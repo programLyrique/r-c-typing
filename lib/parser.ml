@@ -926,8 +926,9 @@ and aux_do_statement (do_stmt: do_statement) =
   let loop_body = (pos, A.Seq [body_ast; cond_check]) in
   (pos, A.While (true_cond, loop_body))
 
-and aux_compound_stmt (stmt: compound_statement) = 
+and aux_compound_stmt (stmt: compound_statement) =
   let (l1,_),block_items,(l2,_) = stmt in
+  let block_items = Preprocessor.expand_block_items block_items in
   let stmts = List.map aux_block_item block_items in
   (locs_to_pos l1 l2, A.Seq stmts)
 
@@ -1192,6 +1193,7 @@ and aux_block_item (item : block_item) =
 
 and aux_body body =
   let (l1,_),block_items,(l2,_) = body in
+  let block_items = Preprocessor.expand_block_items block_items in
   let stmts = List.map aux_block_item block_items in
   if Utils.is_singleton stmts then
     List.hd stmts

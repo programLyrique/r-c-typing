@@ -189,6 +189,39 @@ let has_builtin str =
 end
 
 
+(* SEXPTYPE numeric values from R's [Rinternals.h], mapped to the
+   [BuiltinVar] binding name we register in [BuiltinVar.all] above. Used
+   by [PAst.process_call] to rewrite an integer SEXPTYPE argument back to
+   its symbolic name (e.g. [Rf_allocVector(13, n)] is rewritten to
+   [Rf_allocVector(INTSXP, n)]) so the call matches the [prim] type-tag
+   domain of the [allocVector] signature instead of failing as an
+   untypeable application. Values outside this table are left alone; the
+   call will then fail downstream, which mirrors the runtime check
+   [allocVector] does on the type argument. *)
+let sexptype_name_of_int = function
+  | 0 -> Some "NILSXP"
+  | 1 -> Some "SYMSXP"
+  | 2 -> Some "LISTSXP"
+  | 3 -> Some "CLOSXP"
+  | 4 -> Some "ENVSXP"
+  | 6 -> Some "LANGSXP"
+  | 7 -> Some "SPECIALSXP"
+  | 8 -> Some "BUILTINSXP"
+  | 9 -> Some "CHARSXP"
+  | 10 -> Some "LGLSXP"
+  | 13 -> Some "INTSXP"
+  | 14 -> Some "REALSXP"
+  | 15 -> Some "CPLXSXP"
+  | 16 -> Some "STRSXP"
+  | 17 -> Some "DOTSXP"
+  | 18 -> Some "ANYSXP"
+  | 19 -> Some "VECSXP"
+  | 20 -> Some "EXPRSXP"
+  | 22 -> Some "EXTPTRSXP"
+  | 24 -> Some "RAWSXP"
+  | _ -> None
+
+
 (* For the new type algebra *)
 let load_parsed_types () =
   let types_dir = Type_parser.find_types_dir () in

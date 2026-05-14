@@ -28,6 +28,18 @@ let set_predefined_defines defines =
 let current_predefined_defines () =
   !predefined_defines
 
+(* Names of every [#define] / [#define f(...)] seen during the top-level walk,
+   accumulated so the in-body preprocessor expander can evaluate
+   [#if defined(NAME)] / [#ifdef NAME] for file-scope macros. *)
+let seen_define_names : StrSet.t ref = ref StrSet.empty
+
+let reset_seen_define_names () = seen_define_names := StrSet.empty
+
+let remember_seen_define_name name =
+  seen_define_names := StrSet.add name !seen_define_names
+
+let known_defines () = StrSet.union !predefined_defines !seen_define_names
+
 (** TEMPORARY WORKAROUND: preloaded string values for a few macros we can't
     currently resolve through normal preprocessing. These are either (a) in
     system headers we don't parse (e.g. [<Rinternals.h>], [<inttypes.h>]'s
@@ -160,6 +172,50 @@ and eval_preproc_binary defines (bin_expr : preproc_binary_expression) : int =
   | `Prep_exp_LT_prep_exp (l, _, r) -> if eval l < eval r then 1 else 0
   | `Prep_exp_LTLT_prep_exp (l, _, r) -> eval l lsl eval r
   | `Prep_exp_GTGT_prep_exp (l, _, r) -> eval l asr eval r
+
+(* Flatten [#if]/[#ifdef]/[#elif]/[#else] inside a [block_item list] by picking
+   the active branch using [eval_preproc_expression] and [known_defines]. The
+   parser calls this on function-body block lists so each [#if/#else] inside
+   a function body is reduced to the single set of statements it would expand
+   to under the C preprocessor, rather than being silently substituted with a
+   [CNull] body (which is what happens if the unresolved directive is fed to
+   the body inference). [#define]/[#undef]/[#include] inside a function body
+   are not handled here — they're rare and stay as inert [block_item]s that
+   [aux_block_item] already drops. *)
+let rec expand_block_items items =
+  List.concat_map expand_block_item items
+
+and expand_block_item (item : block_item) : block_item list =
+  match item with
+  | `Prep_if (_, condition, _, body, else_opt, _) ->
+      let value = eval_preproc_expression (known_defines ()) condition in
+      if value <> 0 then expand_block_items body
+      else expand_else_branch else_opt
+  | `Prep_ifdef (directive, name_tok, body, else_opt, _) ->
+      let name = U.token_to_string name_tok in
+      let is_defined = StrSet.mem name (known_defines ()) in
+      let take_body =
+        if preproc_ifdef_is_ifndef directive then not is_defined else is_defined
+      in
+      if take_body then expand_block_items body
+      else expand_else_branch else_opt
+  | other -> [other]
+
+and expand_else_branch = function
+  | None -> []
+  | Some (`Prep_else (_, body)) -> expand_block_items body
+  | Some (`Prep_elif_5b2d46e (_, condition, _, body, else_opt)) ->
+      let value = eval_preproc_expression (known_defines ()) condition in
+      if value <> 0 then expand_block_items body
+      else expand_else_branch else_opt
+  | Some (`Prep_elif_b56056c (directive, name_tok, body, else_opt)) ->
+      let name = U.token_to_string name_tok in
+      let is_defined = StrSet.mem name (known_defines ()) in
+      let take_body =
+        if preproc_elifdef_is_ifndef directive then not is_defined else is_defined
+      in
+      if take_body then expand_block_items body
+      else expand_else_branch else_opt
 
 let rec strip_outer_parens s =
   let s = String.trim s in
@@ -460,6 +516,7 @@ and top_level_item_dispatch ~parser_callbacks ~top_level_item ~top_level_block_i
         (defines, [])
       else
         let defines = StrSet.add name defines in
+        remember_seen_define_name name;
         remove_define_constant name;
         A.remove_define_alias name;
         let item = parse_preproc_define parser_callbacks prepoc_def in
@@ -473,6 +530,8 @@ and top_level_item_dispatch ~parser_callbacks ~top_level_item ~top_level_block_i
          | None -> []
          | Some item -> [item])
   | `Prep_func_def func_def ->
+      let (_, name_tok, _, _, _) = func_def in
+      remember_seen_define_name (U.token_to_string name_tok);
       (defines,
        match parse_preproc_function_def parser_callbacks func_def with
        | None -> []
@@ -536,6 +595,7 @@ let with_test_state f =
   let saved_include_dirs = !include_dirs in
   let saved_define_constants = !define_constants in
   let saved_const_eval = !(Const_eval.constants) in
+  let saved_seen_defines = !seen_define_names in
   Fun.protect
     ~finally:(fun () ->
       warn_unsupported := saved_warn;
@@ -543,6 +603,7 @@ let with_test_state f =
       include_dirs := saved_include_dirs;
       define_constants := saved_define_constants;
       Const_eval.constants := saved_const_eval;
+      seen_define_names := saved_seen_defines;
       reset_processed_headers ();
       A.reset_define_aliases ())
     (fun () ->
@@ -551,6 +612,7 @@ let with_test_state f =
       A.reset_define_aliases ();
       reset_define_constants ();
       Const_eval.reset ();
+      reset_seen_define_names ();
       f ())
 
 

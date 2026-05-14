@@ -4,12 +4,12 @@ SEXP larger_than_3(SEXP v)
 {
     if (!isInteger(v) || LENGTH(v) != 1)
     {
-        error("Input must be a single integer"); // empty -> any
+        fail("Input must be a single integer"); // empty -> any
     }
     int val = INTEGER(v)[0]; // int[1] -> C_int
     if (val == 3)
     {                                        // (C_int,C_int) -> C_bool
-        fail("Input must be larger than 3"); // any -> empty
+        error("Input must be larger than 3"); // any -> empty
     }
     return v;
 }
@@ -18,7 +18,7 @@ SEXP size_bound(SEXP v)
 {
     if (LENGTH(v) > 10)
     {
-        error("Input length must be at most 10");
+        fail("Input length must be at most 10");
     }
     return v;
 }
@@ -33,7 +33,7 @@ int cond_on_int(int v)
 {
     if (v)
     {
-        error("Input must be zero");
+        fail("Input must be zero");
     }
     return v;
 }
@@ -42,26 +42,26 @@ int isNull(int *ptr)
 {
     if (!ptr)
     {
-        error("Input pointer must be NULL");
+        fail("Input pointer must be NULL");
     }
     return 0;
 }
 
 SEXP C_escape_chars(SEXP x) {
   if (!isString(x))
-    error("x must be a character vector.");
+    fail("x must be a character vector.");
 }
 SEXP C_escape_chars_one(SEXP str) {
   // This is just a stub for testing the type of the return value of this function
 //   if(TYPEOF(str) != CHARSXP) {
-//     error("Expected a single charsxp");
+//     fail("Expected a single charsxp");
 //   }
   return str;
 }
 
 SEXP C_escape_chars2(SEXP x) {
   if (!isString(x))
-    error("x must be a character vector.");
+    fail("x must be a character vector.");
   if (x == R_NilValue || Rf_length(x) == 0)
     return x;
 

@@ -35,7 +35,7 @@ SEXP incr_real(SEXP a)
 {
     if (!isReal(a) || LENGTH(a) != 1)
     {
-        error("Input must be a single real"); // Ty.empty -> Ty.any
+        fail("Input must be a single real"); // Ty.empty -> Ty.any
     }
     double val = REAL(a)[0];                        // real[1] -> C_double
     val = val + 1.0;                                // (C_double,C_double) -> C_double
@@ -96,7 +96,7 @@ SEXP r_plus_scalar_strict(SEXP a, SEXP b)
     }
     else
     { // removing that will add one overload for plus
-        error("Inputs must be both integer or both real");
+        fail("Inputs must be both integer or both real");
     }
 }
 
@@ -123,7 +123,7 @@ SEXP r_plus_scalar(SEXP a, SEXP b)
     }
     else
     { // removing that will add one overload for plus
-        error("Inputs must be both integer or both real");
+        fail("Inputs must be both integer or both real");
     }
 }
 

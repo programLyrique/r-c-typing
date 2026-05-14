@@ -375,3 +375,14 @@
  (deps    cprogs/const_fold.c cprogs/const_fold.expected)
  (action  (diff cprogs/const_fold.expected const_fold.output)))
 
+(rule
+ (alias   runtest)
+ (deps    (glob_files ../types/*.ty) cprogs/sexp_alloc.c)
+ (action  (with-stdout-to sexp_alloc.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/sexp_alloc.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/sexp_alloc.c cprogs/sexp_alloc.expected)
+ (action  (diff cprogs/sexp_alloc.expected sexp_alloc.output)))
+

@@ -18,6 +18,6 @@ SEXP mk_value(SEXP a)
     }
     else
     {
-        error("Input must be integer or an environment");
+        fail("Input must be integer or an environment");
     }
 }

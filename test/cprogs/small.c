@@ -20,7 +20,7 @@ SEXP change_int(SEXP result) {
 
 SEXP errorIntScalar(SEXP a) {
     if (!isInteger(a) || LENGTH(a) != 1) {
-        error("Input must be a single integer"); // Ty.empty -> Ty.any
+        fail("Input must be a single integer"); // Ty.empty -> Ty.any
     }
 }
 
@@ -43,14 +43,14 @@ int isIntScalar(SEXP a) {
 SEXP check() {
     SEXP res = make_scalar();
     if(!isIntScalar(res)) {
-        error("Should be an integer scalar");
+        fail("Should be an integer scalar");
     }
     return 0;
 }
 
 SEXP incr(SEXP a) {
     if (!isInteger(a) || LENGTH(a) != 1) {
-        error("Input must be a single integer"); // Ty.empty -> Ty.any
+        fail("Input must be a single integer"); // Ty.empty -> Ty.any
     }
     int val = INTEGER(a)[0]; // int[1] -> C_int
     val = val + 1; // (C_int,C_int) -> C_int

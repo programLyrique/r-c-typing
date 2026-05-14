@@ -352,7 +352,25 @@ let mk_e env eid expr =
 let fresh_e env expr =
   mk_e env (Eid.unique ()) expr
 
-let rec aux_const c = 
+(* Functions whose first positional argument is a SEXPTYPE tag. When the
+   first arg is a literal int (or an enum constant the registered lookup
+   knows the value of), [process_call] rewrites it to the corresponding
+   SEXPTYPE [Id] so the call matches the [prim]-tag domain of the
+   signatures in [types/base.ty]. Includes the [Rf_]-prefixed alias
+   variants because the call site may use either name. *)
+let sexptype_first_arg_callees =
+  StrSet.of_list
+    ["allocVector"; "Rf_allocVector"; "R_allocResizableVector"]
+
+(* Lookup hook for resolving an identifier to its integer value (typically
+   an enum constant). [Const_eval] installs the real implementation at
+   library init time; [process_call] consults it when rewriting SEXPTYPE
+   arguments. Kept as a ref to avoid a [PAst] -> [Const_eval] -> ... ->
+   [PAst] module cycle. *)
+let enum_int_lookup : (string -> int option) ref = ref (fun _ -> None)
+let set_enum_int_lookup f = enum_int_lookup := f
+
+let rec aux_const c =
   match c with 
   | CChar c -> Ast.CChar c
   | CStr s -> Ast.CStr s 
@@ -513,6 +531,30 @@ and process_call env f args =
       let zero = (arg_pos, Const (CInt 0)) in
       let cast = (arg_pos, Cast (Ast.Typeref name, zero)) in
       Ast.Call (aux_e env f, [aux_e env cast])
+  | (_, Id fname), first :: rest
+    when StrSet.mem fname sexptype_first_arg_callees ->
+      (* The first argument of these allocator/coerce functions is a SEXPTYPE
+         tag. Source code often passes the numeric value directly (a literal
+         or an enum constant like vctrs's [R_TYPE_integer = 13]), which the
+         type system sees as a singleton integer ([c(13)]) and rejects
+         against the [prim] domain of [allocVector]'s signature. Rewrite
+         that first arg to the corresponding [INTSXP]/[REALSXP]/... [Id]
+         when we recognise the integer; leave it alone otherwise so the
+         downstream type error still surfaces. *)
+      let arg_as_int = function
+        | (_, Const (CInt n)) -> Some n
+        | (_, Id name) -> !enum_int_lookup name
+        | _ -> None
+      in
+      let first =
+        match arg_as_int first with
+        | None -> first
+        | Some n ->
+            (match Defs.sexptype_name_of_int n with
+             | None -> first
+             | Some sxname -> (fst first, Id sxname))
+      in
+      Ast.Call (aux_e env f, List.map (aux_e env) (first :: rest))
   | _ -> Ast.Call (aux_e env f, List.map (aux_e env) args) in
   e
 and transform env (pos, topl_unit) = 

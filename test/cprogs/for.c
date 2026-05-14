@@ -2,7 +2,7 @@
 
 SEXP sum_all(SEXP v) {
     if(!isReal(v)) {
-        error("Input must be a real vector");
+        fail("Input must be a real vector");
     }
     int n = LENGTH(v);
     double total = 0.0;
