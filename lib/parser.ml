@@ -167,7 +167,7 @@ let rec placeholder_const_of_ctype ty =
   | Ast.Float -> A.CFloat 0.
   | Ast.Char -> A.CChar '\000'
   | Ast.Bool -> A.CBool false
-  | Ast.Ptr _ | Ast.SEXP | Ast.Any -> A.CNull
+  | Ast.Ptr _ | Ast.SEXP | Ast.Any | Ast.FunPtr _ -> A.CNull
   | Ast.Array (elem_ty, _) -> A.CArray [placeholder_const_of_ctype elem_ty]
   | Ast.Struct _ | Ast.Union _ | Ast.Enum _ | Ast.Typeref _ -> A.CNull
 
@@ -186,27 +186,28 @@ type enum_counter =
   | EnumUnknown
 
 let rec aux_struct_fields name fields =
-  (* The [bool] reports whether a function declarator was seen anywhere in
-     the chain. When true, the caller approximates the field's base type as
-     [Ast.Any] (so the type becomes [Ptr ... (Ptr Any)]), since function
-     pointers are not modelled as value pointers in our type system. *)
-  let rec aux_field_decl_name (decl : field_declarator) : int * string * bool =
+  (* The third return is [Some (params, variadic)] when a function declarator
+     was seen, capturing the function-pointer signature so the caller can
+     build an [Ast.FunPtr] field. In that case the returned [int] applies to
+     the return type (outer [Poin_field_decl] wrappers); the inner
+     parenthesized-pointer level is discarded because it just signals
+     function-pointer-ness, not a return-type indirection. *)
+  let rec aux_field_decl_name (decl : field_declarator)
+      : int * string * (Ast.ctype list * bool) option =
     match decl with
-    | `Id (_loc, s) -> (0, s, false)
+    | `Id (_loc, s) -> (0, s, None)
     | `Poin_field_decl (_, _, _, _, d) ->
-        let level, field_name, is_fp = aux_field_decl_name d in
-        (level + 1, field_name, is_fp)
+        let level, field_name, fp = aux_field_decl_name d in
+        (level + 1, field_name, fp)
     | `Array_field_decl (d, _, _, _, _) ->
-        let level, field_name, is_fp = aux_field_decl_name d in
-        (level + 1, field_name, is_fp)
+        let level, field_name, fp = aux_field_decl_name d in
+        (level + 1, field_name, fp)
     | `Paren_field_decl (_, _, d, _) -> aux_field_decl_name d
     | `Attr_field_decl (d, _) -> aux_field_decl_name d
-    | `Func_field_decl (inner_decl, _params) ->
-        if !warn_unsupported then
-          Printf.eprintf
-            "Not supported yet: function pointer field; approximating as an opaque pointer\n";
-        let level, field_name, _ = aux_field_decl_name inner_decl in
-        (level, field_name, true)
+    | `Func_field_decl (inner_decl, param_list) ->
+        let _, field_name, _ = aux_field_decl_name inner_decl in
+        let param_tys, variadic = funptr_params_of_list param_list in
+        (0, field_name, Some (param_tys, variadic))
   in
   let aux_field_decl (field_decl : field_declaration_declarator) =
     let first_decl, first_bits, other_decls = field_decl in
@@ -239,9 +240,14 @@ let rec aux_struct_fields name fields =
                                Printf.printf
                                  "Not supported yet: bitfield width is ignored in struct field declaration\n"
                            | Some _ -> ());
-                           let level, field_name, is_fp = aux_field_decl_name decl in
-                           let base = if is_fp then Ast.Any else base_ty in
-                           (Ast.build_ptr level base, field_name))
+                           let level, field_name, fp = aux_field_decl_name decl in
+                           let ty = match fp with
+                             | None -> Ast.build_ptr level base_ty
+                             | Some (params, variadic) ->
+                                 let ret_ty = Ast.build_ptr level base_ty in
+                                 Ast.FunPtr (ret_ty, params, variadic)
+                           in
+                           (ty, field_name))
               in
               collect (List.rev_append fields_from_item acc) rest
           | `Prep_def _ | `Prep_func_def _ | `Prep_call _
@@ -405,14 +411,30 @@ and aux_global_linkage decl_spec =
 
 (* For pointers, arrays, parenthesized and function-style abstract declarators.
    Arrays decay to pointers in expression contexts, so they add one pointer
-   level like [Abst_poin_decl]. For function declarators we cannot model the
-   function type itself, so we fall back to [Ast.Any] and rely on surrounding
-   pointer/array wrappers to provide the correct level of indirection. *)
-let rec aux_abstract_declarator (base_type: Ast.ctype) (abs_decl: abstract_declarator option) =
+   level like [Abst_poin_decl]. Function-pointer abstract declarators —
+   "T (*)(P1, P2, …)" used in casts and sizeof — match the parenthesized
+   pointer pattern below and produce an [Ast.FunPtr]; other [Abst_func_decl]
+   shapes fall back to [Ast.Any]. *)
+and aux_abstract_declarator (base_type: Ast.ctype) (abs_decl: abstract_declarator option) =
   let aux = function
-    | `Abst_poin_decl (_,_,_,decl) -> Ast.Ptr (aux_abstract_declarator base_type decl)
+    | `Abst_poin_decl (_,_,_,inner) ->
+        let inner_ty = aux_abstract_declarator base_type inner in
+        (* If the inner declarator already resolved to a function pointer,
+           the outer [*] applies to the *return* type (e.g. "T* (*)(…)"
+           parses as [Abst_poin_decl] around an [Abst_func_decl]). *)
+        (match inner_ty with
+         | Ast.FunPtr (ret, params, variadic) ->
+             Ast.FunPtr (Ast.Ptr ret, params, variadic)
+         | _ -> Ast.Ptr inner_ty)
     | `Abst_array_decl (decl,_,_,_,_) -> Ast.Ptr (aux_abstract_declarator base_type decl)
     | `Abst_paren_decl (_, _, decl, _) -> aux_abstract_declarator base_type (Some decl)
+    | `Abst_func_decl (Some (`Abst_paren_decl (_, _, `Abst_poin_decl _, _)), param_list) ->
+        (* Function-pointer abstract declarator: "T (*)(params)". The inner
+           parenthesized pointer marks function-pointer-ness; [base_type]
+           (plus any wrappers from outer [Abst_poin_decl]s the caller will
+           apply) is the return type. *)
+        let param_tys, variadic = funptr_params_of_list param_list in
+        Ast.FunPtr (base_type, param_tys, variadic)
     | `Abst_func_decl (decl, _) ->
         if !warn_unsupported then
           Printf.eprintf
@@ -422,14 +444,14 @@ let rec aux_abstract_declarator (base_type: Ast.ctype) (abs_decl: abstract_decla
   Option.fold ~none:base_type
     ~some:aux abs_decl
 
-let aux_type_descriptor (type_desc: type_descriptor) : Ast.ctype =
+and aux_type_descriptor (type_desc: type_descriptor) : Ast.ctype =
   let (_qualifiers1, type_spec, _qualifiers2, abstract_decl) = type_desc in
   let base_type = aux_type_spec type_spec in
   (* For now, ignore qualifiers and abstract declarators
      TODO: Handle const, volatile, pointers, arrays, etc. *)
   aux_abstract_declarator base_type abstract_decl
 
-let rec aux_decl_name (decl : declarator) : int * string =
+and aux_decl_name (decl : declarator) : int * string =
   match decl with
   | `Id tok -> (0, token_to_string tok)
   | `Func_decl (decl, _, _, _) ->  aux_decl_name decl
@@ -442,90 +464,153 @@ let rec aux_decl_name (decl : declarator) : int * string =
 
 (* True when [decl] is a parenthesized-pointer declarator wrapping any name,
    i.e. the function-pointer marker "(\*name)". *)
-let rec is_parenthesized_pointer_declarator (decl : declarator) =
+and is_parenthesized_pointer_declarator (decl : declarator) =
   match decl with
   | `Paren_decl (_, _, `Poin_decl _, _) -> true
   | `Attr_decl (decl, _) -> is_parenthesized_pointer_declarator decl
   | _ -> false
 
-(* If [decl] is the declarator of a function-pointer global, return the inner
-   identifier name. Recognised shapes are
-   [Poin_decl* (Func_decl (Paren_decl (Poin_decl _), ...))]
-   and the same with [Attr_decl] wrappers. The outer [Poin_decl]s come from
-   pointer-typed return values like [r_obj\* (\*fp)(...)]. *)
-let rec function_pointer_global_name (decl : declarator) =
-  match decl with
-  | `Poin_decl (_, _, _, _, inner) -> function_pointer_global_name inner
-  | `Attr_decl (inner, _) -> function_pointer_global_name inner
-  | `Func_decl (inner, _, _, _) when is_parenthesized_pointer_declarator inner ->
-      (try Some (snd (aux_decl_name inner)) with _ -> None)
-  | _ -> None
-
-(* If [decl] is the [declaration_declarator] of a function-pointer global
-   declaration without initialiser, return the inner identifier name. The
-   recognised shapes are
-   [Func_decl_decl(Paren_decl(Poin_decl _), ...)]  for "(*fp)(...)" and
-   [Poin_decl(_, _, _, _, Func_decl(Paren_decl(Poin_decl _), ...))] for
-   pointer-returning forms like "r_obj* (*fp)(...)". *)
-let function_pointer_declaration_declarator_name
-    (decl : declaration_declarator) =
-  match decl with
-  | `Func_decl_decl (name_decl, _, _, _)
-    when is_parenthesized_pointer_declarator name_decl ->
-      (try Some (snd (aux_decl_name name_decl)) with _ -> None)
-  | `Poin_decl (_, _, _, _, inner) -> function_pointer_global_name inner
-  | _ -> None
-
-let rec aux_type_declarator (td : type_declarator) : int * string =
+(* Third return is [Some (params, variadic)] when the declarator includes a
+   function declarator (typedef of a function-pointer type). The [int] then
+   counts only the outer pointer wrappers, which apply to the return type. *)
+and aux_type_declarator (td : type_declarator)
+    : int * string * (Ast.ctype list * bool) option =
   match td with
-  | `Id tok -> (0, token_to_string tok)
+  | `Id tok -> (0, token_to_string tok, None)
   | `Poin_type_decl (_, _, _, _, inner) ->
-      let (level, name) = aux_type_declarator inner in (level + 1, name)
+      let (level, name, fp) = aux_type_declarator inner in (level + 1, name, fp)
   | `Array_type_decl (inner, _, _, _, _) ->
-      let (level, name) = aux_type_declarator inner in (level + 1, name)
+      let (level, name, fp) = aux_type_declarator inner in (level + 1, name, fp)
   | `Paren_type_decl (_, _, inner, _) -> aux_type_declarator inner
   | `Attr_type_decl (inner, _) -> aux_type_declarator inner
-  | `Func_type_decl _ ->
-      Printf.eprintf "Not supported yet: function pointer typedef\n"; (0, "__func_ptr__")
+  | `Func_type_decl (inner, param_list) ->
+      let _, name, _ = aux_type_declarator inner in
+      let param_tys, variadic = funptr_params_of_list param_list in
+      (0, name, Some (param_tys, variadic))
   | `Choice_signed _ | `Prim_type _ ->
-      Printf.eprintf "Not supported yet: primitive in type declarator\n"; (0, "__prim__")
+      Printf.eprintf "Not supported yet: primitive in type declarator\n";
+      (0, "__prim__", None)
 
-let aux_type_definition ((_, _, type_def_ty, (first_decl, rest_decls), _, _) : type_definition) =
+and aux_type_definition ((_, _, type_def_ty, (first_decl, rest_decls), _, _) : type_definition) =
   let (_, type_spec, _) = type_def_ty in
   let base_ty = aux_type_spec type_spec in
   let aux_one td =
-    let (ptr_level, name) = aux_type_declarator td in
-    (Mlsem.Common.Position.dummy, A.TypeDecl (name, Ast.build_ptr ptr_level base_ty))
+    let (ptr_level, name, fp) = aux_type_declarator td in
+    let ty = match fp with
+      | None -> Ast.build_ptr ptr_level base_ty
+      | Some (params, variadic) ->
+          let ret_ty = Ast.build_ptr ptr_level base_ty in
+          Ast.FunPtr (ret_ty, params, variadic)
+    in
+    (Mlsem.Common.Position.dummy, A.TypeDecl (name, ty))
   in
   aux_one first_decl :: List.map (fun (_, td) -> aux_one td) rest_decls
 
-let aux_param (p: anon_choice_param_decl_4ac2852) : A.param =
+(* The remaining helpers below are chained into the same recursion because
+   parameter parsing now detects function-pointer parameter shapes:
+   [aux_param] uses [function_pointer_global_signature] to recognise a
+   function-pointer declarator and emit an [Ast.FunPtr] parameter type, and
+   [function_pointer_global_signature] uses [aux_extract_params] (which
+   iterates over [aux_param]) to recover the param ctype list. Struct fields
+   and typedefs also reach into [funptr_params_of_list] for the same purpose. *)
+and aux_param (p: anon_choice_param_decl_4ac2852) : A.param =
   match p with
   | `Param_decl (decl_spec, Some (`Decl decl), _) ->
-    let ty = aux_decl_spec decl_spec in
-    let level, name = aux_decl_name decl in
-    A.Param (Ast.build_ptr level ty, name)
+    let base_ty = aux_decl_spec decl_spec in
+    (match function_pointer_global_signature decl with
+     | Some (ret_level, params, variadic, name) ->
+         let ret_ty = Ast.build_ptr ret_level base_ty in
+         A.Param (Ast.FunPtr (ret_ty, params, variadic), name)
+     | None ->
+         let level, name = aux_decl_name decl in
+         A.Param (Ast.build_ptr level base_ty, name))
+  | `Param_decl (decl_spec, Some (`Abst_decl decl), _) ->
+    (* Abstract declarator: parameter with a complex type but no name, as in
+       function-pointer typedefs ("typedef void (*sighandler_t)(int);" — the
+       inner [int] is named, but more elaborate forms like
+       "typedef int (*cmp_t)(const void *, const void *);" leave the inner
+       params unnamed). We synthesise a name and reuse [aux_abstract_declarator]
+       to build the parameter ctype. *)
+    let base_ty = aux_decl_spec decl_spec in
+    let ty = aux_abstract_declarator base_ty (Some decl) in
+    A.Param (ty, "anon_param_" ^ string_of_int (gen_id ()))
   | `Param_decl (decl_spec, None, _) ->
     let ty = aux_decl_spec decl_spec in
     A.Param (ty, "anon_param_" ^ string_of_int (gen_id ()))
   | `Vari_param _ -> A.Vararg
-  | _ -> Boilerplate.map_anon_choice_param_decl_4ac2852 () p |> Tree_sitter_run.Raw_tree.to_channel stderr ;
-    failwith "Not supported yet: parameter declaration"
 
 (** Drop bare [void] parameters (the C [f(void)] = "no parameters" form).
     [Vararg] is preserved. *)
-let drop_void_params =
+and drop_void_params lst =
   List.filter (function
     | A.Param (Ast.Void, _) -> false
-    | _ -> true)
+    | _ -> true) lst
 
 (** Extract parameter list from a [parameter_list] CST node. *)
-let aux_extract_params ((_loc1, content, _loc2) : parameter_list) : A.param list =
+and aux_extract_params ((_loc1, content, _loc2) : parameter_list) : A.param list =
   match content with
   | `Opt_choice_param_decl_rep_COMMA_choice_param_decl (Some (p1, params)) ->
       let all = (aux_param p1) :: (List.map (fun (_, p) -> aux_param p) params) in
       drop_void_params all
   | _ -> []
+
+(* Function-pointer signature extraction.
+   For a declarator that names a function pointer, return
+   [(ret_pointer_level, param_ctypes, variadic, name)]:
+   - [ret_pointer_level] is the number of outer [Poin_decl] wrappers, which
+     applies to the return type (e.g. "r_obj* fp" with parenthesized-pointer
+     body gives ret_pointer_level=1).
+   - [param_ctypes] is the param-list ctypes (Vararg filtered out).
+   - [variadic] is true iff the param list contained a [Vararg].
+   - [name] is the identifier under the inner parenthesized-pointer
+     indirection.
+   Recognised shapes are nested [Poin_decl] wrappers around a [Func_decl]
+   whose inner declarator is a parenthesized pointer-to-name declarator,
+   optionally with [Attr_decl] wrappers. *)
+and funptr_params_of_list param_list =
+  let params = aux_extract_params param_list in
+  let variadic = List.exists (function A.Vararg -> true | _ -> false) params in
+  let param_tys =
+    List.filter_map (function A.Param (ty, _) -> Some ty | A.Vararg -> None) params
+  in
+  (param_tys, variadic)
+
+and function_pointer_global_signature (decl : declarator) =
+  match decl with
+  | `Poin_decl (_, _, _, _, inner) ->
+      Option.map
+        (fun (lvl, params, variadic, name) -> (lvl + 1, params, variadic, name))
+        (function_pointer_global_signature inner)
+  | `Attr_decl (inner, _) -> function_pointer_global_signature inner
+  | `Func_decl (inner, param_list, _, _) when is_parenthesized_pointer_declarator inner ->
+      (try
+        let name = snd (aux_decl_name inner) in
+        let param_tys, variadic = funptr_params_of_list param_list in
+        Some (0, param_tys, variadic, name)
+      with _ -> None)
+  | _ -> None
+
+let function_pointer_declaration_declarator_signature
+    (decl : declaration_declarator) =
+  match decl with
+  | `Func_decl_decl (name_decl, param_list, _, _)
+    when is_parenthesized_pointer_declarator name_decl ->
+      (try
+        let name = snd (aux_decl_name name_decl) in
+        let param_tys, variadic = funptr_params_of_list param_list in
+        Some (0, param_tys, variadic, name)
+      with _ -> None)
+  | `Poin_decl (_, _, _, _, inner) ->
+      Option.map
+        (fun (lvl, params, variadic, name) -> (lvl + 1, params, variadic, name))
+        (function_pointer_global_signature inner)
+  | _ -> None
+
+let function_pointer_global_name decl =
+  Option.map (fun (_, _, _, n) -> n) (function_pointer_global_signature decl)
+
+let function_pointer_declaration_declarator_name decl =
+  Option.map (fun (_, _, _, n) -> n) (function_pointer_declaration_declarator_signature decl)
 
 (** Check whether a [declarator] contains a function declarator. *)
 let rec has_func_decl (decl: declarator) =
@@ -1154,29 +1239,33 @@ and aux_declaration typ (decl: anon_choice_opt_ms_call_modi_decl_decl_opt_gnu_as
             end
       end
   | `Opt_ms_call_modi_decl_decl_opt_gnu_asm_exp (_, declr, _) ->
-      let (level, name, is_fp) = aux_decl2_name declr in
-      let base = if is_fp then Ast.Any else typ in
-      let typ = Ast.build_ptr level base in
+      let (level, name, fp) = aux_decl2_name declr in
+      let typ = match fp with
+        | None -> Ast.build_ptr level typ
+        | Some (params, variadic) ->
+            let ret_ty = Ast.build_ptr level typ in
+            Ast.FunPtr (ret_ty, params, variadic)
+      in
       (Mlsem.Common.Position.dummy, A.VarDeclare (typ, (Mlsem.Common.Position.dummy, A.Id name)))
 and aux_declarations ((decl_type, decl1, decls, _loc2): declaration) =
   let typ = aux_decl_spec decl_type in
   (Mlsem.Common.Position.dummy, A.Seq ((aux_declaration typ decl1) :: (List.map (fun (_, d) -> aux_declaration typ d) decls)))
-(* Returns (pointer_level, name, is_function_pointer). When [is_function_pointer]
-   is true, callers should approximate the base type as [Ast.Any] since function
-   pointers are not modelled as value pointers in our type system. *)
+(* Returns (return_ptr_level, name, fp_signature_opt). When the third
+   component is [Some (params, variadic)] the declarator names a function
+   pointer (or a local function prototype, which we model the same way);
+   the [int] then counts only the outer pointer wrappers and applies to
+   the return type. *)
 and aux_decl2_name (decl: declaration_declarator) =
   match decl  with
-  | `Id tok -> (0, token_to_string tok, false)
-  | `Poin_decl (_,_,_,_,decl) -> let (level, name) = aux_decl_name decl in (level + 1, name, false)
-  | `Array_decl (decl,_,_,_,_) -> let (level, name) = aux_decl_name decl in (level + 1, name, false)
-  | `Paren_decl (_, _, decl, _) -> let (level, name) = aux_decl_name decl in (level, name, false)
-  | `Attr_decl (decl, _) -> let (level, name) = aux_decl_name decl in (level, name, false)
-  | `Func_decl_decl (inner_decl, _, _, _) ->
-      if !warn_unsupported then
-        Printf.eprintf
-          "Not supported yet: function pointer declaration; approximating as an opaque pointer\n";
-      let (level, name) = aux_decl_name inner_decl in
-      (level, name, true)
+  | `Id tok -> (0, token_to_string tok, None)
+  | `Poin_decl (_,_,_,_,decl) -> let (level, name) = aux_decl_name decl in (level + 1, name, None)
+  | `Array_decl (decl,_,_,_,_) -> let (level, name) = aux_decl_name decl in (level + 1, name, None)
+  | `Paren_decl (_, _, decl, _) -> let (level, name) = aux_decl_name decl in (level, name, None)
+  | `Attr_decl (decl, _) -> let (level, name) = aux_decl_name decl in (level, name, None)
+  | `Func_decl_decl (inner_decl, param_list, _, _) ->
+      let (_, name) = aux_decl_name inner_decl in
+      let param_tys, variadic = funptr_params_of_list param_list in
+      (0, name, Some (param_tys, variadic))
 and aux_block_item (item : block_item) =
   match item with
   | `Stmt stmt -> aux_statement stmt
@@ -1352,8 +1441,13 @@ and aux_top_level_item_non_preproc defines (item : top_level_item) =
           let ty = Ast.build_ptr level base_ty in
           Some (Mlsem.Common.Position.dummy, A.GlobalVar (linkage, name, ty))
         in
-        let emit_function_pointer level name =
-          let ty = Ast.build_ptr level Ast.Any in
+        (* [ret_level] applies to the return type (number of outer
+           [Poin_decl] wrappers around the parenthesized-pointer body). The
+           function pointer itself is a callable, so we emit it as [FunPtr],
+           which [Ast.typeof_ctype] translates to an attribute-wrapped arrow. *)
+        let emit_function_pointer ret_level params variadic name =
+          let ret_ty = Ast.build_ptr ret_level base_ty in
+          let ty = Ast.FunPtr (ret_ty, params, variadic) in
           Some (Mlsem.Common.Position.dummy, A.GlobalVar (linkage, name, ty))
         in
         match decl with
@@ -1365,12 +1459,11 @@ and aux_top_level_item_non_preproc defines (item : top_level_item) =
                [r_obj* (*fp)(r_obj*) = NULL;] parses as
                [Poin_decl(Func_decl(Paren_decl(Poin_decl(Id "fp")), ...))]
                (the outer Poin_decl comes from the [r_obj*] return type).
-               [function_pointer_global_name] handles all the wrapping shapes;
-               emit the binding with [level=1] so it is bound as an opaque
-               [*Any] and later assignments to [fp] succeed instead of falling
-               back to an [Immut] binding via [PAst.var]. *)
-            (match function_pointer_global_name declr with
-             | Some name -> emit_function_pointer 1 name
+               [function_pointer_global_signature] handles all the wrapping
+               shapes and recovers the full return / params / variadic info. *)
+            (match function_pointer_global_signature declr with
+             | Some (ret_level, params, variadic, name) ->
+                 emit_function_pointer ret_level params variadic name
              | None ->
                  (match declr with
                   | `Func_decl _ -> None
@@ -1386,16 +1479,20 @@ and aux_top_level_item_non_preproc defines (item : top_level_item) =
                either "(*fp)(...)" or "r_obj* (*fp)(...)" — are caught up
                front so the [Poin_decl ... has_func_decl] arm below does not
                drop them as if they were function declarations. *)
-            (match function_pointer_declaration_declarator_name declr with
-             | Some name -> emit_function_pointer 1 name
+            (match function_pointer_declaration_declarator_signature declr with
+             | Some (ret_level, params, variadic, name) ->
+                 emit_function_pointer ret_level params variadic name
              | None ->
                  (match declr with
                   | `Func_decl_decl _ -> None
                   | `Poin_decl (_, _, _, _, inner) when has_func_decl inner -> None
                   | `Id _ | `Poin_decl _ | `Array_decl _ | `Paren_decl _ | `Attr_decl _ ->
+                      (* By construction, none of the surviving arms hit the
+                         [Func_decl_decl] branch in [aux_decl2_name], so its
+                         function-pointer signature is always [None] here. *)
                       (try
-                        let (level, name, is_fp) = aux_decl2_name declr in
-                        if is_fp then emit_function_pointer level name else emit level name
+                        let (level, name, _fp) = aux_decl2_name declr in
+                        emit level name
                        with _ -> None)))
       in
       let all_decls = first_decl :: List.map snd more_decls in

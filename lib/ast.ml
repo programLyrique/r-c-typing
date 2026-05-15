@@ -27,10 +27,10 @@ let rec extract_names l =
   | [CStr _ ] -> failwith "expected \"\" at the end "
   | _ -> failwith "expected string constant"
 
-type ctype = 
+type ctype =
  | Void
  | Int
- | Float 
+ | Float
  | Char
  | Bool
  | Ptr of ctype
@@ -39,6 +39,12 @@ type ctype =
  | Union of string * (ctype * string) list
  | Enum of string * (string * int option) list
  | Typeref of string (*Refer to another named type, e.g. a named struct or a typedef*)
+ (* Function pointer: return type, parameter types, variadic flag.
+    Represents the C-level shape `RET (PTR_NAME)(PARAMS)`. It translates to
+    an [Arrow] type wrapped with [Attr.mk_anyclass], matching how [infer_cfun]
+    types ordinary C functions so that the [pfun] projection accepts the
+    value as callable. *)
+ | FunPtr of ctype * ctype list * bool
  (* SEXPs *)
  | SEXP
  | Any (* Do we actually need that?*)
@@ -195,6 +201,17 @@ let typeof_ctype ct =
           |> Ty.disj
         else
           Cint.any_na
+    | FunPtr (ret, params, variadic) ->
+        (* Mirrors [C_interface.infer_cfun]: variadic functions accept [Ty.any]
+           for their argument tuple; fixed-arity ones use the explicit tuple.
+           The [Attr.mk_anyclass] wrap is required so [Ast.build_call]'s
+           [pfun] projection accepts the value as callable. *)
+        let ret_ty = aux resolving ret in
+        let arg_ty =
+          if variadic then Ty.any
+          else Tuple.mk (List.map (aux resolving) params)
+        in
+        Arrow.mk arg_ty ret_ty |> Attr.mk_anyclass
     | _ -> failwith ("Type not supported yet in typeof_ctype: " ^ show_ctype ct)
   in
   aux StrMap.empty ct

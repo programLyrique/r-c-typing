@@ -286,6 +286,10 @@ let rec resolve_ctype_aux visited decl ty =
   | Ast.Union (name, fields) ->
       let visited = StrSet.add name visited in
       Ast.Union (name, List.map (fun (fty, fname) -> (resolve_ctype_aux visited decl fty, fname)) fields)
+  | Ast.FunPtr (ret, params, variadic) ->
+      Ast.FunPtr (resolve_ctype_aux visited decl ret,
+                  List.map (resolve_ctype_aux visited decl) params,
+                  variadic)
   | _ -> ty
 
 let resolve_ctype decl ty = resolve_ctype_aux StrSet.empty decl ty

@@ -20,6 +20,7 @@ let is_simple_c_function past =
     let ret = match ret_ty with
       | Ast.SEXP -> false
       | Ast.Struct _ -> false
+      | Ast.FunPtr _ -> false
       | _ -> true
     in
     let params = List.for_all (function
@@ -28,6 +29,7 @@ let is_simple_c_function past =
             match ty with
             | Ast.SEXP -> false
             | Ast.Struct _ -> false
+            | Ast.FunPtr _ -> false
             | _ -> true) params
   in
    ret && params
