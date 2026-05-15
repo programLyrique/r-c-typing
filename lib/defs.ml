@@ -111,6 +111,15 @@ module BuiltinVar = struct
       ("FALSE", Cint.ff);
       (* Special values *)
       ("R_NilValue", Null.any |> Attr.mk_anyclass);
+      (* Predefined preprocessor macros (see
+         https://gcc.gnu.org/onlinedocs/cpp/Standard-Predefined-Macros.html).
+         [__FILE__], [__DATE__], [__TIME__] expand to string literals,
+         [__LINE__] to an integer constant. We use the non-singleton C
+         types since the concrete value is never load-bearing for typing. *)
+      ("__FILE__", Cptr.string);
+      ("__LINE__", Cint.any);
+      ("__DATE__", Cptr.string);
+      ("__TIME__", Cptr.string);
     ]
 
 

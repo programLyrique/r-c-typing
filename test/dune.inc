@@ -386,3 +386,14 @@
  (deps    cprogs/sexp_alloc.c cprogs/sexp_alloc.expected)
  (action  (diff cprogs/sexp_alloc.expected sexp_alloc.output)))
 
+(rule
+ (alias   runtest)
+ (deps    (glob_files ../types/*.ty) cprogs/predef_macros.c)
+ (action  (with-stdout-to predef_macros.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/predef_macros.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/predef_macros.c cprogs/predef_macros.expected)
+ (action  (diff cprogs/predef_macros.expected predef_macros.output)))
+

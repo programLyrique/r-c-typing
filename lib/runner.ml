@@ -152,7 +152,22 @@ let with_inference_timeout timeout thunk =
 let infer_ast ?fallback visible opts (idenv, env, decl) (ast : Ast.e) =
   let name,v =
     match ast with
-    | _,_,_,Ast.Function (name, _, _, _) -> name,MVariable.create Immut (Some name)
+    | _,_,_,Ast.Function (name, _, _, _) ->
+        (* When a function-like preprocessor macro shares a name with the
+           file-scope variable it wraps (rlang's
+           [#define r_stop_internal(...) (r_stop_internal)(...)] is the
+           canonical example), [name] is already bound to a mutable global.
+           Registering the Fundef as [Immut] would shadow that binding and
+           cause assignments to the underlying variable to crash with
+           "Cannot assign to an immutable variable". Use [Mut] in that case
+           so the macro's inferred call type is still recorded *and*
+           assignments to the variable elsewhere remain legal. *)
+        let kind =
+          match StrMap.find_opt name idenv with
+          | Some v_existing when MVariable.is_mutable v_existing -> MVariable.Mut
+          | _ -> MVariable.Immut
+        in
+        name, MVariable.create kind (Some name)
     | _ -> failwith "Expected a function definition at the top level."
   in
   let started = Unix.gettimeofday () in
