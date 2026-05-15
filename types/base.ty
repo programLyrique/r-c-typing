@@ -268,7 +268,7 @@ CADR: t(lang) -> any_sexp
 RAW: t(v(raw)) -> *c_int
 
 // R API: misc
-Rf_length: t(v[int('a)](any)) -> c_int('a)
+length: t(v[int('a)](any)) -> c_int('a)
 asReal: t(any) -> c_double
 memcpy: t(any, any, c_int) -> any
 R_alloc: t(c_int, c_int) -> *any
