@@ -64,6 +64,13 @@ type const =
   | Break
   | Next
   | Seq of e list
+  | Block of e list
+    (** C compound statement [{ ... }]. Introduces a new lexical scope:
+        declarations inside the [Block] are visible only until its end. Emitted
+        by the parser for every [{ ... }] in the source, including function
+        bodies. Distinct from [Seq], which is used for synthesised, non-scoping
+        statement concatenations (for-loop body+incr, switch case bodies,
+        multi-declarator [int a, b;]). *)
   | Comma of e * e
   | Case of e * e
   | Default of e
@@ -142,68 +149,11 @@ let rec bv_e in_lhs_assign (_,e) =
       let acc = bv_e in_lhs_assign e in
       List.fold_left (fun acc case -> StrSet.union acc (bv_e in_lhs_assign case)) acc cases
   | Seq exprs -> List.fold_left (fun acc e -> StrSet.union acc (bv_e in_lhs_assign e)) StrSet.empty exprs
+  | Block exprs -> List.fold_left (fun acc e -> StrSet.union acc (bv_e in_lhs_assign e)) StrSet.empty exprs
   | Comma (e1, e2) -> StrSet.union (bv_e in_lhs_assign e1) (bv_e in_lhs_assign e2)
   | Cast (_, e) -> bv_e in_lhs_assign e
   | VarDeclare (_, (_, Id s)) -> StrSet.singleton s
   | VarDeclare (_, _) -> failwith "Declaration must have an identifier" (*Should be unreachable*)
-
-(** Extract variables declared by C declarations in an expression.
-    Unlike [bv_e], this does not treat assignment targets as declarations:
-    [global_arr[i] = v] writes an existing object, while [int x;] creates a
-    local binding. *)
-let rec declared_locals_e (_, e) =
-  match e with
-  | VarDeclare (_, (_, Id s)) -> StrSet.singleton s
-  | VarDeclare (_, _) -> failwith "Declaration must have an identifier"
-  | Break | Next | Const _ | Id _ -> StrSet.empty
-  | Unop (_, e1) | FieldAccess (e1, _) | Return (Some e1)
-  | Cast (_, e1) | Default e1 -> declared_locals_e e1
-  | Return None -> StrSet.empty
-  | Binop (_, (e1, e2)) | VarAssign (e1, e2)
-  | Case (e1, e2) | Comma (e1, e2) ->
-      StrSet.union (declared_locals_e e1) (declared_locals_e e2)
-  | Ite (cond, then_, else_) ->
-      StrSet.union
-        (declared_locals_e cond)
-        (StrSet.union (declared_locals_e then_) (declared_locals_e else_))
-  | Call (f, args) ->
-      List.fold_left
-        (fun acc arg -> StrSet.union acc (declared_locals_e arg))
-        (declared_locals_e f)
-        args
-  | If (cond, then_, else_) ->
-      let acc =
-        declared_locals_e cond
-        |> StrSet.union (declared_locals_e then_)
-      in
-      (match else_ with
-       | None -> acc
-       | Some e -> StrSet.union acc (declared_locals_e e))
-  | While (cond, body) ->
-      StrSet.union (declared_locals_e cond) (declared_locals_e body)
-  | For (init, cond, incr, body) ->
-      let acc = declared_locals_e init in
-      let acc =
-        match cond with
-        | None -> acc
-        | Some e -> StrSet.union acc (declared_locals_e e)
-      in
-      let acc =
-        match incr with
-        | None -> acc
-        | Some e -> StrSet.union acc (declared_locals_e e)
-      in
-      StrSet.union acc (declared_locals_e body)
-  | Switch (e, cases) ->
-      List.fold_left
-        (fun acc case -> StrSet.union acc (declared_locals_e case))
-        (declared_locals_e e)
-        cases
-  | Seq exprs ->
-      List.fold_left
-        (fun acc e -> StrSet.union acc (declared_locals_e e))
-        StrSet.empty
-        exprs
 
 module StrMap = Map.Make(String)
 
@@ -233,8 +183,16 @@ let resolve_alias name =
   in
   loop StrSet.empty name
 
+(** The identifier environment is a stack of scope frames, innermost first.
+    Each frame is a [Variable.t StrMap.t] mapping C identifiers to their
+    [Variable.t]. Lookup walks frames head-to-tail (inner -> outer), so an
+    inner declaration shadows outer bindings (parameters, globals, .ty
+    definitions). The outermost frame holds globals and file-scope names
+    that survive across the whole translation unit; new frames are pushed
+    on entry to a [Block] (and to a parameter scope at function entry) and
+    fall out naturally when [transform]/[aux_e] returns. *)
 type env = {
-  id: Variable.t StrMap.t;
+  id: Variable.t StrMap.t list;
   decl: Ast.ctype Ast.DeclMap.t;
 }
 
@@ -301,11 +259,19 @@ let rec has_struct_type ty =
   | Ast.Array (t, _) -> has_struct_type t
   | _ -> false
 
-(* Full lookup chain for [str]: local idenv, builtin op, builtin var, .ty
-   bindings. Returns [Some v] if [str] resolves to a concrete binding,
-   [None] if it would fall through to the fresh-variable case. *)
+(* Full lookup chain for [str]: scope frames (innermost first), builtin op,
+   builtin var, .ty bindings. Returns [Some v] if [str] resolves to a
+   concrete binding, [None] if it would fall through to the fresh-variable
+   case. *)
+let rec lookup_in_frames str = function
+  | [] -> None
+  | frame :: rest ->
+      (match StrMap.find_opt str frame with
+       | Some _ as r -> r
+       | None -> lookup_in_frames str rest)
+
 let lookup_binding env str =
-  match StrMap.find_opt str env.id with
+  match lookup_in_frames str env.id with
   | Some _ as r -> r
   | None ->
     (match Defs.BuiltinOp.find_builtin str with
@@ -333,22 +299,19 @@ let var env str =
     Printf.printf "Creating fresh variable: %s\n" effective;
     Defs.BuiltinVar.register_dynamic effective Ty.any
 
-let add_var env str =
+(** Push an empty scope frame on top of the env. The previous frames remain
+    reachable through [lookup_binding] for shadowing-fall-through. *)
+let push_scope env = {env with id = StrMap.empty :: env.id}
+
+(** Bind [str] to a fresh [Variable.t] in the topmost scope frame of [env].
+    Returns the updated env and the new variable. *)
+let add_var_top env str =
   let v = MVariable.create MVariable.Mut (Some str) in
-  StrMap.add str v env
-
-
-(* Wrap [e] in a [Declare] for local variable [str], unless [str] is already
-   bound as a parameter (parameters are lambda-bound, so no local Declare is
-   needed). Locals come from explicit C declarations, so a declared local can
-   intentionally shadow a file-scope global, but a write to a global does not
-   create a synthetic local. *)
-let add_def params eid e str =
-  let v = StrMap.find str eid in
-  if StrSet.mem str params then e
-  else
-    let _, decl, _, _ = e in
-    (Eid.unique (), decl, Ast.VarMap.empty, Ast.Declare (v, e))
+  let id = match env.id with
+    | [] -> [StrMap.singleton str v]
+    | top :: rest -> StrMap.add str v top :: rest
+  in
+  ({env with id}, v)
 
 let mk_e env eid expr =
   (eid, env.decl, Ast.VarMap.empty, expr)
@@ -430,24 +393,51 @@ let rec aux_e env (pos,e) =
   | Ite (cond, then_, else_) -> 
       Ast.Ite (aux_e env cond, aux_e env then_, aux_e env else_) 
   | While (cond, body) -> Ast.While (aux_e env cond, aux_e env body)
-  | For (init, cond, incr, body) -> 
-      (* Transform For into While *)
-      let init_e = aux_e env init in
-      let cond_e = match cond with 
-        | None -> fresh_e env (Ast.Const (Ast.CBool true))
-        | Some e -> aux_e env e
+  | For (init, cond, incr, body) ->
+      (* Transform For into While. A C99 [for (int i = 0; ...; ...)] declares
+         [i] in a scope local to the loop; the parser emits the init as
+         [VarDeclare] (no initializer) or [Seq [VarDeclare; VarAssign]]
+         (with initializer), possibly with several declarators. We scan the
+         init for declarations, push a fresh frame, register each declared
+         name there, then translate init/cond/incr/body normally (the inner
+         [VarDeclare] arm of [aux_e] will look up the name and reuse the
+         pre-added [Variable.t]). The whole lowered while is wrapped in
+         [Ast.Declare]s so the locals stay visible only inside the for. *)
+      let rec collect_decls acc = function
+        | _, VarDeclare (_, (_, Id s)) -> s :: acc
+        | _, Seq inner -> List.fold_left collect_decls acc inner
+        | _ -> acc
       in
-      let incr_e = match incr with 
-        | None -> fresh_e env (Ast.Const (Ast.CNull))
-        | Some e -> aux_e env e
+      let decls = List.rev (collect_decls [] init) in
+      let env_for, declared_vs =
+        List.fold_left
+          (fun (env, vs) name ->
+            let env', v = add_var_top env name in
+            (env', v :: vs))
+          (push_scope env, [])
+          decls
       in
-      let while_body = 
-        let body_e = aux_e env body in
-        let seq_e = fresh_e env (Ast.Seq (body_e, incr_e)) in
-        seq_e
+      let declared_vs = List.rev declared_vs in
+      let init_e = aux_e env_for init in
+      let cond_e = match cond with
+        | None -> fresh_e env_for (Ast.Const (Ast.CBool true))
+        | Some e -> aux_e env_for e
       in
-      let while_e = fresh_e env (Ast.While (cond_e, while_body)) in
-      Ast.Seq (init_e, while_e)
+      let incr_e = match incr with
+        | None -> fresh_e env_for (Ast.Const Ast.CNull)
+        | Some e -> aux_e env_for e
+      in
+      let while_body =
+        let body_e = aux_e env_for body in
+        fresh_e env_for (Ast.Seq (body_e, incr_e))
+      in
+      let while_e = fresh_e env_for (Ast.While (cond_e, while_body)) in
+      let for_seq = fresh_e env_for (Ast.Seq (init_e, while_e)) in
+      List.fold_right
+        (fun v acc -> fresh_e env (Ast.Declare (v, acc)))
+        declared_vs
+        for_seq
+      |> (fun (_, _, _, e) -> e)
   | Return None -> Ast.Return None
   | Return (Some e) -> Ast.Return (Some (aux_e env e))
   | Break -> Ast.Break
@@ -460,20 +450,25 @@ let rec aux_e env (pos,e) =
         transform. We do NOT recurse into While/For/Switch bodies, so a break
         that targets an inner loop is left alone. *)
       let rec remove_break body =
+        let scan sts =
+          List.fold_left (fun (had_break, acc) stmt ->
+            if had_break then (true, acc)
+            else match stmt with
+            | _, Break -> (true, acc)
+            | _, Return _ -> (true, acc @ [stmt])
+            | pos, (Seq _ | Block _) ->
+                let has_brk, body' = remove_break (snd stmt) in
+                (has_brk, acc @ [(pos, body')])
+            | _ -> (false, acc @ [stmt])
+          ) (false, []) sts
+        in
         match body with
         | Seq sts ->
-            let has_break_or_return, sts = List.fold_left (fun (had_break, acc) stmt ->
-              if had_break then (true, acc)
-              else match stmt with
-              | _, Break -> (true, acc)
-              | _, Return _ -> (true, acc @ [stmt])
-              | pos, Seq _ ->
-                  let has_brk, body' = remove_break (snd stmt) in
-                  (has_brk, acc @ [(pos, body')])
-              | _ -> (false, acc @ [stmt])
-            ) (false, []) sts
-            in
+            let has_break_or_return, sts = scan sts in
             (has_break_or_return, Seq sts)
+        | Block sts ->
+            let has_break_or_return, sts = scan sts in
+            (has_break_or_return, Block sts)
         | Break -> (true, Const CNull)
         | Return _ -> (true, body)
         | e -> (false, e)
@@ -501,9 +496,23 @@ let rec aux_e env (pos,e) =
       in
       let _, _, _, e = seq_e in
       e
+  | Block stmts ->
+      (* Compound statement [{ ... }]: introduce a fresh scope frame, then
+         walk [stmts] left-to-right, emitting [Ast.Declare] at each
+         [VarDeclare] so the binding scopes only to the rest of the block. *)
+      let env' = push_scope env in
+      let block_e = aux_block env' stmts in
+      let _, _, _, e = block_e in
+      e
   | Comma (e1, e2) -> Ast.Seq (aux_e env e1, aux_e env e2)
   | Cast (ty, e) -> Ast.Cast (resolve_ctype env.decl ty, aux_e env e)
-  | VarDeclare (typ, (_,Id s)) ->
+  | VarDeclare (typ, (_, Id s)) ->
+      (* Reached when a [VarDeclare] sits inside a [Seq] processed by [aux_e]
+         directly — most commonly the for-init [Seq [VarDeclare; VarAssign]].
+         The enclosing arm ([For] for for-init, [aux_block] for block items)
+         is responsible for first registering [s] in the env's top frame.
+         Here we just emit the struct-zeroing initializer (if any) using
+         [var env s], which reuses the pre-registered [Variable.t]. *)
       let typ = resolve_ctype env.decl typ in
       if has_struct_type typ then
         let null_e = fresh_e env (Ast.Const Ast.CNull) in
@@ -513,6 +522,66 @@ let rec aux_e env (pos,e) =
   | VarDeclare (_, _) -> failwith "Declaration must have an identifier" (*Should be unreachable*)
   in
     mk_e env eid e
+and aux_block env stmts =
+  (* Translate the statements of a [Block] in their scope frame. Each
+     [VarDeclare] extends the topmost frame for the rest of the block and
+     produces an [Ast.Declare] whose body is the remaining translated
+     statements, so the lexical lifetime of every local matches its C scope.
+     A nested [Seq] (only emitted for multi-declarator declarations like
+     [int a, b;]) is flattened into its parent block: its declarators land
+     in the same scope as their siblings. *)
+  let rec loop env = function
+    | [] -> fresh_e env (Ast.Const Ast.CNull)
+    | [stmt] -> aux_block_stmt env stmt
+    | stmt :: rest ->
+        (match stmt with
+         | _, VarDeclare (typ, (_, Id s)) ->
+             let env', v = add_var_top env s in
+             let typ = resolve_ctype env.decl typ in
+             let init_e =
+               if has_struct_type typ then
+                 fresh_e env (Ast.VarAssign (v,
+                   fresh_e env (Ast.Cast (typ, fresh_e env (Ast.Const Ast.CNull)))))
+               else
+                 fresh_e env Ast.Noop
+             in
+             let rest_e = loop env' rest in
+             fresh_e env (Ast.Declare (v, fresh_e env (Ast.Seq (init_e, rest_e))))
+         | _, VarDeclare (_, _) ->
+             failwith "Declaration must have an identifier"
+         | _, Seq inner ->
+             (* Multi-declarator [int a, b;] from parser.ml emits a [Seq] of
+                [VarDeclare]s.  Splice it into the surrounding block so all
+                declarators share its scope. *)
+             loop env (inner @ rest)
+         | _ ->
+             let stmt_e = aux_e env stmt in
+             let rest_e = loop env rest in
+             fresh_e env (Ast.Seq (stmt_e, rest_e)))
+  in
+  loop env stmts
+and aux_block_stmt env stmt =
+  (* Tail position: a single declaration as the last block statement has no
+     subsequent uses, so we just emit its initializer (if any) and return. *)
+  match stmt with
+  | _, VarDeclare (typ, (_, Id s)) ->
+      let v = MVariable.create MVariable.Mut (Some s) in
+      let typ = resolve_ctype env.decl typ in
+      let init_e =
+        if has_struct_type typ then
+          fresh_e env (Ast.VarAssign (v,
+            fresh_e env (Ast.Cast (typ, fresh_e env (Ast.Const Ast.CNull)))))
+        else
+          fresh_e env Ast.Noop
+      in
+      fresh_e env (Ast.Declare (v, init_e))
+  | _, VarDeclare (_, _) ->
+      failwith "Declaration must have an identifier"
+  | _, Seq inner ->
+      (* Trailing multi-declarator: treat as a sub-block of declarators. *)
+      aux_block env inner
+  | _ ->
+      aux_e env stmt
 and process_call env f args =
   (* Set calls modify in place in the R C API, but for typing reason,
   we make it create a new value and then assign to the original variable. *)
@@ -565,14 +634,24 @@ and transform env (pos, topl_unit) =
   let eid = Eid.unique_with_pos pos in
   let (decl, e) = match topl_unit with 
   | Fundef (ret_ty, name, params, body) ->
-
-    let param_vars = bv_params params in
-    let pid = List.fold_left add_var env.id (StrSet.elements param_vars) in
-    let env = {env with id=pid} in
-    let local_vars = declared_locals_e body in
-    let eid = List.fold_left add_var env.id (StrSet.elements local_vars) in
-    let env = {env with id=eid} in
-    let e = List.fold_left (add_def param_vars eid) (aux_e env body) (StrSet.elements local_vars) in
+    (* Bind every parameter into the topmost scope frame. The body is emitted
+       by the parser as a [Block] for actual definitions and as [Seq []] for
+       forward declarations; treat [Block] specially so the function body's
+       outer node carries the inner statement's eid (matching the pre-scope
+       translator) rather than a synthetic eid from the [{}] span. The block
+       still introduces its own scope frame so locals declared inside cannot
+       leak out. *)
+    let param_vars = bv_params params |> StrSet.elements in
+    let env =
+      List.fold_left
+        (fun env name -> fst (add_var_top env name))
+        env
+        param_vars
+    in
+    let e = match body with
+      | _, Block stmts -> aux_block (push_scope env) stmts
+      | _ -> aux_e env body
+    in
     let params =
       List.filter_map (function
         | Param (ty, name) -> Some (resolve_ctype env.decl ty, var env name)
@@ -609,6 +688,7 @@ let map f e =
     | Default e1 -> Default (aux e1)
     | Switch (e1, cases) -> Switch (aux e1, List.map aux cases)
     | Seq exprs -> Seq (List.map aux exprs)
+    | Block exprs -> Block (List.map aux exprs)
     | Comma (e1, e2) -> Comma (aux e1, aux e2)
     | Cast (ty, e) -> Cast (ty, aux e)
     in
@@ -657,6 +737,7 @@ let rec extract_calls_from_expr ?(fun_names=StrSet.empty) (_pos, e') =
   | Default e -> extract e
   | Switch (e, cases) -> extract e @ List.concat_map extract cases
   | Seq exprs -> List.concat_map extract exprs
+  | Block exprs -> List.concat_map extract exprs
   | Comma (e1, e2) -> extract e1 @ extract e2
   | Cast (_, e) -> extract e
 

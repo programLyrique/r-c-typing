@@ -414,7 +414,7 @@ let rec infer_def ?internal_scope ?(force_internal_global=false) ?(simple_c_fun=
     (idenv, env, decl)
   | _ ->
 
-      let e = PAst.transform {PAst.id = idenv; decl} past in
+      let e = PAst.transform {PAst.id = [idenv]; decl} past in
       if opts.ast && visible then
         Printf.printf "%s\n" (Ast.show_e e);
       (* Provide a declared-C-signature fallback for Fundefs when [opts] asks

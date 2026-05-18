@@ -290,6 +290,17 @@
 
 (rule
  (alias   runtest)
+ (deps    (glob_files ../types/*.ty) cprogs/block-scope.c)
+ (action  (with-stdout-to block-scope.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/block-scope.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/block-scope.c cprogs/block-scope.expected)
+ (action  (diff cprogs/block-scope.expected block-scope.output)))
+
+(rule
+ (alias   runtest)
  (deps    (glob_files ../types/*.ty) cprogs/sexprec-alias.c)
  (action  (with-stdout-to sexprec-alias.output
               (run %{exe:typing_test.exe} %{dep:cprogs/sexprec-alias.c}))))

@@ -1,0 +1,8 @@
+local_shadows_global_whole_fn: ∀'a. *(c_int_na & 'a) -> 'a
+
+local_shadows_global_inner_block: ∀'a. c_int_na & 'a -> c_int_na & 'a
+
+sibling_blocks: () -> c_false
+
+doubly_nested: ∀'a. c_int_na & 'a -> c_int_na & 'a
+

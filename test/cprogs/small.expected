@@ -4,7 +4,7 @@ errorIntScalar: int1 -> ()
 
 make_scalar: () -> int1
 
-isIntScalar: (int1 -> c_true) & (int[^(int \ 1)] | vec1 & ~int | vec[^(int \ 1)] & ~int -> c_false)
+isIntScalar: (int1 -> c_true) & (int[^(int \ 1)] | (chr | vec & ~int) -> c_false)
 
 check: () -> c_false
 

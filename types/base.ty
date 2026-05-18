@@ -21,9 +21,9 @@ LOGICAL: t(v(lgl)) -> *c_int
 LOGICAL_RO: t(v(lgl)) -> *c_int
 
 
-LENGTH: t(v[int('a)](any)) -> c_int('a)
-XLENGTH: t(v[int('a)](any)) -> c_int('a)
-xlength: t(v[int('a)](any)) -> c_int('a)
+LENGTH: (t(v[int('a)](any)) -> c_int('a)) & (t(p(chr)) -> c_int) // length actually returns the length of the string (without '\0)
+XLENGTH: (t(v[int('a)](any)) -> c_int('a)) & (t(p(chr)) -> c_int)
+xlength: (t(v[int('a)](any)) -> c_int('a)) & (t(p(chr)) -> c_int)
 envlength: t(env) -> c_int
 
 // there is also a special case for VECSXP (list) that is coded in OCaml
@@ -152,7 +152,7 @@ R_ReleaseObject: t(any_sexp) -> c_void
 
 // Arithmetic (including pointer arithmetic for strings)
 
-+__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na) & (t(c_string, c_int) -> c_string)
++__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na) & (t(c_string, c_int) -> c_string) & (t(c_char, c_int) -> c_char) & (t(c_char, c_char) -> c_char)
 
 -__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na) & (t(c_string, c_int) -> c_string) & (t(c_string, c_string) -> c_int)
 
@@ -268,7 +268,7 @@ CADR: t(lang) -> any_sexp
 RAW: t(v(raw)) -> *c_int
 
 // R API: misc
-length: t(v[int('a)](any)) -> c_int('a)
+length: (t(v[int('a)](any)) -> c_int('a)) & (t(p(chr)) -> c_int)
 asReal: t(any) -> c_double
 memcpy: t(any, any, c_int) -> any
 R_alloc: t(c_int, c_int) -> *any

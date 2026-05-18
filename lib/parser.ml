@@ -1015,7 +1015,7 @@ and aux_compound_stmt (stmt: compound_statement) =
   let (l1,_),block_items,(l2,_) = stmt in
   let block_items = Preprocessor.expand_block_items block_items in
   let stmts = List.map aux_block_item block_items in
-  (locs_to_pos l1 l2, A.Seq stmts)
+  (locs_to_pos l1 l2, A.Block stmts)
 
 and aux_switch_statement (switch_stmt: switch_statement) =
   let (loc1,_),expr,cases = switch_stmt in
@@ -1023,10 +1023,10 @@ and aux_switch_statement (switch_stmt: switch_statement) =
   let body = aux_compound_stmt cases in
 
   match body with
-  | pos, A.Seq lst ->
+  | pos, A.Block lst ->
       (* Filter out non-case/non-default items that can appear in the switch
          compound statement (e.g. preprocessor directives turned into Const CNull,
-         or declarations). Only Case and Default are meaningful to the switch. 
+         or declarations). Only Case and Default are meaningful to the switch.
          TODO: actually support the preprocessor inside here*)
       let lst = List.filter (fun (_, item) ->
         match item with
@@ -1287,7 +1287,7 @@ and aux_body body =
   if Utils.is_singleton stmts then
     List.hd stmts
   else
-   (locs_to_pos l1 l2, A.Seq stmts)
+    (locs_to_pos l1 l2, A.Block stmts)
 
 and aux_paren_expr (p_expr: parenthesized_expression) =
   let (l1,_), expr, (l2,_) = p_expr in
@@ -1315,8 +1315,8 @@ and aux_if_statement (if_stmt: if_statement) =
 let rec body_has_trailing_return ((_, expr) : A.e) =
   match expr with
   | A.Return _ -> true
-  | A.Seq [] -> false
-  | A.Seq exprs -> body_has_trailing_return (List.hd (List.rev exprs))
+  | A.Seq [] | A.Block [] -> false
+  | A.Seq exprs | A.Block exprs -> body_has_trailing_return (List.hd (List.rev exprs))
   | _ -> false
 
 exception VariadicParameter of string
@@ -1327,8 +1327,9 @@ let ensure_void_return body =
     let pos, expr = body in
     let trailing_return = (pos, A.Return None) in
     match expr with
+    | A.Block exprs -> (pos, A.Block (exprs @ [trailing_return]))
     | A.Seq exprs -> (pos, A.Seq (exprs @ [trailing_return]))
-    | _ -> (pos, A.Seq [body; trailing_return])
+    | _ -> (pos, A.Block [body; trailing_return])
 
 let rec preprocessor_callbacks () =
   {
@@ -1712,7 +1713,8 @@ let%test "quoted include is ignored instead of crashing" =
 let%test "void function gets trailing return on fallthrough" =
   let res = parse_string "void f() { 1; }" in
   match to_ast res with
-  | [(_, A.Fundef (Ast.Void, "f", [], (_, A.Seq [(_, A.Const (A.CInt 1)); (_, A.Return None)])))] -> true
+  | [(_, A.Fundef (Ast.Void, "f", [],
+      (_, A.Block [(_, A.Const (A.CInt 1)); (_, A.Return None)])))] -> true
   | _ -> false
 
 let%test "void function does not duplicate explicit return" =
@@ -1729,5 +1731,6 @@ let%test "labeled statements are ignored as Noop" =
       set_warn_unsupported false;
       let res = parse_string "int f() { label: { int x = 1; } return 0; }" in
       match to_ast res with
-      | [(_, A.Fundef (Ast.Int, "f", [], (_, A.Seq [(_, A.Const A.CNull); (_, A.Return (Some (_, A.Const (A.CInt 0))))])))] -> true
+      | [(_, A.Fundef (Ast.Int, "f", [],
+          (_, A.Block [(_, A.Const A.CNull); (_, A.Return (Some (_, A.Const (A.CInt 0))))])))] -> true
       | _ -> false)
