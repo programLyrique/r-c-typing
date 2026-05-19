@@ -18,7 +18,7 @@ use_stat_sexp: () -> env | vec | prim
 
 use_stat_int_7: () -> c_int_na
 
-use_def_arr: c_int -> c_int_na
+use_def_arr: c_int_na -> c_int_na
 
 use_def_pt_x: () -> c_int_na
 
