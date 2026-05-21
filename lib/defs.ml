@@ -5,8 +5,24 @@ module MVariable = Mlsem.Lang.MVariable
 
 (* Add here any known type definitions, for instance, from the R C API *)
 
+(* Must stay in sync with [any_sexp] in [types/base.ty:6]:
+     any_sexp = env | null | sym | list | lang | (any -> any) | expr |
+                externalptr | vec
+   This is what [typeof_ctype SEXP] returns, so any C cast through SEXP
+   inherits these categories. Previously only [prim | env | vec] was listed,
+   which made dereferences of SEXP-pointer locals in rlang callbacks reject
+   [lang] / [sym] / [null] arguments despite the surface C type being SEXP. *)
 let any_sexp =
-   Ty.disj [Rstt.Prim.any ; Rstt.Env.any; Rstt.Vec.any ]
+   Ty.disj [
+     Rstt.Prim.any;
+     Rstt.Env.any;
+     Rstt.Vec.any;
+     Rstt.Null.any;
+     Rstt.Sym.any;
+     Rstt.Lang.any;
+     Rstt.Lst.any;
+     Rstt.ExternalPtr.any;
+   ]
 
 let any_c = Ty.disj [Cint.any; Cenums.char; Cenums.double; Cptr.any]
 

@@ -91,6 +91,7 @@ R_DimSymbol: sym
 R_DimNamesSymbol: sym
 R_RowNamesSymbol: sym
 R_BraceSymbol: sym
+R_BracketSymbol: sym
 
 // R API: evaluation / binding
 Rf_eval: t(any_sexp, env) -> any
@@ -106,6 +107,8 @@ Rf_isS4:     t(any_sexp) -> c_bool
 Rf_onintr:   t() -> c_void
 Rf_lengthgets: t(vec | list | lang, c_int) -> any_sexp
 Rf_ParseVector: t(any_sexp, c_int, *c_int, chr1) -> any_sexp // the 2 sexp arguments are probably STRSXP actually and the return type, an expr?
+R_ParseVector: t(any_sexp, c_int, *c_int, any_sexp) -> expr
+R_GetBindingType: t(sym, env) -> c_int
 
 // R API: external pointers (extended)
 R_ClearExternalPtr: t(externalptr) -> c_void
@@ -115,11 +118,26 @@ R_ExternalPtrProtected: t(externalptr) -> any_sexp
 R_RegisterCFinalizerEx: t(externalptr, any_sexp -> () | c_void, c_bool) -> c_void
 
 // R API: closures
-R_ClosureExpr: t(any -> any) -> lang 
+R_ClosureExpr: t(any -> any) -> lang
+R_ClosureEnv: t(any -> any) -> env
+R_ClosureFormals: t(any -> any) -> lang | null
+R_mkClosure: t(lang | null, any_sexp, env) -> (any -> any)
+
+// R API: ALTREP
+// R_altrep_class_t is [typedef struct { SEXP ptr; } R_altrep_class_t;] — modelled
+// as a single-field C struct so [R_new_altrep] callers carrying a real
+// [R_altrep_class_t] (rather than [any]) get a meaningful first-arg type.
+ALTREP: t(any_sexp) -> c_bool
+R_altrep_data2: t(any_sexp) -> any_sexp
+R_new_altrep: t(s({ ptr : any_sexp }), any_sexp, any_sexp) -> any_sexp
 
 // R API: misc
 R_CheckStack2: t(c_int) -> c_void
 R_GetCCallable: t(c_string, c_string) -> any
+MAYBE_REFERENCED: t(any_sexp) -> c_int
+vmaxget: () -> *any
+Rf_charIsASCII: t(p(chr)) -> c_bool
+R_new_custom_connection: t(c_string, c_string, c_string, *any) -> any_sexp
 
 // Casts
 asLogical: t(any_sexp) -> c_true | c_false
@@ -137,6 +155,13 @@ Rf_lang4: t(any_sexp, any_sexp, any_sexp, any_sexp) -> lang
 // TODO: we also support attributes in the type algebra, so add it!
 getAttrib: t(any_sexp, sym) -> any_sexp
 setAttrib: t(any_sexp, sym, any) -> any_sexp
+ANY_ATTRIB: t(any_sexp) -> c_int
+CLEAR_ATTRIB: t(any_sexp) -> c_void
+SHALLOW_DUPLICATE_ATTRIB: t(any_sexp, any_sexp) -> c_void
+// 2nd argument is [SEXP (*FUN)(SEXP, SEXP, void*)] but the type system has
+// no first-class function-pointer-with-data abstraction, so the callback is
+// left as [any].
+R_mapAttrib: t(any_sexp, any, *any) -> any_sexp
 
 []<-: t(*'a, c_int_na, 'a) -> *'a
 []: (t(*'a, c_int_na) -> 'a) & (t(c_string, c_int_na) -> c_char)
@@ -263,9 +288,22 @@ cons: t(any_sexp, lang | null) -> lang
 lcons: t(any_sexp, lang | null) -> lang
 CAR: t(lang) -> any_sexp
 CADR: t(lang) -> any_sexp
+CDDR: t(lang) -> any_sexp
+TAG: t(lang) -> any_sexp
+SET_TAG: t(lang, any_sexp) -> c_void
+SETCAR: t(lang, any_sexp) -> any_sexp
+SETCDR: t(lang, any_sexp) -> any_sexp
 
 // R API: raw vectors
 RAW: t(v(raw)) -> *c_int
+
+// R API: complex / list vector accessors
+// Rcomplex is [typedef struct { double r; double i; } Rcomplex;] so the
+// pointee is modelled as the matching two-field C struct — code that reads
+// [COMPLEX(x)[i].r] / [.i] then gets a precise [c_double] for each field.
+COMPLEX: t(v(clx)) -> *s({ r : c_double, i : c_double })
+COMPLEX_RO: t(v(clx)) -> *s({ r : c_double, i : c_double })
+VECTOR_PTR_RO: t(list) -> *any_sexp
 
 // R API: misc
 length: (t(v[int('a)](any)) -> c_int('a)) & (t(p(chr)) -> c_int)

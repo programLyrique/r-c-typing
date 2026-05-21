@@ -705,6 +705,13 @@ let rec extract_calls_from_expr ?(fun_names=StrSet.empty) (_pos, e') =
     match e' with
     | Id name when StrSet.mem name fun_names -> [name]
     | Cast (_, inner) -> extract_arg inner
+    (* [&fn] is the canonical "function as value" syntax (callback
+       registration like [r_attrib_map(x, &r_attrib_get_cb, &tag)]). Peel the
+       address-of so the bare [Id] inside reaches the [fun_names] check —
+       otherwise the static [fn] is unreachable from any entry point and gets
+       pruned by [Call_graph.keep_reachable], leading to spurious "unbound
+       variable" when [fn]'s caller is typed. *)
+    | Unop ("&", inner) -> extract_arg inner
     | _ -> extract (_pos, e')
   in
   match e' with

@@ -14,7 +14,7 @@ Entry points for .C convention:
 
 make_pair: (any_sexp, any_sexp) -> lang
 
-get_type: env | vec | prim -> env | vec | prim
+get_type: env | externalptr | lang | list | null | sym | vec | prim -> env | externalptr | lang | list | null | sym | vec | prim
 
 reverse_strings: ∀'a. chr[int(i(int & 'a))] -> chr[int(i(int & 'a))]
 

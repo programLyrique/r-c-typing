@@ -10,7 +10,7 @@ open Rstt
 
 type type_kind = Def | Alias
 
-let parse_type_line line =
+let parse_type_line ?(filename="<input>") ?(lineno=0) line =
   (* Remove inline comments: everything after // is ignored.
      This allows writing things like: mkCharCE: t(c_string, any) -> p(chr) // encoding *)
   let line =
@@ -24,29 +24,41 @@ let parse_type_line line =
   if line = "" || String.starts_with ~prefix:"//" line then
     None
   else
+    let loc =
+      if lineno > 0 then Printf.sprintf "%s:%d" filename lineno else filename
+    in
     match Utils.split_once_any [':';'='] line with
     | ('\000', _, "") ->
-        Printf.eprintf "Warning: could not parse line (missing type): %s@." line;
+        Printf.eprintf "%s: warning: could not parse line (missing type): %s\n"
+          loc line;
         None
     | (sep, sym, ty_str) ->
         let ty_str = String.trim ty_str in
-        let ty = 
+        let ty =
         try
-          Rstt_repl.IO.parse_type ty_str 
-        with Rstt_repl__IO.SyntaxError (_, msg) ->
-          Printf.eprintf "Syntax error while parsing type in line: %s. Error: %s@." line msg;
-          raise (Rstt_repl.(IO.SyntaxError (Position.dummy, msg)));
+          Rstt_repl.IO.parse_type ty_str
+        with
+        | Rstt_repl__IO.SyntaxError (_, msg) as e ->
+            Printf.eprintf "%s: syntax error in type expression: %s\n  %s\n"
+              loc msg line;
+            raise e
+        | Rstt_repl__IO.LexicalError (_, msg) as e ->
+            Printf.eprintf "%s: lexical error in type expression: %s\n  %s\n"
+              loc msg line;
+            raise e
         in
         match sep with
         | ':' -> Some (String.trim sym, ty, Def)
         | '=' -> Some (String.trim sym, ty, Alias)
         | _ -> failwith "Unreachable case in parse_type_line."
-        
-let parse_type_file filename = 
+
+let parse_type_file filename =
   if not (Sys.file_exists filename) then
     failwith (Printf.sprintf "Type file not found: %s" filename);
   let contents = In_channel.with_open_text filename In_channel.input_lines in
-  List.filter_map parse_type_line contents
+  contents
+  |> List.mapi (fun i line -> parse_type_line ~filename ~lineno:(i + 1) line)
+  |> List.filter_map Fun.id
 
 let add_struct_guards t =
   let open Rstt.Builder in
