@@ -12,9 +12,9 @@ incr: int1 -> int1
 
 isFunction: ((any -> any) -> c_true) & (~(any -> any) -> c_false)
 
-isPrimitive: ((any -> any) -> c_true) & (env | externalptr | lang | list | null | sym | vec -> c_false)
+isPrimitive: ((any -> any) -> c_true) & (chr | (env | externalptr | lang | list | null | sym | vec) -> c_false)
 
-isList: (env | externalptr | list | sym | vec | (any -> any) -> c_false) & (lang | null -> c_true)
+isList: (chr | (env | externalptr | list | sym | vec | (any -> any)) -> c_false) & (lang | null -> c_true)
 
-isNewList: (env | externalptr | lang | sym | vec | (any -> any) -> c_false) & (list | null -> c_true)
+isNewList: (chr | (env | externalptr | lang | sym | vec | (any -> any)) -> c_false) & (list | null -> c_true)
 

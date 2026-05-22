@@ -2,7 +2,7 @@
 any_scalar = int | dbl | lgl | chr | clx | raw
 prim = p(int) | p(dbl) | p(lgl) | p(chr) | p(clx) | p(raw)
 expr = {lang|sym}
-any_r_not_vec = env | null | sym | list | lang | (any -> any) | expr | externalptr
+any_r_not_vec = env | null | sym | list | lang | (any -> any) | expr | externalptr | p(chr)
 any_sexp = any_r_not_vec | vec
 
 error: any -> empty
@@ -25,6 +25,8 @@ LENGTH: (t(v[int('a)](any)) -> c_int('a)) & (t(p(chr)) -> c_int) // length actua
 XLENGTH: (t(v[int('a)](any)) -> c_int('a)) & (t(p(chr)) -> c_int)
 xlength: (t(v[int('a)](any)) -> c_int('a)) & (t(p(chr)) -> c_int)
 envlength: t(env) -> c_int
+nrows: t(vec | list | expr | null | lang) -> c_int
+ncols: t(vec | list | expr | null | lang) -> c_int
 
 // there is also a special case for VECSXP (list) that is coded in OCaml
 allocVector: (t('a & prim, c_int('b)) -> v[int('b)]('a)) & (t(list, 'b) -> list)

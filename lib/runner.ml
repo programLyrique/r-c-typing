@@ -720,6 +720,13 @@ let () =
   Mlsem_types.PrinterCfg.set_descr_printer Rstt.Pp.print_descr_ctx ;
   Mlsem_types.PrinterCfg.set_printer Rstt.Pp.print ;
   Mlsem_types.PrinterCfg.add_printer_param (Rstt.Pp.printer_params ()) ;
+  (* Disambiguate the two [any]s in printed output: [Attr.any] (the attr-tagged
+     subset of SEXPs — everything except CHARSXP) was rendering as the bare
+     word [any], which clashes with [Ty.any] (the universal type written
+     literally as [any] in [.ty] input). Print [Attr.any] as [attr_any] so
+     diagnostics like [r_attrib_get_cb: (any | chr, ...)] become readable. *)
+  Mlsem_types.PrinterCfg.add_printer_param
+    (Rstt.Pp.printer_params' [(Rstt.Attr.any, "attr_any")]) ;
   Mlsem_system.Config.normalization_fun := Rstt.Simplify.partition_vecs
 
 let%test "filter predicate with Some substring" =

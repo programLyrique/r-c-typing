@@ -14,9 +14,9 @@ create_named_list_with_int: () -> { a: 3, b: 6 }
 
 create_named_list_set_only_one: () -> { a: 3, b: any }
 
-set_noname_list: ∀'a. 'a & (any | chr) -> { null | 'a }
+set_noname_list: ∀'a. 'a & (chr | attr_any) -> { null | 'a }
 
-set_protected_noname_list: ∀'a. 'a & (any | chr) -> { null | 'a }
+set_protected_noname_list: ∀'a. 'a & (chr | attr_any) -> { null | 'a }
 
 read_in_list: () -> 3 | null
 

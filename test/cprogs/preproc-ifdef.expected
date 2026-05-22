@@ -1,6 +1,6 @@
-selected_by_ifdef: ∀'a. 'a & (any | chr) -> 'a & (any | chr)
+selected_by_ifdef: ∀'a. 'a & (chr | attr_any) -> 'a & (chr | attr_any)
 
-selected_by_ifndef: ∀'a. 'a & (any | chr) -> 'a & (any | chr)
+selected_by_ifndef: ∀'a. 'a & (chr | attr_any) -> 'a & (chr | attr_any)
 
-selected_by_linux_define: ∀'a. 'a & (any | chr) -> 'a & (any | chr)
+selected_by_linux_define: ∀'a. 'a & (chr | attr_any) -> 'a & (chr | attr_any)
 

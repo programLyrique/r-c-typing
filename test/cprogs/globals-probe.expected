@@ -1,10 +1,10 @@
-use_ext_sexp: () -> env | externalptr | lang | list | null | sym | vec | prim
+use_ext_sexp: () -> chr | attr_any
 
 use_ext_int: () -> c_int_na
 
 use_ext_const_int: () -> c_int_na
 
-use_def_sexp: () -> env | externalptr | lang | list | null | sym | vec | prim
+use_def_sexp: () -> chr | attr_any
 
 use_def_int: () -> c_int_na
 
@@ -12,9 +12,9 @@ use_def_int_42: () -> c_int_na
 
 use_def_const_int_42: () -> c_int_na
 
-use_def_sexp_nil: () -> env | externalptr | lang | list | null | sym | vec | prim
+use_def_sexp_nil: () -> chr | attr_any
 
-use_stat_sexp: () -> env | externalptr | lang | list | null | sym | vec | prim
+use_stat_sexp: () -> chr | attr_any
 
 use_stat_int_7: () -> c_int_na
 
@@ -22,9 +22,9 @@ use_def_arr: c_int_na -> c_int_na
 
 use_def_pt_x: () -> c_int_na
 
-use_ext_sexp_A: () -> env | externalptr | lang | list | null | sym | vec | prim
+use_ext_sexp_A: () -> chr | attr_any
 
-use_ext_sexp_B: () -> env | externalptr | lang | list | null | sym | vec | prim
+use_ext_sexp_B: () -> chr | attr_any
 
 set_def_int: c_int_na -> ()
 
