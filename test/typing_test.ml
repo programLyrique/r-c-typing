@@ -14,7 +14,7 @@ let () =
   let opts = Runner.{ cst = false; past = false; ast = false; mlsem = false;
                       typing = true; debug = false; filter = None; timeout = None;
                       fallback_c_signature = false; call_graph = None;
-                      log_inference_times = false } in
+                      log_times = false } in
   let idenv = Runner.StrMap.empty in
   let env = Defs.initial_env in
   (* Runner.run_on_file already prints the interesting output to stdout via

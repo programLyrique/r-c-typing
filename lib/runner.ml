@@ -27,12 +27,18 @@ type cmd_options = {
      Graphviz .dot format to [path]. Cycles are colored, files clustered,
      entry points marked. *)
   call_graph : string option;
-  (* When true, print a "  timing: <seconds> s" line on every terminal path
-     of [infer_ast] (success, timeout, untypeable, internal Not_found) so
-     slow functions can be spotted in the per-package output. Indented to
-     match the existing [  fallback:] convention so [parse_output.R] keeps
-     treating it as continuation. Off by default. *)
-  log_inference_times : bool;
+  (* When true, emit timing diagnostics:
+     - one "  timing: <seconds> s" line on every terminal path of [infer_ast]
+       (success, timeout, untypeable, internal Not_found) so slow functions
+       can be spotted in the per-package output (indented to match the
+       existing [  fallback:] convention so [parse_output.R] keeps treating
+       it as continuation);
+     - "Phase: <name> <seconds> s" lines summarising the coarse pipeline
+       stages (load_ty, parsing, call_graph, non_fundef_pass, fundef_pass,
+       recording_save). The [Phase:] prefix is registered as noise by
+       [parse_output.R] so it never reaches the per-function CSV.
+     Off by default. *)
+  log_times : bool;
 }
 
 let make_substring_pred = function
@@ -172,7 +178,7 @@ let infer_ast ?fallback visible opts (idenv, env, decl) (ast : Ast.e) =
   in
   let started = Unix.gettimeofday () in
   let log_timing () =
-    if opts.log_inference_times && visible then
+    if opts.log_times && visible then
       Format.printf "  timing: %.6f s@." (Unix.gettimeofday () -. started)
   in
   if opts.debug then
@@ -464,7 +470,12 @@ let run_on_file opts filename idenv env =
   (idenv, env)
 
 let run_on_files opts filenames ?entry_points idenv env =
-  (* Parse all the files to past *)
+  (* Parse all the files to past. Diagnostic phase timers report each of the
+     three coarse stages (parse / non-Fundef setup / Fundef pass) on a
+     [Phase: …] line so the gap between wall-clock and the per-function
+     timings can be attributed. [r-typing/scripts/parse_output.R] filters
+     these as noise so they don't leak into the per-function CSV. *)
+  let t_parse_start = Unix.gettimeofday () in
   let pasts = List.map (fun filename ->
       if not (Sys.file_exists filename) then
         failwith (Printf.sprintf "File not found: %s" filename);
@@ -475,6 +486,9 @@ let run_on_files opts filenames ?entry_points idenv env =
       let past = Parser.to_ast cst in
       (filename, past)
     ) filenames in
+  if opts.log_times then
+    Format.printf "Phase: parsing %.3f s@." (Unix.gettimeofday () -. t_parse_start);
+  let t_callgraph_start = Unix.gettimeofday () in
   let full_call_graph = Call_graph.of_past_list (List.map snd pasts) in
   let entry_names = match entry_points with
     | None -> []
@@ -571,6 +585,9 @@ let run_on_files opts filenames ?entry_points idenv env =
      in a subtype relation, and [register_dynamic_binding] keeps the existing
      type. Building [decl] up front guarantees every [resolve_ctype] call
      sees the full declaration map. *)
+  if opts.log_times then
+    Format.printf "Phase: call_graph %.3f s@." (Unix.gettimeofday () -. t_callgraph_start);
+  let t_non_fundef_start = Unix.gettimeofday () in
   let rec collect_type_decls decl item =
     match item with
     | _, PAst.TypeDecl (name, ty) ->
@@ -627,6 +644,9 @@ let run_on_files opts filenames ?entry_points idenv env =
       (idenv, env, decl, StrMap.empty)
       pasts
   in
+  if opts.log_times then
+    Format.printf "Phase: non_fundef_pass %.3f s@."
+      (Unix.gettimeofday () -. t_non_fundef_start);
 
   (* Sort function definitions by call graph. *)
   let sorted_pasts = Call_graph.topo_sort filtered_pasts call_graph in
@@ -644,6 +664,7 @@ let run_on_files opts filenames ?entry_points idenv env =
     Printf.printf "%s\n" (PAst.show_definitions visible_past)
   end;
   let entry_points = StrMap.of_list (Option.value ~default:[] entry_points) in
+  let t_fundef_start = Unix.gettimeofday () in
   let idenv, env, _ =
     List.fold_left
       (fun (idenv, env, decl) (filename, item) ->
@@ -668,6 +689,9 @@ let run_on_files opts filenames ?entry_points idenv env =
       (idenv, env, decl)
       sorted_pasts
   in
+  if opts.log_times then
+    Format.printf "Phase: fundef_pass %.3f s@."
+      (Unix.gettimeofday () -. t_fundef_start);
   (idenv, env)
 
 

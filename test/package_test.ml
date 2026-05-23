@@ -15,7 +15,7 @@ let () =
   let opts = Runner.{ cst = false; past = false; ast = false; mlsem = false;
                       typing = true; debug = false; filter; timeout = None;
                       fallback_c_signature = false; call_graph = None;
-                      log_inference_times = false } in
+                      log_times = false } in
   Parser.set_warn_unsupported false;
   let idenv = Runner.StrMap.empty in
   let env = Defs.initial_env in

@@ -13,9 +13,12 @@ let positive_float =
   in
   Arg.conv (parse, Format.pp_print_float)
 
-let main opts include_dirs path =
+let main ~mlsem_recording opts include_dirs path =
   System.Config.infer_overload := true;
-  Mlsem.Types.Recording.start_recording ();
+  if mlsem_recording then
+    Mlsem.Types.Recording.start_recording ();
+  if opts.Runner.log_times then
+    Format.printf "Phase: load_ty %.3f s@." !Defs.ty_load_time;
   let env_dirs = match Sys.getenv_opt "C_INCLUDE_PATH" with
     | None | Some "" -> []
     | Some s -> String.split_on_char ':' s |> List.filter (fun x -> x <> "")
@@ -39,7 +42,14 @@ let main opts include_dirs path =
     Runner.run_on_package opts path idenv env |> ignore
   else
     Runner.run_on_file opts path idenv env |> ignore;
-  Mlsem.Types.Recording.save_to_file "mlsem_recording.json" (Mlsem.Types.Recording.tally_calls ());
+  if mlsem_recording then begin
+    let t_rec = Unix.gettimeofday () in
+    Mlsem.Types.Recording.save_to_file "mlsem_recording.json"
+      (Mlsem.Types.Recording.tally_calls ());
+    if opts.Runner.log_times then
+      Format.printf "Phase: recording_save %.3f s@."
+        (Unix.gettimeofday () -. t_rec)
+  end;
   ()
 
 let cst_opt =
@@ -96,14 +106,29 @@ let call_graph_opt =
   in
   Arg.(value & opt (some string) None & info ["call-graph"] ~docv:"FILE" ~doc)
 
-let log_inference_times_opt =
+let mlsem_recording_opt =
   let doc =
-    "Log the wall-clock time of each function's body inference on a \
-     '  timing: <seconds> s' line below the result. The line is indented to \
-     match the existing 'fallback:' convention so per-function CSV parsing \
-     is unaffected. Off by default."
+    "Bracket the run with \
+     [Mlsem.Types.Recording.start_recording] / [save_to_file], dumping a \
+     per-process call tally to [mlsem_recording.json] in the current \
+     directory. The dump can be several tens of MB and add a few seconds \
+     per package, so it is off by default — including for the CRAN \
+     pipeline. Turn on to inspect mlsem-side call statistics."
   in
-  Arg.(value & flag & info ["log-inference-times"] ~doc)
+  Arg.(value & flag & info ["mlsem-recording"] ~doc)
+
+let log_times_opt =
+  let doc =
+    "Emit timing diagnostics. Two kinds of lines: (1) a '  timing: <seconds> \
+     s' line below every function's result giving the wall-clock time of \
+     its body inference (indented to match the existing 'fallback:' \
+     convention so per-function CSV parsing is unaffected); (2) coarse \
+     'Phase: <name> <seconds> s' lines for the major pipeline stages: \
+     load_ty, parsing, call_graph, non_fundef_pass, fundef_pass, \
+     recording_save. The 'Phase:' prefix is filtered as noise by the \
+     r-typing CSV parser. Off by default."
+  in
+  Arg.(value & flag & info ["log-times"] ~doc)
 
 let path_arg =
   let doc = "C source file to parse or package directory to analyze" in
@@ -125,9 +150,10 @@ let cmd =
      and+ timeout = timeout_opt
      and+ fallback_c_signature = fallback_c_sig_opt
      and+ call_graph = call_graph_opt
-     and+ log_inference_times = log_inference_times_opt
+     and+ log_times = log_times_opt
+     and+ mlsem_recording = mlsem_recording_opt
     and+ path = path_arg in
-    PEnv.sequential_handler Defs.parsed_types_penv (fun path -> main {cst; past; ast; mlsem ; typing = not no_typing ; debug ; filter; timeout; fallback_c_signature; call_graph; log_inference_times} include_dirs path) path |> fst)
+    PEnv.sequential_handler Defs.parsed_types_penv (fun path -> main ~mlsem_recording {cst; past; ast; mlsem ; typing = not no_typing ; debug ; filter; timeout; fallback_c_signature; call_graph; log_times} include_dirs path) path |> fst)
      
 
 let () = exit (Cmd.eval cmd)

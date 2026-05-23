@@ -179,7 +179,7 @@ Combine flags to trace transformations: `--past --ast --mlsem`
 
 Additional debugging tips:
 
-- Check `mlsem_recording.json` (generated after runs) for MLsem type system call traces
+- Pass `--mlsem-recording` to dump MLsem type-system call traces to `mlsem_recording.json` (off by default, since the dump adds several seconds and tens of MB per package)
 - Tree-sitter parse errors appear in CST output - use `--cst` to diagnose parsing issues
 
 ## Inference Pipeline ([lib/runner.ml](lib/runner.ml))

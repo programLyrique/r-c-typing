@@ -254,9 +254,19 @@ let load_parsed_types () =
     Rstt.Builder.StrMap.union (fun _k _v1 v2 -> Some v2) acc types
   ) Rstt.Builder.StrMap.empty ty_files
 
+(* Wall-clock time of [load_parsed_types ()] at module-init. Captured here and
+   exposed so [bin/main.ml] can emit a [Phase: load_ty …] line under
+   [--log-times] without restructuring the [let] binding. *)
+let ty_load_time = ref 0.0
+
 let parsed_types, parsed_types_penv =
-  Mlsem.Types.PEnv.sequential_handler Mlsem.Types.PEnv.empty
-    (fun () -> load_parsed_types ()) ()
+  let t0 = Unix.gettimeofday () in
+  let r =
+    Mlsem.Types.PEnv.sequential_handler Mlsem.Types.PEnv.empty
+      (fun () -> load_parsed_types ()) ()
+  in
+  ty_load_time := Unix.gettimeofday () -. t0;
+  r
 
 let build_vars m = 
   let add_var name ty acc =
