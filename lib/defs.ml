@@ -13,7 +13,7 @@ module MVariable = Mlsem.Lang.MVariable
    null, sym, list, lang, closure, externalptr, and vec uniformly.
    This must match the SEXP-param model in [ast.ml]'s [Function] handler so
    parameters and casts on the same SEXP value agree on its type. *)
-let any_sexp = Ty.cup Rstt.Prim.Chr.any Rstt.Attr.any
+let any_sexp = Ty.cup Rstt.Prim.(Chr.any |> mk) Rstt.Attr.any
 
 let any_c = Ty.disj [Cint.any; Cenums.char; Cenums.double; Cptr.any]
 

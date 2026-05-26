@@ -12,5 +12,5 @@ to_char: ∀'a. ((p(chr) & 'a -> na_string & 'a) & ('a & ((env | externalptr<...
 
 make_url_names: (() -> chr9)<...>
 
-R_parse: (((p(^chr), p(chr) | attr_any) -> empty) & (((env | externalptr<...> | lang | list | null | sym | vec0 | vec[^(1..)] | (any -> any)<...>) | p(chr), any_sexp) -> ()))<...>
+R_parse: (((p(^chr), any_sexp) -> empty) & (((env | externalptr<...> | lang | list | null | sym | vec0 | vec[^(1..)] | (any -> any)<...>) | p(chr), any_sexp) -> ()))<...>
 

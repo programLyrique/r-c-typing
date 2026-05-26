@@ -10,7 +10,7 @@ isNull: (*c_int_na \ c_null -> c_false)<...>
 
 C_escape_chars: (chr -> ())<...>
 
-C_escape_chars_one: ∀'a. ('a & (p(chr) | attr_any) -> 'a & (p(chr) | attr_any))<...>
+C_escape_chars_one: ∀'a. (any_sexp & 'a -> any_sexp & 'a)<...>
 
 C_escape_chars2: ∀'a,'b,'c. ((chr0 & 'a -> chr0 & 'a) & (chr[int(i(int & 'b & 'c & ~0))] & 'a -> chr[int(i(int & 'c))]))<...>
 
