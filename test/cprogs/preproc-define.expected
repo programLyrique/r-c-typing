@@ -1,8 +1,8 @@
-add_one: int -> int1
+add_one: (int -> int1)<...>
 
-add_magic: int -> int1
+add_magic: (int -> int1)<...>
 
-alias_simple: int -> int1
+alias_simple: (int -> int1)<...>
 
-alias_chain: int -> int1
+alias_chain: (int -> int1)<...>
 

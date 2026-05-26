@@ -3,7 +3,10 @@ any_scalar = int | dbl | lgl | chr | clx | raw
 prim = p(int) | p(dbl) | p(lgl) | p(chr) | p(clx) | p(raw)
 expr = {lang|sym}
 any_r_not_vec = env | null | sym | list | lang | (any -> any) | expr | externalptr | p(chr)
-any_sexp = any_r_not_vec | vec
+//any_sexp = any_r_not_vec | vec // the old definition: but in Defs, it was defined as p(chr) | Attr.any
+any_sexp = p(chr) | sexp // Syntax for Attr.any is sexp
+// This is maybe too unconstrained as sexp can have content be a C type, not only a R type. 
+// Maybe it would be better to tighten Defs.any_sexp...
 
 error: any -> empty
 fail: empty -> any

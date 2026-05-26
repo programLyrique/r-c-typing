@@ -1,22 +1,22 @@
-create_pos_list: () -> { _0: null, _1: null, _2: null }
+create_pos_list: (() -> { _0: null, _1: null, _2: null })<...>
 
-create_list: () -> { _0: null, _1: null, _2: null }
+create_list: (() -> { _0: null, _1: null, _2: null })<...>
 
-create_named_list: () -> { a: any, b: any }
+create_named_list: (() -> { a: any, b: any })<...>
 
-create_list_const_prop: () -> { _0: null, _1: null, _2: null, _3: null, _4: null, _5: null, _6: null }
+create_list_const_prop: (() -> { _0: null, _1: null, _2: null, _3: null, _4: null, _5: null, _6: null })<...>
 
-create_list_const_prop2: () -> { _0: null, _1: null, _2: null, _3: null, _4: null, _5: null, _6: null }
+create_list_const_prop2: (() -> { _0: null, _1: null, _2: null, _3: null, _4: null, _5: null, _6: null })<...>
 
-create_named_list_with_elems: () -> { a: dbl1, b: dbl1 }
+create_named_list_with_elems: (() -> { a: dbl1, b: dbl1 })<...>
 
-create_named_list_with_int: () -> { a: 3, b: 6 }
+create_named_list_with_int: (() -> { a: 3, b: 6 })<...>
 
-create_named_list_set_only_one: () -> { a: 3, b: any }
+create_named_list_set_only_one: (() -> { a: 3, b: any })<...>
 
-set_noname_list: ∀'a. 'a & (chr | attr_any) -> { null | 'a }
+set_noname_list: ∀'a. (any_sexp & 'a -> { null | 'a })<...>
 
-set_protected_noname_list: ∀'a. 'a & (chr | attr_any) -> { null | 'a }
+set_protected_noname_list: ∀'a. (any_sexp & 'a -> { null | 'a })<...>
 
-read_in_list: () -> 3 | null
+read_in_list: (() -> 3 | null)<...>
 

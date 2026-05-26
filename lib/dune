@@ -9,6 +9,8 @@
   preprocessor
   parser
   PAst
+  prim_pp
+  vec_pp
   runner
   type_parser
   utils

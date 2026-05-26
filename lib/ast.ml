@@ -352,7 +352,7 @@ let rec aux_e (eid, _decl, vars, e) =
           (* Special case of SEXPs. we coul restrict it to actual SEXP but
            typeof_ctype currently does not return all possible sexp types for SEXP. *)
           match cty with 
-          | SEXP -> Ty.cap (Ty.cup (Rstt.Prim.(Chr.any |> mk)) Rstt.Attr.any) (TVar.typ (TVar.mk KInfer None))
+          | SEXP -> Ty.cap Defs.any_sexp (TVar.typ (TVar.mk KInfer None))
           | _ -> Ty.cap (typeof_ctype cty) (TVar.typ (TVar.mk KInfer None))
         )  params
       in  
