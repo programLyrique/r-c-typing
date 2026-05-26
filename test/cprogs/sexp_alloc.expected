@@ -1,8 +1,8 @@
-alloc_int_literal: ∀'a. cint(int & 'a) -> int[int(i(int & 'a))]
+alloc_int_literal: ∀'a. (cint(int & 'a) -> int[int(i(int & 'a))])<...>
 
-alloc_int_enum: ∀'a. cint(int & 'a) -> int[int(i(int & 'a))]
+alloc_int_enum: ∀'a. (cint(int & 'a) -> int[int(i(int & 'a))])<...>
 
-alloc_double_define: ∀'a. cint(int & 'a) -> dbl[int(i(int & 'a))]
+alloc_double_define: ∀'a. (cint(int & 'a) -> dbl[int(i(int & 'a))])<...>
 
 alloc_oob:
 untypeable: untypeable application

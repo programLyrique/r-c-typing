@@ -4,7 +4,7 @@ Entry points for .Call convention:
 
 Entry points for .C convention:
 
-target_leaf: ∀'a. 'a & (p(chr) | attr_any) -> 'a & (p(chr) | attr_any)
+target_leaf: ∀'a. ('a & (p(chr) | attr_any) -> 'a & (p(chr) | attr_any))<...>
 
-target_root: ∀'a. 'a & (p(chr) | attr_any) -> 'a & (p(chr) | attr_any)
+target_root: ∀'a. ('a & (p(chr) | attr_any) -> 'a & (p(chr) | attr_any))<...>
 

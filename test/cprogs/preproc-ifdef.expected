@@ -1,6 +1,6 @@
-selected_by_ifdef: ∀'a. 'a & (p(chr) | attr_any) -> 'a & (p(chr) | attr_any)
+selected_by_ifdef: ∀'a. ('a & (p(chr) | attr_any) -> 'a & (p(chr) | attr_any))<...>
 
-selected_by_ifndef: ∀'a. 'a & (p(chr) | attr_any) -> 'a & (p(chr) | attr_any)
+selected_by_ifndef: ∀'a. ('a & (p(chr) | attr_any) -> 'a & (p(chr) | attr_any))<...>
 
-selected_by_linux_define: ∀'a. 'a & (p(chr) | attr_any) -> 'a & (p(chr) | attr_any)
+selected_by_linux_define: ∀'a. ('a & (p(chr) | attr_any) -> 'a & (p(chr) | attr_any))<...>
 
