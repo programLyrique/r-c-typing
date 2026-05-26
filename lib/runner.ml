@@ -362,7 +362,23 @@ let rec infer_def ?internal_scope ?(force_internal_global=false) ?(simple_c_fun=
           try Ast.typeof_ctype resolved
           with Failure _ -> Ty.any
         in
-        let v, ty = Defs.BuiltinVar.register_dynamic_binding ~mut:true storage_name ty in
+        (* For SEXP globals, install a gradual annotation [empty .. any_sexp]
+           instead of pinning the type at [any_sexp]. The C declaration
+           [extern SEXP foo] only constrains the upper bound (any SEXP);
+           which SEXP sub-family ([sym] / [env] / [lang] / [v(chr)] / ...)
+           a given read corresponds to is decided by the use-site, and
+           gradual reads let the type checker refine accordingly. Without
+           this, every read of e.g. [syms_x] returns the full [any_sexp]
+           and dispatches that need [sym] or [env] fail. Non-SEXP globals
+           (int, c_string, ...) keep their pinned annotation. *)
+        let annot =
+          if resolved = Ast.SEXP
+          then Some (GTy.mk_gradual Ty.empty ty)
+          else None
+        in
+        let v, ty =
+          Defs.BuiltinVar.register_dynamic_binding ~mut:true ?annot storage_name ty
+        in
         let tys = ty |> GTy.mk |> TyScheme.mk_mono in
         let env = MVariable.add_to_env v tys (Env.rm v env) in
         if opts.debug && visible then

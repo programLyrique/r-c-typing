@@ -138,7 +138,13 @@ let dynamic : (string, Variable.t * Ty.t) Hashtbl.t = Hashtbl.create 64
    a later, more precise declaration upgrade a fallback binding (e.g. a
    [Ty.any] placeholder installed by [PAst.var]'s unknown-name path gets
    replaced when the real [extern SEXP foo;] declaration is seen). *)
-let register_dynamic_binding ?(mut = false) name ty : Variable.t * Ty.t =
+let register_dynamic_binding ?(mut = false) ?annot name ty : Variable.t * Ty.t =
+  (* [annot] (when given) is the gradual [GTy.t] to use for the [AnnotMut]
+     kind, overriding the default pinned [GTy.mk ty]. Used by [infer_def]
+     for SEXP globals: there we want [mk_gradual empty any_sexp] so a read
+     can refine to whichever SEXP sub-family (sym / env / lang / ...) the
+     use-site actually requires. Non-SEXP globals stay pinned. *)
+  let annot_of ty = match annot with Some a -> a | None -> GTy.mk ty in
   match Hashtbl.find_opt dynamic name with
   | Some (v, existing) ->
       let ty =
@@ -149,11 +155,11 @@ let register_dynamic_binding ?(mut = false) name ty : Variable.t * Ty.t =
         if not mut then false
         else
           match MVariable.kind v with
-          | MVariable.AnnotMut existing -> not (GTy.equiv existing (GTy.mk ty))
+          | MVariable.AnnotMut existing -> not (GTy.equiv existing (annot_of ty))
           | _ -> true
       in
       if needs_mutable_rebind then begin
-        let v = MVariable.create (MVariable.AnnotMut (GTy.mk ty)) (Some name) in
+        let v = MVariable.create (MVariable.AnnotMut (annot_of ty)) (Some name) in
         Hashtbl.replace dynamic name (v, ty);
         v, ty
       end else begin
@@ -161,7 +167,7 @@ let register_dynamic_binding ?(mut = false) name ty : Variable.t * Ty.t =
         v, ty
       end
   | None ->
-      let kind = if mut then MVariable.AnnotMut (GTy.mk ty) else Immut in
+      let kind = if mut then MVariable.AnnotMut (annot_of ty) else Immut in
       let v = MVariable.create kind (Some name) in
       Hashtbl.add dynamic name (v, ty);
       v, ty
