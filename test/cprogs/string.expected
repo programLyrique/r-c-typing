@@ -6,11 +6,11 @@ create_str_from_concat: () -> "hello world"
 
 get_c_string_from_str: (chr[^(int \ 0)] -> c_string \ c_null) & (chr0 | v0(clx | dbl | int | lgl | raw) | v[^(int \ 0)](clx | dbl | int | lgl | raw) -> c_null)
 
-is_blank_string: (^(chr \ "") -> c_false) & ("" | null -> c_true)
+is_blank_string: (p(^(chr \ "")) -> c_false) & (null | p("") -> c_true)
 
-to_char: ∀'a. (chr & 'a -> na_string & 'a) & ('a & (chr | (env | externalptr | lang | list | null | sym | vec0 | vec[^(1..)] | (any -> any))) -> chr) & ('a & (chr | (env | externalptr | lang | list | null | vec0 | (any -> any))) -> na_string)
+to_char: ∀'a. (p(chr) & 'a -> na_string & 'a) & ('a & ((env | externalptr | lang | list | null | sym | vec0 | vec[^(1..)] | (any -> any)) | p(chr)) -> p(chr)) & ('a & ((env | externalptr | lang | list | null | vec0 | (any -> any)) | p(chr)) -> na_string)
 
 make_url_names: () -> chr9
 
-R_parse: ((^chr, chr | attr_any) -> empty) & ((chr | (env | externalptr | lang | list | null | sym | vec0 | vec[^(1..)] | (any -> any)), any_sexp) -> ())
+R_parse: ((p(^chr), p(chr) | attr_any) -> empty) & (((env | externalptr | lang | list | null | sym | vec0 | vec[^(1..)] | (any -> any)) | p(chr), any_sexp) -> ())
 

@@ -741,6 +741,11 @@ let run_on_package opts path idenv env =
   run_on_files opts c_files ~entry_points idenv env
   
 let () =
+  (* Register before rstt's own params so the overrides for [Prim] and [Vec]
+     win in [TagMap.of_list] (later-merged extensions overwrite earlier ones,
+     and [add_printer_param] prepends — so earliest call ends up last). *)
+  Mlsem_types.PrinterCfg.add_printer_param Prim_pp.printer_params ;
+  Mlsem_types.PrinterCfg.add_printer_param Vec_pp.printer_params ;
   Mlsem_types.PrinterCfg.set_descr_printer Rstt.Pp.print_descr_ctx ;
   Mlsem_types.PrinterCfg.set_printer Rstt.Pp.print ;
   Mlsem_types.PrinterCfg.add_printer_param (Rstt.Pp.printer_params ()) ;

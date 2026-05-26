@@ -4,11 +4,11 @@ make_int_or_float: (c_false -> dbl2) & (c_int_na \ c_false -> int1)
 
 incr_real: dbl1 -> dbl1
 
-test_int_or_real: (dbl -> c_false) & (int -> c_true) & (chr | ~(dbl | int) -> ())
+test_int_or_real: (dbl -> c_false) & (int -> c_true) & (p(chr) | ~(dbl | int) -> ())
 
-test_isInt: (int -> c_true) & (chr | ~int -> c_false)
+test_isInt: (int -> c_true) & (p(chr) | ~int -> c_false)
 
-test_isInt2: (int -> c_true) & (chr | ~int -> c_false)
+test_isInt2: (int -> c_true) & (p(chr) | ~int -> c_false)
 
 r_plus_scalar_strict: ((dbl, dbl) -> dbl1) & ((int, int) -> int1)
 
