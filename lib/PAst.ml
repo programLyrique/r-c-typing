@@ -76,6 +76,12 @@ type const =
   | Default of e
   | Switch of e * e list  (* expression on which to switch, list of cases/default *)
   | Cast of Ast.ctype * e (* Type cast expression *)
+  | CoerceNarrow of Ast.ctype * e
+    (** Implicit narrowing conversion synthesised at a typed pointer
+        initialization (C's [void* -> T*] rule). Unlike [Cast] it lowers to an
+        intersecting cast, so it only narrows the initializer's type toward the
+        declared pointer type and never widens nor de-refines a more precise
+        initializer. *)
   [@@deriving show]
  and param =
    | Param of Ast.ctype * string
@@ -152,6 +158,7 @@ let rec bv_e in_lhs_assign (_,e) =
   | Block exprs -> List.fold_left (fun acc e -> StrSet.union acc (bv_e in_lhs_assign e)) StrSet.empty exprs
   | Comma (e1, e2) -> StrSet.union (bv_e in_lhs_assign e1) (bv_e in_lhs_assign e2)
   | Cast (_, e) -> bv_e in_lhs_assign e
+  | CoerceNarrow (_, e) -> bv_e in_lhs_assign e
   | VarDeclare (_, (_, Id s)) -> StrSet.singleton s
   | VarDeclare (_, _) -> failwith "Declaration must have an identifier" (*Should be unreachable*)
 
@@ -506,6 +513,7 @@ let rec aux_e env (pos,e) =
       e
   | Comma (e1, e2) -> Ast.Seq (aux_e env e1, aux_e env e2)
   | Cast (ty, e) -> Ast.Cast (resolve_ctype env.decl ty, aux_e env e)
+  | CoerceNarrow (ty, e) -> Ast.CoerceNarrow (resolve_ctype env.decl ty, aux_e env e)
   | VarDeclare (typ, (_, Id s)) ->
       (* Reached when a [VarDeclare] sits inside a [Seq] processed by [aux_e]
          directly — most commonly the for-init [Seq [VarDeclare; VarAssign]].
@@ -691,6 +699,7 @@ let map f e =
     | Block exprs -> Block (List.map aux exprs)
     | Comma (e1, e2) -> Comma (aux e1, aux e2)
     | Cast (ty, e) -> Cast (ty, aux e)
+    | CoerceNarrow (ty, e) -> CoerceNarrow (ty, aux e)
     in
     f (pos, e)
   in aux e
@@ -705,6 +714,7 @@ let rec extract_calls_from_expr ?(fun_names=StrSet.empty) (_pos, e') =
     match e' with
     | Id name when StrSet.mem name fun_names -> [name]
     | Cast (_, inner) -> extract_arg inner
+    | CoerceNarrow (_, inner) -> extract_arg inner
     (* [&fn] is the canonical "function as value" syntax (callback
        registration like [r_attrib_map(x, &r_attrib_get_cb, &tag)]). Peel the
        address-of so the bare [Id] inside reaches the [fun_names] check —
@@ -747,6 +757,7 @@ let rec extract_calls_from_expr ?(fun_names=StrSet.empty) (_pos, e') =
   | Block exprs -> List.concat_map extract exprs
   | Comma (e1, e2) -> extract e1 @ extract e2
   | Cast (_, e) -> extract e
+  | CoerceNarrow (_, e) -> extract e
 
 (* Inline tests for extract_calls_from_expr *)
 let%test "simple function call" =

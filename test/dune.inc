@@ -408,3 +408,14 @@
  (deps    cprogs/predef_macros.c cprogs/predef_macros.expected)
  (action  (diff cprogs/predef_macros.expected predef_macros.output)))
 
+(rule
+ (alias   runtest)
+ (deps    (glob_files ../types/*.ty) cprogs/ptr_init_conversion.c)
+ (action  (with-stdout-to ptr_init_conversion.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/ptr_init_conversion.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/ptr_init_conversion.c cprogs/ptr_init_conversion.expected)
+ (action  (diff cprogs/ptr_init_conversion.expected ptr_init_conversion.output)))
+

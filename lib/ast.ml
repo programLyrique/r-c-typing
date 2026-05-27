@@ -111,6 +111,13 @@ type e' =
 | While of e * e
 | TyCheck of e * Ty.t (* Test between an expression and a constant *)
 | Cast of ctype * e (* Type cast expression *)
+| CoerceNarrow of ctype * e
+  (* Implicit narrowing conversion (C's [void* -> T*] at a typed pointer
+     initialization). Lowers to [TypeCast] (intersecting cast: result is
+     [target & source]) rather than [Cast]'s [TypeCoerce] (replacement), so it
+     only narrows a too-wide initializer (e.g. [malloc]'s [c_ptr]) and never
+     widens nor de-refines an already-precise one (e.g. [CHAR]'s non-null
+     [c_string('a)]). *)
 | Function of string * ctype * (ctype * Variable.t) list * e
 | Switch of e * (e * e * bool) list (* expression on which to switch, and then case/default (Noop), their bodies and whether it had a break*)
 | Seq of e * e
@@ -342,8 +349,13 @@ let rec aux_e (eid, _decl, vars, e) =
         let tt = Eid.unique (), A.Value (GTy.mk Rstt.Cint.tt) in
         let ff = Eid.unique (), A.Value (GTy.mk Rstt.Cint.ff) in
         A.Ite (e, GTy.mk ty, tt, ff)
-    | Cast (ty, e) -> let e = aux_e e in 
+    | Cast (ty, e) -> let e = aux_e e in
         A.TypeCoerce (e, typeof_ctype ty |> GTy.mk , SA.NoCheck)
+    | CoerceNarrow (ty, e) -> let e = aux_e e in
+        (* Intersecting cast: result is [typeof(ty) & source], so an
+           already-precise initializer is preserved and only a too-wide one is
+           narrowed to the declared pointer type. *)
+        A.TypeCast (e, typeof_ctype ty |> GTy.mk , SA.NoCheck)
     | Function (_name, _ret_type, params, body) ->
       (* Create lets in the body for each argument: match parameter names with
        type variable in the domain *)
@@ -431,6 +443,7 @@ let rec aux_e (eid, _decl, vars, e) =
       | Return e -> Return (Option.map aux e)
       | TyCheck (e, ty) -> TyCheck (aux e, ty)
       | Cast (ty, e) -> Cast (ty, aux e)
+      | CoerceNarrow (ty, e) -> CoerceNarrow (ty, aux e)
       | Function (name, ret_type, params, body) ->
           Function (name, ret_type, params, aux body)
       | Switch (e, cases) ->
@@ -628,6 +641,10 @@ let rec aux_e (eid, _decl, vars, e) =
       | Cast (ty, e1) ->
           let e1', env1, _ = aux e1 env in
           ((id, decl, env, Cast (ty, e1')), env1, None)
+
+      | CoerceNarrow (ty, e1) ->
+          let e1', env1, _ = aux e1 env in
+          ((id, decl, env, CoerceNarrow (ty, e1')), env1, None)
 
       | Function (name, ret_type, params, body) ->
           (* Do not propagate outer constants into function bodies. *)
