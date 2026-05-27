@@ -77,6 +77,7 @@ CE_BYTES: c(3)
 CE_SYMBOL: c(5)
 CE_ANY: c(99)
 translateCharUTF8: t(p(chr)) -> c_string
+translateChar: t(p(chr)) -> c_string
 PRINTNAME: t(sym) -> p(chr)
 STRING_PTR_RO: t(v(chr)) -> *p(chr)
 STRING_PTR: t(v(chr)) -> *p(chr)
@@ -105,11 +106,13 @@ R_DimNamesSymbol: sym
 R_RowNamesSymbol: sym
 R_BraceSymbol: sym
 R_BracketSymbol: sym
+R_Bracket2Symbol: sym
 
 // R API: evaluation / binding
 Rf_eval: t(any_sexp, env) -> any
 Rf_defineVar: t(sym, any_sexp, env) -> c_void
 Rf_GetOption1: t(sym) -> any_sexp
+R_getVar: t(sym, env, c_bool) -> any_sexp
 
 // R API: reflection / printing
 Rf_PrintValue: t(any_sexp) -> c_void

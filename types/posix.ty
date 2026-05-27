@@ -60,6 +60,9 @@ strsignal: t(any) -> c_string
 strdup: t(any) -> c_string
 
 // POSIX stdio
+stdin: c_ptr
+stdout: c_ptr
+stderr: c_ptr
 fdopen: t(any, any) -> any
 fprintf: (t(any, any) -> c_int) & (t(any, any, any) -> c_int) & (t(any, any, any, any) -> c_int)
 fclose: t(any) -> c_int
@@ -102,6 +105,7 @@ strcpy: t(any, any) -> c_string
 fmin: t(c_double, c_double) -> c_double
 
 // POSIX sockets / netdb
+__SOCKADDR_COMMON: t(any) -> c_void
 socket: t(any, any, any) -> c_int
 bind: t(any, any, any) -> c_int
 getaddrinfo: t(any, any, any, any) -> c_int
