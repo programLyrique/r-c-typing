@@ -1205,6 +1205,20 @@ and aux_declaration typ (decl: anon_choice_opt_ms_call_modi_decl_decl_opt_gnu_as
         match init with
         | `Exp expr ->
             let e = aux_expression expr in
+            (* Model C's implicit [void* -> T*] conversion at initialization.
+               When the declared type is a concrete (non-[void]) pointer,
+               coerce the initializer to it, narrowing e.g. [malloc]'s [c_ptr]
+               to the declared [char*]. Skipped when the target is [void*]
+               itself: that is the top pointer ("no pointee assertion"), and
+               its [Ast] encoding is a pointer-to-[void] that would *clobber* a
+               precise initializer rather than widen it — so [void *s = f()]
+               keeps [f]'s precise return type. *)
+            let e =
+              match typ with
+              | Ast.Ptr Ast.Void -> e
+              | Ast.Ptr _ -> (Position.dummy, A.CoerceNarrow (typ, e))
+              | _ -> e
+            in
             let var_assign = (Mlsem.Common.Position.dummy, A.VarAssign ((Mlsem.Common.Position.dummy, name), e)) in
             (Mlsem.Common.Position.dummy, A.Seq [var_decl; var_assign])
         | `Init_list init_list ->

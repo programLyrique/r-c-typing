@@ -68,6 +68,14 @@ asChar: (t(v[(1..)]('a)) -> p(chr)) & (t(p(chr) & 'a) -> 'a) & (t(sym) -> p(chr)
 type2char:  (t(p(int)) -> c("integer")) & (t(p(dbl)) -> c("double")) & (t(p(lgl)) -> c("logical")) & (t(p(chr)) -> c("character")) & (t(p(clx)) -> c("complex")) & (t(p(raw)) -> c("raw")) & (t(list) -> c("list")) & (t(null) -> c("NULL")) & (t(env) -> c("environment")) & (t(sym) -> c("symbol")) & (t(lang) -> c("language")) & (t(expr) -> c("expression")) & (t(any -> any) -> c("closure"))
 isString: (t(v(chr)) -> c_true) & (t(any_sexp \ v(chr)) -> c_false)
 getCharCE: t(p(chr)) -> c_int
+// cetype_t encoding constants (R's Rinternals.h); the encoding argument of
+// mkCharCE / mkCharLenCE and the result of getCharCE.
+CE_NATIVE: c(0)
+CE_UTF8: c(1)
+CE_LATIN1: c(2)
+CE_BYTES: c(3)
+CE_SYMBOL: c(5)
+CE_ANY: c(99)
 translateCharUTF8: t(p(chr)) -> c_string
 PRINTNAME: t(sym) -> p(chr)
 STRING_PTR_RO: t(v(chr)) -> *p(chr)
@@ -168,7 +176,7 @@ SHALLOW_DUPLICATE_ATTRIB: t(any_sexp, any_sexp) -> c_void
 // left as [any].
 R_mapAttrib: t(any_sexp, any, *any) -> any_sexp
 
-[]<-: t(*'a, c_int_na, 'a) -> *'a
+[]<-: (t(*'a, c_int_na, 'a) -> *'a) & (t(c_string, c_int_na, c_char) -> c_string)
 []: (t(*'a, c_int_na) -> 'a) & (t(c_string, c_int_na) -> c_char)
 
 PROTECT_INDEX: c_int
@@ -182,7 +190,7 @@ R_ReleaseObject: t(any_sexp) -> c_void
 
 // Arithmetic (including pointer arithmetic for strings)
 
-+__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na) & (t(c_string, c_int) -> c_string) & (t(c_char, c_int) -> c_char) & (t(c_char, c_char) -> c_char)
++__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na) & (t(c_string, c_int) -> c_string) & (t(c_char, c_int) -> c_char) & (t(c_char, c_char) -> c_char) & (t(*'a, c_int_na) -> *'a) & (t(c_int_na, *'a) -> *'a)
 
 -__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na) & (t(c_string, c_int) -> c_string) & (t(c_string, c_string) -> c_int)
 
