@@ -1,0 +1,14 @@
+C_first_class: (any_sexp -> p(chr))<...>
+
+C_n_classes: (any_sexp -> c_int)<...>
+
+C_names: (any_sexp -> any_sexp)<...>
+
+C_dim: (any_sexp -> any_sexp)<...>
+
+C_refined_class: (() -> v1("myclass"))<...>
+
+C_refined_class_length: (() -> c_true)<...>
+
+C_refined_class_first: (() -> p("myclass"))<...>
+

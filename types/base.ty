@@ -60,7 +60,7 @@ mkCharCE: t(c_string('a) | c_null, any) -> p(chr('a)) // the 2nd argument is the
 mkCharLenCE: t(c_string('a), c_int, any) -> p(chr('a))
 R_CHAR: (t(p(chr('a))) -> c_string('a)) & (t(p(chr \ ^chr)) -> c("NA"))
 CHAR: (t(p(chr('a))) -> c_string('a)) & (t(p(chr \ ^chr)) -> c("NA"))
-STRING_ELT: t(v(chr), c_int) -> p(chr)
+STRING_ELT: t(v(chr & 'a), c_int) -> p('a)
 SET_STRING_ELT: t(v['a](chr), c_int, p(chr)) -> v['a](chr) // TODO: write a specialized version for size 1
 StringBlank: (t(p("")) -> c_true) & (t(p(chr \ "")) -> c_false) & (t(null) -> c_true) 
 NA_STRING: na_string
@@ -181,6 +181,10 @@ R_mapAttrib: t(any_sexp, any, *any) -> any_sexp
 
 []<-: (t(*'a, c_int_na, 'a) -> *'a) & (t(c_string, c_int_na, c_char) -> c_string)
 []: (t(*'a, c_int_na) -> 'a) & (t(c_string, c_int_na) -> c_char)
+
+// Test fixture: a value with a concrete class set, used by attributes.c
+// to exercise the refined branch of [Defs.getAttrib_class_ty].
+test_class_fixture: int <myclass>
 
 PROTECT_INDEX: c_int
 

@@ -419,3 +419,14 @@
  (deps    cprogs/ptr_init_conversion.c cprogs/ptr_init_conversion.expected)
  (action  (diff cprogs/ptr_init_conversion.expected ptr_init_conversion.output)))
 
+(rule
+ (alias   runtest)
+ (deps    (glob_files ../types/*.ty) cprogs/attributes.c)
+ (action  (with-stdout-to attributes.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/attributes.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/attributes.c cprogs/attributes.expected)
+ (action  (diff cprogs/attributes.expected attributes.output)))
+

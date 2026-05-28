@@ -38,8 +38,8 @@ let mkNamed_vecsxp_ty names =
   build TIdMap.empty builder
 
 
-let set_vector_elt_ty name = 
-  let open Rstt.Builder in 
+let set_vector_elt_ty name =
+  let open Rstt.Builder in
   let _, r' = rvar empty_env "r" in
   let _, a = tvar empty_env "a" in
   (* t({;`r}, 'a) -> {name: 'a; `r} ; actually, maybe 'a & any_sexp for the 1st argument... *)
@@ -49,6 +49,33 @@ let set_vector_elt_ty name =
         TList ({bindings = [(name, TVar a)]; sym = []; tl = TRowVar r'}) )
   in
   build TIdMap.empty builder
+
+(* Domain of the [getAttrib(_, R_ClassSymbol)] projection: any R SEXP. *)
+let getAttrib_class_pdom _result_ty = any_sexp
+
+(* Type of [getAttrib(v, R_ClassSymbol)] given v's inferred type. The class
+   attribute is a chr vector listing v's classes. When v's [classes]
+   component (from its [attr(content, classes)] encoding) is a concrete,
+   positive list we refine to [v[N](class-name singletons)]; otherwise we
+   fall back to [v(chr)]. The result is [Attr.mk_anyclass]-wrapped to match
+   the encoding R values use in [.ty] (Builder.build does this implicitly
+   for Vec; we have to be explicit here). *)
+let getAttrib_class_ty v_ty =
+  let open Rstt in
+  let fallback =
+    Attr.mk_anyclass (Vec.mk (Vec.AnyLength (Prim.mk Prim.Chr.any)))
+  in
+  try
+    let classes_ty = Attr.proj_classes v_ty in
+    match Classes.destruct classes_ty with
+    | { pos; neg = []; unk = []; tail = NoOther } when pos <> [] ->
+      let names = List.map (fun (Classes.L (s, _)) -> s) pos in
+      let elem_ty =
+        names |> List.map Prim.Chr.str |> Ty.disj |> Prim.mk
+      in
+      Attr.mk_anyclass (Vec.mk (Vec.CstLength (List.length names, elem_ty)))
+    | _ -> fallback
+  with _ -> fallback
 
 let tobool, tobool_t =
   let v = MVariable.create Immut (Some "tobool") in

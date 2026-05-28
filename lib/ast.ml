@@ -306,6 +306,18 @@ let rec aux_e (eid, _decl, vars, e) =
            in
         let ty = Defs.mkNamed_vecsxp_ty names in
         A.Value (GTy.mk ty)
+    (* getAttrib(v, R_ClassSymbol): install a custom projection so the result
+       type is computed from v's inferred type at typing time, refining to
+       v[N](class-name singletons) when v's classes are concretely known,
+       falling back to v(chr) otherwise. See [Defs.getAttrib_class_ty]. *)
+    | Call((_,_,_,Id f), [v_arg; ( _ ,_,_, Id label) ])
+        when let name = Variable.get_name f in (name = Some "getAttrib" || name = Some "Rf_getAttrib") &&
+         (Variable.get_name label = Some "R_ClassSymbol") ->
+        A.Projection
+          (SA.PCustom { pname="getClassAttrib"; pgen=true;
+                        pdom=Defs.getAttrib_class_pdom;
+                        proj=Defs.getAttrib_class_ty },
+           aux_e v_arg)
     (* Named lists*)
     | Call ((eid,_,_,Id v1), [(_, _,_,Id v2) as id2; ( _ ,_,_, idx); value])
       when (Variable.get_name v1 = Some "SET_VECTOR_ELT") &&
