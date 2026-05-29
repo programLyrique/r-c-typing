@@ -57,13 +57,13 @@ let getAttrib_class_pdom _result_ty = any_sexp
    attribute is a chr vector listing v's classes. When v's [classes]
    component (from its [attr(content, classes)] encoding) is a concrete,
    positive list we refine to [v[N](class-name singletons)]; otherwise we
-   fall back to [v(chr)]. The result is [Attr.mk_anyclass]-wrapped to match
+   fall back to [v(chr)]. The result is [Attr.mk_content]-wrapped to match
    the encoding R values use in [.ty] (Builder.build does this implicitly
    for Vec; we have to be explicit here). *)
 let getAttrib_class_ty v_ty =
   let open Rstt in
   let fallback =
-    Attr.mk_anyclass (Vec.mk (Vec.AnyLength (Prim.mk Prim.Chr.any)))
+    Attr.mk_content (Vec.mk (Vec.AnyLength (Prim.mk Prim.Chr.any)))
   in
   try
     let classes_ty = Attr.proj_classes v_ty in
@@ -73,7 +73,7 @@ let getAttrib_class_ty v_ty =
       let elem_ty =
         names |> List.map Prim.Chr.str |> Ty.disj |> Prim.mk
       in
-      Attr.mk_anyclass (Vec.mk (Vec.CstLength (List.length names, elem_ty)))
+      Attr.mk_content (Vec.mk (Vec.CstLength (List.length names, elem_ty)))
     | _ -> fallback
   with _ -> fallback
 
@@ -96,7 +96,7 @@ let inherits_test_ty name =
   let classes =
     Classes.mk { pos = [Classes.L (name, [])]; neg = []; unk = []; tail = Classes.Unknown }
   in
-  Attr.mk { content = Attr.proj_content Attr.any; classes }
+  Attr.mk { content = Attr.proj_content Attr.any; classes ; attrs = Lst.any }
 
 (* setAttrib(vec, R_ClassSymbol, val): the result is vec's value re-tagged with
    the class attribute carried by [val]. This is the dual of
@@ -153,14 +153,217 @@ let setAttrib_class_classes val_ty =
 let setAttrib_class_cdom _result_ty = [ [ any_sexp; any_sexp ] ]
 
 (* Result type of [setAttrib(vec, R_ClassSymbol, val)] from the inferred types
-   of [vec] and [val]: keep vec's content, install val's classes. *)
+   of [vec] and [val]: keep vec's content and its other attributes, install
+   val's classes. setAttrib on R_ClassSymbol only replaces the class attribute,
+   so vec's [attrs] (names, dim, ...) carry through unchanged. *)
 let setAttrib_class_cons tys =
   let open Rstt in
   match tys with
   | [ vec_ty; val_ty ] ->
     let content = try Attr.proj_content vec_ty with _ -> vec_ty in
+    let attrs = try Attr.proj_attrs vec_ty with _ -> Lst.any in
     let classes = setAttrib_class_classes val_ty in
-    Attr.mk { content; classes }
+    Attr.mk { content; classes; attrs }
+  | _ -> assert false
+
+(* ===== Arbitrary (non-class) attributes, stored in the [attrs] Lst field =====
+
+   An R value's attributes are modeled by [Attr]'s [attrs] field, a list type
+   ([Lst]) whose [bindings] map an attribute name (a string label) to its value
+   type, with an open [tl] tail standing for any other (unknown) attribute. When
+   the attribute name is statically known (an [R_*Symbol] constant or an
+   [install "lit"]), getAttrib/setAttrib read/write the matching label; when it
+   is dynamic, getAttrib reads the union of all attributes and setAttrib widens
+   the tail. The class attribute is handled separately above (the [classes]
+   field); [names] is intentionally not routed here (see ast.ml). *)
+
+(* Build a required list field carrying type [t]. *)
+let mk_field (t : Rstt.Ty.t) : Rstt.Ty.F.t =
+  let open Rstt in
+  Ty.F.mk_descr (Ty.O.required t)
+
+(* An [Lst] value is a tagged record; recover that underlying record type. *)
+let lst_record attrs_ty =
+  let open Rstt in
+  attrs_ty |> Ty.get_descr |> Descr.get_tags |> Tags.get Lst.tag
+  |> Op.TagComp.as_atom |> snd
+
+(* [label]'s field in a record, as (value-when-present, can-be-absent). This is
+   the projection mechanism [Attr] uses for content/classes/attrs, so it reads
+   optional ("present-or-absent") tails correctly -- unlike a raw [Ty.F.get_descr]
+   on the add_option-wrapped tail field. A bound required label gives
+   (its value, false); an open tail gives (any, true); a closed record lacking
+   the label gives (empty, true). *)
+let record_proj_field rec_ty label =
+  let open Rstt in
+  let atom =
+    rec_ty |> Ty.get_descr |> Descr.get_records |> Op.Records.proj label |> Ty.O.get
+  in
+  (Ty.O.Atom.get atom, Ty.O.Atom.is_optional atom)
+
+(* A sentinel label no R attribute uses; projecting it yields the attrs tail. *)
+let attr_tail_label = "\000__attr_tail__"
+
+(* Bind [name -> val_ty] in an [attrs] Lst, replacing any prior binding and
+   keeping the other bindings and the tail. Falls back to a fresh open list
+   carrying just this label when the Lst can't be destructured. *)
+let lst_set_label attrs_ty name val_ty =
+  let open Rstt in
+  let fresh () = Lst.mk { bindings = [ (name, mk_field val_ty) ]; sym = []; tl = Ty.F.any } in
+  try
+    match Lst.destruct attrs_ty with
+    | [ (atom :: _, []) ] ->
+      let bindings = (name, mk_field val_ty) :: List.remove_assoc name atom.Lst.bindings in
+      Lst.mk { bindings; sym = atom.Lst.sym; tl = atom.Lst.tl }
+    | _ -> fresh ()
+  with _ -> fresh ()
+
+(* Widen the tail of an [attrs] Lst to also allow [val_ty]: a setAttrib with an
+   unknown attribute name means some (unknown) attribute now maps to [val_ty]. *)
+let lst_widen_tail attrs_ty val_ty =
+  let open Rstt in
+  try
+    match Lst.destruct attrs_ty with
+    | [ (atom :: _, []) ] ->
+      let tl = Ty.F.cup atom.Lst.tl (mk_field val_ty) in
+      Lst.mk { bindings = atom.Lst.bindings; sym = atom.Lst.sym; tl }
+    | _ -> Lst.any
+  with _ -> Lst.any
+
+(* The value-when-present of a label, capped to a SEXP (getAttrib returns an R
+   SEXP, so an open tail's [any] tightens to [any_sexp]). *)
+let attr_value_of rec_ty label =
+  let open Rstt in
+  let v, optional = record_proj_field rec_ty label in
+  (Ty.cap v any_sexp, optional)
+
+(* Project the value of attribute [name] from an [attrs] Lst. A bound (required)
+   attribute reads back as exactly its value; an absent-or-tail one is unioned
+   with NULL, since R's getAttrib returns NULL when the attribute is unset.
+   [any_sexp] does NOT include NULL (R's NULL is not attr-tagged), so NULL is
+   added explicitly whenever the attribute may be absent. *)
+let lst_proj_label attrs_ty name =
+  let open Rstt in
+  try
+    let v, optional = attr_value_of (lst_record attrs_ty) (Labels.named name) in
+    if optional then Ty.cup v Null.any else v
+  with _ -> Ty.cup any_sexp Null.any
+
+(* Project the value of an unknown (dynamic) attribute name: the union of every
+   binding value and the tail value, plus NULL (a dynamic attribute may be
+   unset). When the attrs are provably closed (empty tail) this narrows to the
+   union of the known attributes | NULL; an open tail widens it to any_sexp. *)
+let lst_proj_any attrs_ty =
+  let open Rstt in
+  try
+    let rec_ty = lst_record attrs_ty in
+    let labels =
+      Lst.destruct attrs_ty
+      |> List.concat_map (fun (ps, _ns) ->
+        List.concat_map (fun atom -> List.map fst atom.Lst.bindings) ps)
+    in
+    let vals =
+      List.map (fun l -> fst (attr_value_of rec_ty (Labels.named l))) labels
+    in
+    let tail_val = fst (attr_value_of rec_ty (Labels.named attr_tail_label)) in
+    Ty.disj (Null.any :: tail_val :: vals)
+  with _ -> Ty.cup any_sexp Null.any
+
+(* Domain of getAttrib(_, sym) for the attrs projections: any R SEXP. *)
+let getAttrib_attr_pdom _result_ty = any_sexp
+
+(* The value type R guarantees for the recognized special attributes (their
+   slot in a value's attributes always holds this type, or NULL when unset).
+   Used to bound getAttrib's result so e.g. getAttrib(x, R_DimSymbol) is an
+   integer vector | NULL rather than any_sexp | NULL. [names] is deliberately
+   absent (handled via the list-field-names model); [class] has its own field. *)
+let attr_int_vec = Rstt.(Attr.mk_content (Vec.mk (Vec.AnyLength (Prim.mk Prim.Int.any))))
+let attr_chr_vec = Rstt.(Attr.mk_content (Vec.mk (Vec.AnyLength (Prim.mk Prim.Chr.any))))
+let attr_list = Rstt.(Attr.mk_content Lst.any)
+let special_attr_type = function
+  | "dim" -> Some attr_int_vec                        (* INTSXP *)
+  | "levels" -> Some attr_chr_vec                     (* factor levels: STRSXP *)
+  | "dimnames" -> Some attr_list                      (* VECSXP *)
+  | "row.names" -> Some (Ty.cup attr_int_vec attr_chr_vec) (* INTSXP or STRSXP *)
+  | _ -> None
+
+(* getAttrib(v, sym) for a statically-known attribute [name]: the value bound to
+   [name] in v's attrs, or NULL if it may be unset (capping/NULL handled in
+   [lst_proj_label]). For a recognized special attribute, the result is further
+   bounded by the type R guarantees for it (so an unset/unknown dim reads as an
+   integer vector | NULL, not any_sexp | NULL). *)
+let getAttrib_named_ty name v_ty =
+  let open Rstt in
+  let attrs = try Attr.proj_attrs v_ty with _ -> Lst.any in
+  let raw = lst_proj_label attrs name in
+  match special_attr_type name with
+  | Some known -> Ty.cap raw (Ty.cup known Null.any)
+  | None -> raw
+
+(* A positional placeholder label ([_0], [_1], ...) from allocVector_vecsxp_ty,
+   as opposed to a real R name. *)
+let is_placeholder_label s =
+  String.length s >= 2 && s.[0] = '_'
+  && String.for_all (function '0' .. '9' -> true | _ -> false)
+       (String.sub s 1 (String.length s - 1))
+
+(* getAttrib(v, R_NamesSymbol): names live in the content list's field labels
+   (set by mkNamed/SET_VECTOR_ELT), so read them back as a names vector rather
+   than from the attrs field. A list with real labels yields exactly those names
+   as string singletons (no "" build-up artifact, unlike a STRSXP read); a
+   positional placeholder-only list (_0, _1, ... from allocVector(VECSXP,n)) is
+   unnamed -> NULL; a non-list / unknown value falls back to chr vector | NULL
+   (a names attribute is always a character vector or NULL). "" is a valid R name
+   (an unnamed element) and is kept. *)
+let getAttrib_names_ty v_ty =
+  let open Rstt in
+  let fallback = Ty.cup attr_chr_vec Null.any in
+  try
+    let content = Attr.proj_content v_ty in
+    let labels =
+      match Lst.destruct content with
+      | (atom :: _, _) :: _ -> List.map fst atom.Lst.bindings
+      | _ -> []
+    in
+    if labels = [] then fallback
+    else if List.for_all is_placeholder_label labels then Null.any
+    else
+      let elem = labels |> List.map Prim.Chr.str |> Ty.disj |> Prim.mk in
+      Attr.mk_content (Vec.mk (Vec.CstLength (List.length labels, elem)))
+  with _ -> fallback
+
+(* getAttrib(v, sym) for a dynamic attribute name: the union of all of v's
+   attribute values, or NULL. (Capping/NULL handled in [lst_proj_any].) *)
+let getAttrib_dynamic_ty v_ty =
+  let open Rstt in
+  let attrs = try Attr.proj_attrs v_ty with _ -> Lst.any in
+  lst_proj_any attrs
+
+(* setAttrib(vec, sym, val) for a statically-known non-class attribute [name]:
+   keep vec's content and classes, and set the [name] label of its attrs to
+   val's type (other attributes carry through). *)
+let setAttrib_named_cons name tys =
+  let open Rstt in
+  match tys with
+  | [ vec_ty; val_ty ] ->
+    let content = try Attr.proj_content vec_ty with _ -> vec_ty in
+    let classes = try Attr.proj_classes vec_ty with _ -> Classes.any in
+    let attrs0 = try Attr.proj_attrs vec_ty with _ -> Lst.any in
+    let attrs = lst_set_label attrs0 name val_ty in
+    Attr.mk { content; classes; attrs }
+  | _ -> assert false
+
+(* setAttrib(vec, sym, val) for a dynamic attribute name: keep content/classes,
+   widen the attrs tail with val's type. *)
+let setAttrib_dynamic_cons tys =
+  let open Rstt in
+  match tys with
+  | [ vec_ty; val_ty ] ->
+    let content = try Attr.proj_content vec_ty with _ -> vec_ty in
+    let classes = try Attr.proj_classes vec_ty with _ -> Classes.any in
+    let attrs0 = try Attr.proj_attrs vec_ty with _ -> Lst.any in
+    let attrs = lst_widen_tail attrs0 val_ty in
+    Attr.mk { content; classes; attrs }
   | _ -> assert false
 
 let tobool, tobool_t =
@@ -212,25 +415,25 @@ module BuiltinVar = struct
       ("CPLXSXP", Prim.Clx.any |> Prim.mk);
       ("STRSXP", Prim.Chr.any |> Prim.mk);
       ("LGLSXP", Prim.Lgl.any |> Prim.mk);
-      ("NILSXP", Null.any |> Attr.mk_anyclass);
-      ("VECSXP", Rstt.Lst.any |> Attr.mk_anyclass);
+      ("NILSXP", Null.any |> Attr.mk_content);
+      ("VECSXP", Rstt.Lst.any |> Attr.mk_content);
       ("EXPRSXP", exprsxp);
-      ("CLOSXP", Arrow.mk Ty.any Ty.any |> Attr.mk_anyclass);
-      ("BUILTINSXP", Arrow.mk Ty.any Ty.any |> Attr.mk_anyclass);
-      ("SPECIALSXP", Arrow.mk Ty.any Ty.any |> Attr.mk_anyclass);
+      ("CLOSXP", Arrow.mk Ty.any Ty.any |> Attr.mk_content);
+      ("BUILTINSXP", Arrow.mk Ty.any Ty.any |> Attr.mk_content);
+      ("SPECIALSXP", Arrow.mk Ty.any Ty.any |> Attr.mk_content);
       ("CHARSXP", Prim.Chr.any |> Prim.mk);
-      ("SYMSXP", Sym.any |> Attr.mk_anyclass);
-      ("LISTSXP", Lang.any |> Attr.mk_anyclass);
-      ("LANGSXP", Lang.any |> Attr.mk_anyclass);
-      ("ENVSXP", Rstt.Env.any |> Attr.mk_anyclass);
-      ("EXTPTRSXP", ExternalPtr.any |> Attr.mk_anyclass);
+      ("SYMSXP", Sym.any |> Attr.mk_content);
+      ("LISTSXP", Lang.any |> Attr.mk_content);
+      ("LANGSXP", Lang.any |> Attr.mk_content);
+      ("ENVSXP", Rstt.Env.any |> Attr.mk_content);
+      ("EXTPTRSXP", ExternalPtr.any |> Attr.mk_content);
       ("ANYSXP", Attr.any);
       ("DOTSXP", Ty.any); (* TODO: replace by the actual type: a list with an any tail*)
       (* Booleans*)
       ("TRUE", Cint.tt);
       ("FALSE", Cint.ff);
       (* Special values *)
-      ("R_NilValue", Null.any |> Attr.mk_anyclass);
+      ("R_NilValue", Null.any |> Attr.mk_content);
       (* Predefined preprocessor macros (see
          https://gcc.gnu.org/onlinedocs/cpp/Standard-Predefined-Macros.html).
          [__FILE__], [__DATE__], [__TIME__] expand to string literals,

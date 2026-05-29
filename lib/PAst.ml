@@ -593,14 +593,27 @@ and aux_block_stmt env stmt =
 and process_call env f args =
   (* Set calls modify in place in the R C API, but for typing reason,
   we make it create a new value and then assign to the original variable. *)
+  (* The R C API "set" functions mutate their first argument in place. We model
+     the mutation as [v = f(v, ...)] (a VarAssign that refines v's type, so a
+     later use of v -- e.g. returning the parameter -- sees the new
+     attribute/element). The whole expression must then yield what the function
+     actually *returns* in R, so value-position uses ([return f(...)],
+     [y = f(...)]) stay faithful:
+       - setAttrib / Rf_setAttrib return the object (vec, the 1st arg) -> yield v
+       - SET_VECTOR_ELT returns the element (3rd arg)                  -> yield it
+       - SET_STRING_ELT returns void                                  -> yield unit
+         (a bare VarAssign yields unit, so no trailing read). *)
+  let set_call loc1 = mk_e env (Eid.unique_with_pos loc1)
+      (Ast.Call (aux_e env f, List.map (aux_e env) args)) in
   let e = match (f, args) with
-  | (loc1,Id ("SET_VECTOR_ELT" | "SET_STRING_ELT")),(_, Id v)::_ ->
-   Ast.VarAssign (var env v,
-      (mk_e env (Eid.unique_with_pos loc1) (Ast.Call (
-         aux_e env f,
-        List.map (aux_e env) args
-      )))
-    )
+  | (loc1,Id ("setAttrib" | "Rf_setAttrib")),(_, Id v)::_ ->
+   let vv = var env v in
+   Ast.Seq (fresh_e env (Ast.VarAssign (vv, set_call loc1)), fresh_e env (Ast.Id vv))
+  | (loc1,Id "SET_VECTOR_ELT"),((_, Id v)::_::elt::_) ->
+   let vv = var env v in
+   Ast.Seq (fresh_e env (Ast.VarAssign (vv, set_call loc1)), aux_e env elt)
+  | (loc1,Id "SET_STRING_ELT"),(_, Id v)::_ ->
+   Ast.VarAssign (var env v, set_call loc1)
   | (_, Id "sizeof"), [(arg_pos, Id name)]
     when Ast.DeclMap.mem name env.decl
       && Option.is_none (lookup_binding env name) ->

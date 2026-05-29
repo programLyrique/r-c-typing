@@ -1,6 +1,6 @@
-test_while: ∀'a. ((^int & 'a -> ^int & 'a) & (int & 'a -> int & 'a))<...>
+test_while: ∀'a. (t(^int & 'a) -> ^int & 'a) & (t(int & 'a) -> int & 'a)
 
-sum_while: (dbl -> dbl1)<...>
+sum_while: t(dbl) -> dbl1
 
-count_do_while: (int -> int1)<...>
+count_do_while: t(int) -> int1
 

@@ -41,7 +41,7 @@ type ctype =
  | Typeref of string (*Refer to another named type, e.g. a named struct or a typedef*)
  (* Function pointer: return type, parameter types, variadic flag.
     Represents the C-level shape `RET (PTR_NAME)(PARAMS)`. It translates to
-    an [Arrow] type wrapped with [Attr.mk_anyclass], matching how [infer_cfun]
+    an [Arrow] type wrapped with [Attr.mk_content], matching how [infer_cfun]
     types ordinary C functions so that the [pfun] projection accepts the
     value as callable. *)
  | FunPtr of ctype * ctype list * bool
@@ -211,14 +211,14 @@ let typeof_ctype ct =
     | FunPtr (ret, params, variadic) ->
         (* Mirrors [C_interface.infer_cfun]: variadic functions accept [Ty.any]
            for their argument tuple; fixed-arity ones use the explicit tuple.
-           The [Attr.mk_anyclass] wrap is required so [Ast.build_call]'s
+           The [Attr.mk_content] wrap is required so [Ast.build_call]'s
            [pfun] projection accepts the value as callable. *)
         let ret_ty = aux resolving ret in
         let arg_ty =
           if variadic then Ty.any
           else Tuple.mk (List.map (aux resolving) params)
         in
-        Arrow.mk arg_ty ret_ty |> Attr.mk_anyclass
+        Arrow.mk arg_ty ret_ty |> Attr.mk_content
     | _ -> failwith ("Type not supported yet in typeof_ctype: " ^ show_ctype ct)
   in
   aux StrMap.empty ct
@@ -226,7 +226,7 @@ let typeof_ctype ct =
 
 
 module AttrProj = struct
-  let pdom ty = Rstt.Attr.mk_anyclass ty
+  let pdom ty = Rstt.Attr.mk_content ty
   let proj ty = Rstt.Attr.proj_content ty
 end
 
@@ -234,14 +234,14 @@ module AttrConstr = struct
   open Rstt
   let cons classes tys =
     match tys with
-    | [ty] -> Attr.mk { content=ty ; classes }
+    | [ty] -> Attr.mk { content=ty ; classes ; attrs=Lst.any }
     | _ -> assert false
   let cdom classes ty =
     try
       Attr.destruct ty
       |> List.filter_map (fun (ps,_) ->
         let content = ps |> List.map (fun a -> a.Attr.content) |> Ty.conj in
-        let ty' = Attr.mk { content ; classes } in
+        let ty' = Attr.mk { content ; classes ; attrs=Lst.any } in
         if Ty.leq ty' ty then Some [content] else None
       )
     with Invalid_argument _ -> []
@@ -255,6 +255,42 @@ let build_call f args =
       let f = Eid.unique (), A.Projection
       (PCustom { pname="pfun" ; pgen=true ; pdom=AttrProj.pdom ; proj=AttrProj.proj }, f) in
       A.App (f, args)
+
+(* Resolve the symbol argument of a getAttrib/setAttrib call to the attribute it
+   targets. The [R_*Symbol] constants and [install("lit")]/[Rf_install("lit")]
+   (string recovered from a literal or the const-prop [vars] map, as
+   SET_VECTOR_ELT does for its index) give a statically-known attribute name;
+   anything else is dynamic. [Class] has a dedicated model (the [classes] field);
+   [Names] is deferred to the list-field-names modeling (mkNamed/SET_VECTOR_ELT),
+   so callers only warn for it. *)
+let attr_target_of_symarg (symarg : e) =
+  let str_of_arg (_, _, vars, e') =
+    match e' with
+    | Const (CStr s) -> Some s
+    | Id v -> (match VarMap.find_opt v vars with Some (C (CStr s)) -> Some s | _ -> None)
+    | _ -> None
+  in
+  let of_name = function
+    | "class" -> `Class
+    | "names" -> `Names
+    | s -> `Named s
+  in
+  match symarg with
+  | (_, _, _, Id label) ->
+    (match Variable.get_name label with
+     | Some "R_ClassSymbol" -> `Class
+     | Some "R_NamesSymbol" -> `Names
+     | Some "R_DimSymbol" -> `Named "dim"
+     | Some "R_DimNamesSymbol" -> `Named "dimnames"
+     | Some "R_LevelsSymbol" -> `Named "levels"
+     | Some "R_RowNamesSymbol" -> `Named "row.names"
+     | _ -> `Dynamic)
+  | (_, _, _, Call ((_, _, _, Id inst), [ strarg ]))
+    when (match Variable.get_name inst with
+          | Some ("install" | "Rf_install") -> true
+          | _ -> false) ->
+    (match str_of_arg strarg with Some s -> of_name s | None -> `Dynamic)
+  | _ -> `Dynamic
 
 (* Transformation to MLsem ast
   GTy is used for gradual types, Ty for "normal" types
@@ -329,32 +365,68 @@ let rec aux_e (eid, _decl, vars, e) =
            in
         let ty = Defs.mkNamed_vecsxp_ty names in
         A.Value (GTy.mk ty)
-    (* getAttrib(v, R_ClassSymbol): install a custom projection so the result
-       type is computed from v's inferred type at typing time, refining to
-       v[N](class-name singletons) when v's classes are concretely known,
-       falling back to v(chr) otherwise. See [Defs.getAttrib_class_ty]. *)
-    | Call((_,_,_,Id f), [v_arg; ( _ ,_,_, Id label) ])
-        when let name = Variable.get_name f in (name = Some "getAttrib" || name = Some "Rf_getAttrib") &&
-         (Variable.get_name label = Some "R_ClassSymbol") ->
-        A.Projection
-          (SA.PCustom { pname="getClassAttrib"; pgen=true;
-                        pdom=Defs.getAttrib_class_pdom;
-                        proj=Defs.getAttrib_class_ty },
-           aux_e v_arg)
-    (* setAttrib(v, R_ClassSymbol, val): dual of the getAttrib case above.
-       Install a custom binary constructor whose result keeps v's content but
-       carries val's classes, refined to concrete class-name singletons when
-       val's type exposes them. See [Defs.setAttrib_class_cons]. The R-internal
-       [classgets(v, val)] is the 2-arg alias for this; it does not appear in
-       the corpus here, so we do not special-case it. *)
-    | Call((_,_,_,Id f), [v_arg; ( _ ,_,_, Id label); val_arg ])
-        when let name = Variable.get_name f in (name = Some "setAttrib" || name = Some "Rf_setAttrib") &&
-         (Variable.get_name label = Some "R_ClassSymbol") ->
-        A.Constructor
-          (SA.CCustom { cname="setClassAttrib"; cgen=true;
-                        cdom=Defs.setAttrib_class_cdom;
-                        cons=Defs.setAttrib_class_cons },
-           [aux_e v_arg; aux_e val_arg])
+    (* getAttrib(v, sym): route by the attribute the symbol denotes.
+       - Class: dedicated projection refining to v[N](class-name singletons)
+         when v's classes are concretely known (see [Defs.getAttrib_class_ty]).
+       - Named name: project that label of v's attrs (value | NULL).
+       - Dynamic: project the union of all of v's attributes (value | NULL).
+       - Names: deferred to list-field-names modeling; warn and type generically. *)
+    | Call(((_,_,_,Id f) as fnode), ([v_arg; symarg] as args))
+        when (match Variable.get_name f with
+              | Some ("getAttrib" | "Rf_getAttrib") -> true | _ -> false) ->
+        (match attr_target_of_symarg symarg with
+         | `Class ->
+             A.Projection
+               (SA.PCustom { pname="getClassAttrib"; pgen=true;
+                             pdom=Defs.getAttrib_class_pdom; proj=Defs.getAttrib_class_ty },
+                aux_e v_arg)
+         | `Named name ->
+             A.Projection
+               (SA.PCustom { pname="getAttrib:" ^ name; pgen=true;
+                             pdom=Defs.getAttrib_attr_pdom; proj=Defs.getAttrib_named_ty name },
+                aux_e v_arg)
+         | `Dynamic ->
+             A.Projection
+               (SA.PCustom { pname="getAttrib:?"; pgen=true;
+                             pdom=Defs.getAttrib_attr_pdom; proj=Defs.getAttrib_dynamic_ty },
+                aux_e v_arg)
+         | `Names ->
+             Format.eprintf
+               "Warning: getAttrib on R_NamesSymbol; names are modeled via list field \
+                bindings, not the attrs field@.";
+             build_call (aux_e fnode) (List.map aux_e args))
+    (* setAttrib(v, sym, val): dual of getAttrib.
+       - Class: keep v's content/attrs, install val's classes.
+       - Named name: set that attrs label to val's type (content/classes/other
+         attrs preserved).
+       - Dynamic: widen the attrs tail with val's type.
+       - Names: deferred; warn and type generically.
+       (The R-internal [classgets(v, val)] 2-arg alias is not in the corpus, so
+       we do not special-case it.) *)
+    | Call(((_,_,_,Id f) as fnode), ([v_arg; symarg; val_arg] as args))
+        when (match Variable.get_name f with
+              | Some ("setAttrib" | "Rf_setAttrib") -> true | _ -> false) ->
+        (match attr_target_of_symarg symarg with
+         | `Class ->
+             A.Constructor
+               (SA.CCustom { cname="setClassAttrib"; cgen=true;
+                             cdom=Defs.setAttrib_class_cdom; cons=Defs.setAttrib_class_cons },
+                [aux_e v_arg; aux_e val_arg])
+         | `Named name ->
+             A.Constructor
+               (SA.CCustom { cname="setAttrib:" ^ name; cgen=true;
+                             cdom=Defs.setAttrib_class_cdom; cons=Defs.setAttrib_named_cons name },
+                [aux_e v_arg; aux_e val_arg])
+         | `Dynamic ->
+             A.Constructor
+               (SA.CCustom { cname="setAttrib:?"; cgen=true;
+                             cdom=Defs.setAttrib_class_cdom; cons=Defs.setAttrib_dynamic_cons },
+                [aux_e v_arg; aux_e val_arg])
+         | `Names ->
+             Format.eprintf
+               "Warning: setAttrib on R_NamesSymbol; names are modeled via list field \
+                bindings, not the attrs field@.";
+             build_call (aux_e fnode) (List.map aux_e args))
     (* Named lists*)
     | Call ((eid,_,_,Id v1), [(_, _,_,Id v2) as id2; ( _ ,_,_, idx); value])
       when (Variable.get_name v1 = Some "SET_VECTOR_ELT") &&

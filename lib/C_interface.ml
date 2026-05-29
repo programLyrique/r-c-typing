@@ -41,7 +41,7 @@ let is_simple_c_function past =
    parameter/return types (e.g. [r_obj* = struct SEXPREC*]) are resolved to
    their canonical form before being translated to Sstt. Without it,
    [Typeref "r_obj"] degrades to [Ty.any] and a [SEXP] signature becomes
-   [*any -> *any]. The result is wrapped with [Attr.mk_anyclass] to match
+   [*any -> *any]. The result is wrapped with [Attr.mk_content] to match
    the calling convention expected by [Ast.build_call] (which projects the
    callee through [pfun], whose domain requires an attribute-wrapped
    function); without this, any body applying such a binding fails with
@@ -64,7 +64,7 @@ let infer_cfun ?(typedef_map = Ast.DeclMap.empty) return_ty params =
       in
       Tuple.mk arg_types
   in
-  Arrow.mk arg_ty ret_ty |> Rstt.Attr.mk_anyclass
+  Arrow.mk arg_ty ret_ty |> Rstt.Attr.mk_content
 
 
 let dotC_typeof typedef_map ct =
@@ -82,11 +82,11 @@ let dotC_typeof typedef_map ct =
   let open Rstt in
   match ct with
   (* TODO: add also Rcomplex* *)
-  | Ptr Int -> Ty.cup (Vec.AnyLength (Prim.mk Prim.Int.any) |> Vec.mk |> Attr.mk_anyclass)
-    (Vec.AnyLength (Prim.mk Prim.Lgl.any) |> Vec.mk |> Attr.mk_anyclass) (* We allow logical vectors as well since they can be coerced to int *)
-  | Ptr Float -> Vec.AnyLength (Prim.mk Prim.Dbl.any) |> Vec.mk |> Attr.mk_anyclass
-  | Ptr Ptr Char -> Vec.AnyLength (Prim.mk Prim.Chr.any) |> Vec.mk |> Attr.mk_anyclass
-  | Ptr Char -> Vec.AnyLength (Prim.mk Prim.Raw.any) |> Vec.mk |> Attr.mk_anyclass (* Actually unsigned char* *)
+  | Ptr Int -> Ty.cup (Vec.AnyLength (Prim.mk Prim.Int.any) |> Vec.mk |> Attr.mk_content)
+    (Vec.AnyLength (Prim.mk Prim.Lgl.any) |> Vec.mk |> Attr.mk_content) (* We allow logical vectors as well since they can be coerced to int *)
+  | Ptr Float -> Vec.AnyLength (Prim.mk Prim.Dbl.any) |> Vec.mk |> Attr.mk_content
+  | Ptr Ptr Char -> Vec.AnyLength (Prim.mk Prim.Chr.any) |> Vec.mk |> Attr.mk_content
+  | Ptr Char -> Vec.AnyLength (Prim.mk Prim.Raw.any) |> Vec.mk |> Attr.mk_content (* Actually unsigned char* *)
   | _ -> failwith (Printf.sprintf "Unsupported type for .C interface: %s. Only init*, double*, char** and unsigned char* are supported." (Ast.show_ctype ct))
 
 
@@ -102,7 +102,7 @@ let infer_dotC ?(typedef_map = Ast.DeclMap.empty) ret_ty params =
   in
   let arg_tuple = Tuple.mk arg_types in
   (* Same attribute wrapping as [infer_cfun] — see comment there. *)
-  Arrow.mk arg_tuple Rstt.Cenums.void |> Rstt.Attr.mk_anyclass
+  Arrow.mk arg_tuple Rstt.Cenums.void |> Rstt.Attr.mk_content
 
 
 let infer_dotC_from_past ?(typedef_map = Ast.DeclMap.empty) = function
@@ -144,13 +144,13 @@ let%test "infer_dotC infers supported .C parameters from a PAst function" =
     Arrow.mk
       (Tuple.mk
          [ Ty.cup
-             (Vec.AnyLength (Prim.mk Prim.Int.any) |> Vec.mk |> Attr.mk_anyclass)
-             (Vec.AnyLength (Prim.mk Prim.Lgl.any) |> Vec.mk |> Attr.mk_anyclass);
-           Vec.AnyLength (Prim.mk Prim.Dbl.any) |> Vec.mk |> Attr.mk_anyclass;
-           Vec.AnyLength (Prim.mk Prim.Chr.any) |> Vec.mk |> Attr.mk_anyclass;
-           Vec.AnyLength (Prim.mk Prim.Raw.any) |> Vec.mk |> Attr.mk_anyclass ])
+             (Vec.AnyLength (Prim.mk Prim.Int.any) |> Vec.mk |> Attr.mk_content)
+             (Vec.AnyLength (Prim.mk Prim.Lgl.any) |> Vec.mk |> Attr.mk_content);
+           Vec.AnyLength (Prim.mk Prim.Dbl.any) |> Vec.mk |> Attr.mk_content;
+           Vec.AnyLength (Prim.mk Prim.Chr.any) |> Vec.mk |> Attr.mk_content;
+           Vec.AnyLength (Prim.mk Prim.Raw.any) |> Vec.mk |> Attr.mk_content ])
       Cenums.void
-    |> Attr.mk_anyclass
+    |> Attr.mk_content
   in
   Ty.equiv (infer_dotC_from_past past) expected
 
@@ -219,7 +219,7 @@ let%test "infer_cfun types variadic functions as any -> ret" =
     infer_cfun Ast.Int [Param (Ast.Ptr Ast.Char, "fmt"); Vararg]
   in
   let expected =
-    Arrow.mk Ty.any (Ast.typeof_ctype Ast.Int) |> Rstt.Attr.mk_anyclass
+    Arrow.mk Ty.any (Ast.typeof_ctype Ast.Int) |> Rstt.Attr.mk_content
   in
   Ty.equiv actual expected
 

@@ -170,8 +170,8 @@ let open Builder in
   let ti_map = TIdMap.empty in
   let type_map, _,_ = build_types ti_map empty_env parsed_types in
   let open Rstt in
-  let int_vec = Prim.Int.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk |> Attr.mk_anyclass in
-  let dbl_vec = Prim.Dbl.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk |> Attr.mk_anyclass in
+  let int_vec = Prim.Int.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk |> Attr.mk_content in
+  let dbl_vec = Prim.Dbl.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk |> Attr.mk_content in
   Ty.equiv (StrMap.find "x" type_map) int_vec  &&
   Ty.equiv (StrMap.find "y" type_map) dbl_vec
 
@@ -188,8 +188,8 @@ let%test "build from file" =
   let ti_map = TIdMap.empty in
   let type_map, _,_ = build_types ti_map Builder.empty_env parsed_types in
   let open Rstt in
-  let int_vec = Prim.Int.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk |> Attr.mk_anyclass in
-  let dbl_vec = Prim.Dbl.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk |> Attr.mk_anyclass in
+  let int_vec = Prim.Int.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk |> Attr.mk_content in
+  let dbl_vec = Prim.Dbl.any |> Prim.mk |> (fun v -> Vec.AnyLength v) |> Vec.mk |> Attr.mk_content in
   Sys.remove filename;
   Ty.equiv (StrMap.find "x" type_map) int_vec  &&
   Ty.equiv (StrMap.find "y" type_map) dbl_vec 

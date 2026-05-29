@@ -5,9 +5,9 @@ Entry points for .Call convention:
 
 Entry points for .C convention:
 
-r_attrib_get: ((*{  }, *{  }) -> *{  })<...>
+r_attrib_get: t(*{  }, *{  }) -> *{  }
 
-my_class: (*{  } -> *{  })<...>
+my_class: t(*{  }) -> *{  }
 
-init: (() -> ())<...>
+init: () -> ()
 

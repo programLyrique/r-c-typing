@@ -1,20 +1,20 @@
-larger_than_3: ∀'a,'b. ((^int1 & 'a -> ^int1 & 'a) & (int1 & 'a -> int1 & 'a))<...>
+larger_than_3: ∀'a,'b. (t(^int1 & 'a) -> ^int1 & 'a) & (t(int1 & 'a) -> int1 & 'a)
 
-size_bound: ∀'a,'b. (vec[int(i('b & (..10)))] & 'a -> vec[int(i('b & (..10)))] & 'a)<...>
+size_bound: ∀'a,'b. t(vec[int(i('b & (..10)))] & 'a) -> vec[int(i('b & (..10)))] & 'a
 
-bail_if: ((c_false, c_string) | (c_int_na \ c_false, c_string) -> ())<...>
+bail_if: t(c_false, c_string) | t(c_int_na \ c_false, c_string) -> ()
 
-cond_on_int: ∀'a. (c_false & 'a -> c_false & 'a)<...>
+cond_on_int: ∀'a. t(c_false & 'a) -> c_false & 'a
 
-isNull: (*c_int_na \ c_null -> c_false)<...>
+isNull: t(*c_int_na \ c_null) -> c_false
 
-C_escape_chars: (chr -> ())<...>
+C_escape_chars: t(chr) -> ()
 
-C_escape_chars_one: ∀'a. (any_sexp & 'a -> any_sexp & 'a)<...>
+C_escape_chars_one: ∀'a. t(any_sexp & 'a) -> any_sexp & 'a
 
-C_escape_chars2: ∀'a,'b,'c,'d. ((chr0 & 'a -> chr0 & 'a) & (v("" | chr & 'd) & 'a -> v("" | chr & 'd)) & (v[int(i(int & 'c))]("" | chr & 'd) & 'a -> v[int(i(int & 'c))]("" | chr & 'd)))<...>
+C_escape_chars2: ∀'a,'b,'c,'d. (t(chr0 & 'a) -> chr0 & 'a) & (t(v("" | chr & 'd) & 'a) -> v("" | chr & 'd)) & (t(v[int(i(int & 'c))]("" | chr & 'd) & 'a) -> v[int(i(int & 'c))]("" | chr & 'd))
 
-strstr: ((c_string, c_string) -> c_string)<...>
+strstr: t(c_string, c_string) -> c_string
 
-R_split_string: ((chr, chr) -> chr2)<...>
+R_split_string: t(chr, chr) -> chr2
 

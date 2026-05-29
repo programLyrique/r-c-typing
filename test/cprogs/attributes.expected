@@ -1,24 +1,50 @@
-C_first_class: (any_sexp -> p(chr))<...>
+first_class: t(any_sexp) -> p(chr)
 
-C_n_classes: (any_sexp -> c_int)<...>
+n_classes: t(any_sexp) -> c_int
 
-C_names: (any_sexp -> any_sexp)<...>
+names: t(any_sexp) -> any_sexp
 
-C_dim: (any_sexp -> any_sexp)<...>
+dim: t(any_sexp) -> int | s(null)
 
-C_set_class: (any_sexp -> <myclass>)<...>
+levels: t(any_sexp) -> chr | s(null)
 
-C_set_class_on_list: (() -> { _0: null, _1: null }<myclass>)<...>
+dimnames: t(any_sexp) -> list | s(null)
 
-C_set_class_unknown: ((any_sexp, any_sexp) -> attr_any)<...>
+row_names: t(any_sexp) -> (chr | int) | s(null)
 
-C_set_class_buildup: (any_sexp -> <data.frame, tbl_df>)<...>
+set_class: t(any_sexp) -> <myclass>
 
-C_set_class_buildup_partial: (any_sexp -> <a>)<...>
+set_class_on_list: () -> { _0: null, _1: null }<myclass>
 
-C_refined_class: (any_sexp -> v1("myclass"))<...>
+set_class_unknown: t(any_sexp, any_sexp) -> attr_any
 
-C_refined_class_length: (any_sexp -> c_true)<...>
+set_class_buildup: t(any_sexp) -> <data.frame, tbl_df>
 
-C_refined_class_first: (any_sexp -> p("myclass"))<...>
+set_class_buildup_partial: t(any_sexp) -> <a>
+
+refined_class: t(any_sexp) -> v1("myclass")
+
+refined_class_length: t(any_sexp) -> c_true
+
+refined_class_first: t(any_sexp) -> p("myclass")
+
+dim_roundtrip_constructed: t(any_sexp) -> int2
+
+install_roundtrip_constructed: t(any_sexp) -> "hello"
+
+dim_roundtrip_arg: ∀'a. t(any_sexp, any_sexp & 'a) -> int & 'a
+
+class_then_dim_keeps_class: t(any_sexp) -> v1("myclass")
+
+get_unset_attr: t(any_sexp) -> int | s(null)
+
+get_dynamic_attr: t(any_sexp, any_sexp) -> p(chr) | s(null) | attr_any
+
+set_attr_on_param_return_param: t(any_sexp) -> any with { dim: int2, any }
+
+set_class_on_param_return_param: t(any_sexp) -> <myclass>
+
+make_factor: () -> int3<factor> with { levels: v2("" | "a" | "b"), any }
+
+factor_levels: () -> v2("" | "a" | "b")
 

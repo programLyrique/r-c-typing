@@ -1,20 +1,20 @@
-change_int: ∀'a. ((^int & 'a -> ^int & 'a) & (int & 'a -> int & 'a))<...>
+change_int: ∀'a. (t(^int & 'a) -> ^int & 'a) & (t(int & 'a) -> int & 'a)
 
-errorIntScalar: (int1 -> ())<...>
+errorIntScalar: t(int1) -> ()
 
-make_scalar: (() -> int1)<...>
+make_scalar: () -> int1
 
-isIntScalar: ((int1 -> c_true) & (int[^(int \ 1)] | (p(chr) | vec & ~int) -> c_false))<...>
+isIntScalar: (t(int1) -> c_true) & (t(int[^(int \ 1)]) | t(p(chr) | vec & ~int) -> c_false)
 
-check: (() -> c_false)<...>
+check: () -> c_false
 
-incr: (int1 -> int1)<...>
+incr: t(int1) -> int1
 
-isFunction: ((any -> any)<...> -> c_true)<...> & (~(any -> any)<...> -> c_false)<...>
+isFunction: (t(any -> any) -> c_true) & (t(~(any -> any)) -> c_false)
 
-isPrimitive: (((any -> any)<...> -> c_true) & ((env | externalptr<...> | lang | list | null | sym | vec) | p(chr) -> c_false))<...>
+isPrimitive: (t(any -> any) -> c_true) & (t((env | externalptr | lang | list | null | sym | vec) | p(chr)) -> c_false)
 
-isList: (((env | externalptr<...> | list | sym | vec | (any -> any)<...>) | p(chr) -> c_false) & (lang | null -> c_true))<...>
+isList: (t((env | externalptr | list | sym | vec | (any -> any)) | p(chr)) -> c_false) & (t(lang) | t(null) -> c_true)
 
-isNewList: (((env | externalptr<...> | lang | sym | vec | (any -> any)<...>) | p(chr) -> c_false) & (list | null -> c_true))<...>
+isNewList: (t((env | externalptr | lang | sym | vec | (any -> any)) | p(chr)) -> c_false) & (t(list) | t(null) -> c_true)
 
