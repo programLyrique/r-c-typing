@@ -16,5 +16,5 @@ make_pair: ((any_sexp, any_sexp) -> lang)<...>
 
 get_type: (any_sexp -> any_sexp)<...>
 
-reverse_strings: ∀'a. (chr[int(i(int & 'a))] -> chr[int(i(int & 'a))])<...>
+reverse_strings: ∀'a,'b. (v[int(i(int & 'a))]("" | chr & 'b) -> v[int(i(int & 'a))]("" | chr & 'b))<...>
 

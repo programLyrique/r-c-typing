@@ -594,7 +594,7 @@ and process_call env f args =
   (* Set calls modify in place in the R C API, but for typing reason,
   we make it create a new value and then assign to the original variable. *)
   let e = match (f, args) with
-  | (loc1,Id "SET_VECTOR_ELT"),(_, Id v)::_ ->
+  | (loc1,Id ("SET_VECTOR_ELT" | "SET_STRING_ELT")),(_, Id v)::_ ->
    Ast.VarAssign (var env v,
       (mk_e env (Eid.unique_with_pos loc1) (Ast.Call (
          aux_e env f,

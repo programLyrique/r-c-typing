@@ -318,6 +318,20 @@ let rec aux_e (eid, _decl, vars, e) =
                         pdom=Defs.getAttrib_class_pdom;
                         proj=Defs.getAttrib_class_ty },
            aux_e v_arg)
+    (* setAttrib(v, R_ClassSymbol, val): dual of the getAttrib case above.
+       Install a custom binary constructor whose result keeps v's content but
+       carries val's classes, refined to concrete class-name singletons when
+       val's type exposes them. See [Defs.setAttrib_class_cons]. The R-internal
+       [classgets(v, val)] is the 2-arg alias for this; it does not appear in
+       the corpus here, so we do not special-case it. *)
+    | Call((_,_,_,Id f), [v_arg; ( _ ,_,_, Id label); val_arg ])
+        when let name = Variable.get_name f in (name = Some "setAttrib" || name = Some "Rf_setAttrib") &&
+         (Variable.get_name label = Some "R_ClassSymbol") ->
+        A.Constructor
+          (SA.CCustom { cname="setClassAttrib"; cgen=true;
+                        cdom=Defs.setAttrib_class_cdom;
+                        cons=Defs.setAttrib_class_cons },
+           [aux_e v_arg; aux_e val_arg])
     (* Named lists*)
     | Call ((eid,_,_,Id v1), [(_, _,_,Id v2) as id2; ( _ ,_,_, idx); value])
       when (Variable.get_name v1 = Some "SET_VECTOR_ELT") &&

@@ -6,9 +6,19 @@ C_names: (any_sexp -> any_sexp)<...>
 
 C_dim: (any_sexp -> any_sexp)<...>
 
-C_refined_class: (() -> v1("myclass"))<...>
+C_set_class: (any_sexp -> <myclass>)<...>
 
-C_refined_class_length: (() -> c_true)<...>
+C_set_class_on_list: (() -> { _0: null, _1: null }<myclass>)<...>
 
-C_refined_class_first: (() -> p("myclass"))<...>
+C_set_class_unknown: ((any_sexp, any_sexp) -> attr_any)<...>
+
+C_set_class_buildup: (any_sexp -> <data.frame, tbl_df>)<...>
+
+C_set_class_buildup_partial: (any_sexp -> <a>)<...>
+
+C_refined_class: (any_sexp -> v1("myclass"))<...>
+
+C_refined_class_length: (any_sexp -> c_true)<...>
+
+C_refined_class_first: (any_sexp -> p("myclass"))<...>
 

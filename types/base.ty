@@ -31,8 +31,13 @@ envlength: t(env) -> c_int
 nrows: t(vec | list | expr | null | lang) -> c_int
 ncols: t(vec | list | expr | null | lang) -> c_int
 
-// there is also a special case for VECSXP (list) that is coded in OCaml
-allocVector: (t('a & prim, c_int('b)) -> v[int('b)]('a)) & (t(list, 'b) -> list)
+// there is also a special case for VECSXP (list) that is coded in OCaml.
+// The STRSXP overload seeds elements to "" (R_BlankString) — R's actual initial
+// value for a fresh STRSXP (see R src/main/memory.c allocVector3: STRSXP slots
+// are set to R_BlankString, VECSXP/EXPRSXP to R_NilValue). This is the sound
+// fresh-vector type, and lets SET_STRING_ELT's union narrow from "" rather than
+// from chr-top.
+allocVector: (t('a & prim, c_int('b)) -> v[int('b)]('a)) & (t(p(chr), c_int('b)) -> v[int('b)]("")) & (t(list, 'b) -> list)
 R_allocResizableVector: (t('a & prim, c_int('b)) -> v[int('b)]('a)) & (t(list, 'b) -> list) // we might have to support the special case as for the function above, but not the case yet
 allocSExp: t('a & any_r_not_vec) -> 'a
 install: t(c_string) -> sym
@@ -61,7 +66,19 @@ mkCharLenCE: t(c_string('a), c_int, any) -> p(chr('a))
 R_CHAR: (t(p(chr('a))) -> c_string('a)) & (t(p(chr \ ^chr)) -> c("NA"))
 CHAR: (t(p(chr('a))) -> c_string('a)) & (t(p(chr \ ^chr)) -> c("NA"))
 STRING_ELT: t(v(chr & 'a), c_int) -> p('a)
-SET_STRING_ELT: t(v['a](chr), c_int, p(chr)) -> v['a](chr) // TODO: write a specialized version for size 1
+// Union the assigned string into the element type. The Vec abstraction shares
+// one element type across all positions, so this accumulates the *set* of
+// strings written (the position is irrelevant). With allocVector seeding STRSXP
+// elements to "", building a vector slot by slot yields e.g.
+// allocVector(STRSXP,2) + SET_STRING_ELT(_,_,mkChar("a")/mkChar("b")) =>
+// v[2]("" | "a" | "b"). Keeping "" is sound: it stands for any slot not (yet)
+// overwritten — a partially-built vector genuinely still holds "" there. The
+// price is that a fully-built vector also retains a spurious "", since a single
+// element type cannot tell "all slots set" from "some still default". This is
+// what lets setAttrib(_, R_ClassSymbol, _) recover class names from the build-up
+// idiom — its class reader drops the "" allocation default (see
+// Defs.setAttrib_class_classes), so the recovered classes stay clean.
+SET_STRING_ELT: t(v['n](chr & 'e), c_int, p(chr & 's)) -> v['n]((chr & 'e) | (chr & 's))
 StringBlank: (t(p("")) -> c_true) & (t(p(chr \ "")) -> c_false) & (t(null) -> c_true) 
 NA_STRING: na_string
 asChar: (t(v[(1..)]('a)) -> p(chr)) & (t(p(chr) & 'a) -> 'a) & (t(sym) -> p(chr)) & (t(any_r_not_vec \ sym | v0('a)) -> na_string)
@@ -181,10 +198,6 @@ R_mapAttrib: t(any_sexp, any, *any) -> any_sexp
 
 []<-: (t(*'a, c_int_na, 'a) -> *'a) & (t(c_string, c_int_na, c_char) -> c_string)
 []: (t(*'a, c_int_na) -> 'a) & (t(c_string, c_int_na) -> c_char)
-
-// Test fixture: a value with a concrete class set, used by attributes.c
-// to exercise the refined branch of [Defs.getAttrib_class_ty].
-test_class_fixture: int <myclass>
 
 PROTECT_INDEX: c_int
 

@@ -77,6 +77,71 @@ let getAttrib_class_ty v_ty =
     | _ -> fallback
   with _ -> fallback
 
+(* setAttrib(vec, R_ClassSymbol, val): the result is vec's value re-tagged with
+   the class attribute carried by [val]. This is the dual of
+   [getAttrib_class_ty]: there we read class names out of [v]'s [classes]
+   component, here we write them in from [val]'s type.
+
+   [setAttrib_class_classes] derives the class component from [val]'s type. When
+   [val] is a chr vector whose element type is a positive, finite set of string
+   singletons (e.g. [mkString "foo"], typed [t(c_string('a)) -> v[1](chr('a))]
+   in base.ty, or a variable holding such a value — the type flows through let
+   bindings) we set exactly those classes ([tail = NoOther]). Otherwise the
+   concrete names are unknown and we fall back to [Classes.any], i.e. arbitrary
+   classes. The [allocVector(STRSXP,n)] + [SET_STRING_ELT] build-up idiom also
+   lands here: [allocVector] seeds elements to "" and [SET_STRING_ELT] unions in
+   each assigned string (see base.ty), so the element type is the set of strings
+   written, plus "".
+
+   The empty string is dropped from the recovered names: it is the STRSXP
+   allocation default ("") standing in for any slot not provably overwritten, not
+   a class the program asked for, and "" is not a meaningful S3/S4 class name.
+   (Soundness note: this means a degenerate genuine "" class would be missed, but
+   no real code dispatches on it.) If nothing but "" remains, the names are
+   treated as unknown ([Classes.any]). *)
+let setAttrib_class_classes val_ty =
+  let open Rstt in
+  let names_opt =
+    try
+      let content = try Attr.proj_content val_ty with _ -> val_ty in
+      match Vec.destruct content with
+      | [ (atom, []) ] ->
+        let elem = match atom with
+          | Vec.AnyLength e | Vec.CstLength (_, e) | Vec.VarLength (_, e) -> e
+        in
+        (match Prim.Chr.destruct (Prim.destruct elem) with
+         | _, { Prim.Chr.positive = true; content } ->
+           (match List.filter (fun s -> s <> "") content with
+            | [] -> None
+            | names -> Some names)
+         | _ -> None)
+      | _ -> None
+    with _ -> None
+  in
+  match names_opt with
+  | Some names ->
+    Classes.mk
+      { pos = List.map (fun n -> Classes.L (n, [])) names;
+        neg = []; unk = []; tail = Classes.NoOther }
+  | None -> Classes.any
+
+(* Domain of the [setAttrib(_, R_ClassSymbol, _)] constructor: the value being
+   tagged and the class value are both arbitrary R SEXPs. The checker calls this
+   with [Ty.any], so the argument is ignored. The two entries match the two
+   constructor arguments ([vec], [val]). *)
+let setAttrib_class_cdom _result_ty = [ [ any_sexp; any_sexp ] ]
+
+(* Result type of [setAttrib(vec, R_ClassSymbol, val)] from the inferred types
+   of [vec] and [val]: keep vec's content, install val's classes. *)
+let setAttrib_class_cons tys =
+  let open Rstt in
+  match tys with
+  | [ vec_ty; val_ty ] ->
+    let content = try Attr.proj_content vec_ty with _ -> vec_ty in
+    let classes = setAttrib_class_classes val_ty in
+    Attr.mk { content; classes }
+  | _ -> assert false
+
 let tobool, tobool_t =
   let v = MVariable.create Immut (Some "tobool") in
   let non_int_or_ptr = Ty.diff Ty.any (Ty.cup Cint.any_na Cptr.any) in
