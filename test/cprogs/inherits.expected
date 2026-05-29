@@ -1,0 +1,10 @@
+C_inherits_guard: ∀'a. ((<myclass, ...> & 'a -> <myclass, ...> & 'a) & ('a & (<~myclass, ...> | p(chr)) -> null))<...>
+
+C_inherits_ternary: ∀'a. ((<myclass, ...> & 'a -> <myclass, ...> & 'a) & ('a & (<~myclass, ...> | p(chr)) -> null))<...>
+
+C_inherits_fixed: (sym -> null | <myclass, ...>)<...>
+
+C_inherits_not_guard: ∀'a. ((<myclass, ...> & 'a -> <myclass, ...> & 'a) & ('a & (<~myclass, ...> | p(chr)) -> null))<...>
+
+C_inherits_not_ternary: ∀'a. ((<myclass, ...> & 'a -> <myclass, ...> & 'a) & ('a & (<~myclass, ...> | p(chr)) -> null))<...>
+

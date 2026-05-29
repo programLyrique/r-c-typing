@@ -4,7 +4,7 @@ create_str_from_chr: (() -> "world")<...>
 
 create_str_from_concat: (() -> "hello world")<...>
 
-get_c_string_from_str: ∀'a. ((v[^(int \ 0)](chr(na | s(enum & 'a))) -> (cstring(_NA) | cstring(enum & 'a & ~_NA)) \ c_null) & (v[^(int \ 0)](chr(s(enum & 'a))) -> cstring(enum & 'a) \ c_null) & (chr0 | v0(clx | dbl | int | lgl | raw) | v[^(int \ 0)](clx | dbl | int | lgl | raw) -> c_null))<...>
+get_c_string_from_str: ∀'a. ((v[^(int \ 0)](chr(na | s(enum & 'a))) -> (cstring(enum & 'a) | cstring(_NA & ~'a)) \ c_null) & (v[^(int \ 0)](chr(s(enum & 'a))) -> cstring(enum & 'a) \ c_null) & (chr0 | v0(clx | dbl | int | lgl | raw) | v[^(int \ 0)](clx | dbl | int | lgl | raw) -> c_null))<...>
 
 is_blank_string: ((p(^(chr \ "")) -> c_false) & (null | p("") -> c_true))<...>
 

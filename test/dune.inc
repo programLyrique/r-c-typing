@@ -430,3 +430,14 @@
  (deps    cprogs/attributes.c cprogs/attributes.expected)
  (action  (diff cprogs/attributes.expected attributes.output)))
 
+(rule
+ (alias   runtest)
+ (deps    (glob_files ../types/*.ty) cprogs/inherits.c)
+ (action  (with-stdout-to inherits.output
+              (run %{exe:typing_test.exe} %{dep:cprogs/inherits.c}))))
+
+(rule
+ (alias   runtest)
+ (deps    cprogs/inherits.c cprogs/inherits.expected)
+ (action  (diff cprogs/inherits.expected inherits.output)))
+

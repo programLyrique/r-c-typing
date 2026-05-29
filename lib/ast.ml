@@ -269,8 +269,31 @@ let rec aux_e (eid, _decl, vars, e) =
         | _ -> None)
     | _ -> None
   in
-  let rec aux e = 
-    match e with 
+  (* inherits(x, "name") / Rf_inherits(x, "name") used as an if/ternary
+     condition: recognise it so the whole conditional becomes a type-case
+     testing x directly against [Defs.inherits_test_ty name] ("attr value
+     carrying class name"). mlsem's occurrence typing then refines x in both
+     branches. Returns [Some (scrutinee, tested_type, negated)] for the caller
+     to feed into [A.If]/[A.Ite] directly (no [tobool] wrapper, which would hide
+     x from the refinement); [negated] is set for a leading [!] so the caller
+     swaps the branches. A non-literal class argument is not recognised and
+     falls through to the general [tobool] path (base.ty's [inherits], no
+     refinement -- unlike the predicates typed in base.ty, [inherits] takes the
+     class as a runtime argument, so the refinement must be installed here). *)
+  let inherits_typecase cond =
+    let negated, (_, _, _, c) =
+      match cond with
+      | (_, _, _, Unop (op, inner)) when Variable.get_name op = Some "!__1" -> true, inner
+      | _ -> false, cond
+    in
+    match c with
+    | Call ((_,_,_, Id f), [v_arg; (_,_,_, Const (CStr name))])
+        when (let n = Variable.get_name f in n = Some "inherits" || n = Some "Rf_inherits") ->
+        Some (aux_e v_arg, GTy.mk (Defs.inherits_test_ty name), negated)
+    | _ -> None
+  in
+  let rec aux e =
+    match e with
     | Const c -> A.Value (typeof_const c |> GTy.mk )
     | Id v -> A.Var v
     | Declare (v,e) -> A.Declare (v, aux_e e)
@@ -354,14 +377,29 @@ let rec aux_e (eid, _decl, vars, e) =
         let es = List.map aux_e args in 
         let f = aux_e f in 
         build_call f es
-    | If (cond, then_, else_) -> 
-        let cond = aux_e cond in
-        let cond = (Eid.unique (), (A.App ((Eid.unique (), A.Var Defs.tobool), cond))) in
-        A.If (cond, GTy.mk Rstt.Cint.tt, aux_e then_, Option.map aux_e else_)
-    | Ite (cond, then_, else_) -> 
-        let cond = aux_e cond in
-        let cond = (Eid.unique (), (A.App ((Eid.unique (), A.Var Defs.tobool), cond))) in
-        A.Ite (cond, GTy.mk Rstt.Cint.tt, aux_e then_, aux_e else_)
+    | If (cond, then_, else_) ->
+        (match inherits_typecase cond with
+         | Some (scrut, tau, false) ->
+             A.If (scrut, tau, aux_e then_, Option.map aux_e else_)
+         | Some (scrut, tau, true) ->
+             (* !inherits: the original then runs when x is NOT in tau (the
+                else-slot); the in-tau slot runs the original else, or nothing. *)
+             let in_tau = match else_ with Some e -> aux_e e | None -> (Eid.unique (), A.Void) in
+             A.If (scrut, tau, in_tau, Some (aux_e then_))
+         | None ->
+             let cond = aux_e cond in
+             let cond = (Eid.unique (), (A.App ((Eid.unique (), A.Var Defs.tobool), cond))) in
+             A.If (cond, GTy.mk Rstt.Cint.tt, aux_e then_, Option.map aux_e else_))
+    | Ite (cond, then_, else_) ->
+        (match inherits_typecase cond with
+         | Some (scrut, tau, false) ->
+             A.Ite (scrut, tau, aux_e then_, aux_e else_)
+         | Some (scrut, tau, true) ->
+             A.Ite (scrut, tau, aux_e else_, aux_e then_)
+         | None ->
+             let cond = aux_e cond in
+             let cond = (Eid.unique (), (A.App ((Eid.unique (), A.Var Defs.tobool), cond))) in
+             A.Ite (cond, GTy.mk Rstt.Cint.tt, aux_e then_, aux_e else_))
     | While (cond, body) -> 
         let cond = aux_e cond in
         let cond = (Eid.unique (), (A.App ((Eid.unique (), A.Var Defs.tobool), cond))) in

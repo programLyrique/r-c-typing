@@ -77,6 +77,27 @@ let getAttrib_class_ty v_ty =
     | _ -> fallback
   with _ -> fallback
 
+(* [inherits(x, "name")] is lowered (in [ast.ml]) to a type-case testing [x]
+   directly against [inherits_test_ty name]: the set of attr-tagged values whose
+   class set includes [name] (other class labels left [Unknown], i.e. they may
+   or may not be present -- [inherits] only asserts membership, not the exact
+   class set; [AllOthers] would be wrong as it asserts every other class is
+   present, a near-empty type). mlsem's occurrence typing then refines [x] in
+   both branches: the then-branch to [x & <name, ...>], the else-branch to
+   [x \ <name, ...>] (which keeps e.g. the [p(chr)] CHARSXP half of [any_sexp],
+   soundly: a CHARSXP carries no class so the test is false for it).
+
+   Testing [x] directly (rather than projecting its class component) keeps the
+   type-case total over all SEXPs -- a projection would be partial (undefined on
+   the classless [p(chr)]), making [inherits] on a possibly-CHARSXP value
+   untypeable. *)
+let inherits_test_ty name =
+  let open Rstt in
+  let classes =
+    Classes.mk { pos = [Classes.L (name, [])]; neg = []; unk = []; tail = Classes.Unknown }
+  in
+  Attr.mk { content = Attr.proj_content Attr.any; classes }
+
 (* setAttrib(vec, R_ClassSymbol, val): the result is vec's value re-tagged with
    the class attribute carried by [val]. This is the dual of
    [getAttrib_class_ty]: there we read class names out of [v]'s [classes]

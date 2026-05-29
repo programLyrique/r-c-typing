@@ -66,18 +66,6 @@ mkCharLenCE: t(c_string('a), c_int, any) -> p(chr('a))
 R_CHAR: (t(p(chr('a))) -> c_string('a)) & (t(p(chr \ ^chr)) -> c("NA"))
 CHAR: (t(p(chr('a))) -> c_string('a)) & (t(p(chr \ ^chr)) -> c("NA"))
 STRING_ELT: t(v(chr & 'a), c_int) -> p('a)
-// Union the assigned string into the element type. The Vec abstraction shares
-// one element type across all positions, so this accumulates the *set* of
-// strings written (the position is irrelevant). With allocVector seeding STRSXP
-// elements to "", building a vector slot by slot yields e.g.
-// allocVector(STRSXP,2) + SET_STRING_ELT(_,_,mkChar("a")/mkChar("b")) =>
-// v[2]("" | "a" | "b"). Keeping "" is sound: it stands for any slot not (yet)
-// overwritten — a partially-built vector genuinely still holds "" there. The
-// price is that a fully-built vector also retains a spurious "", since a single
-// element type cannot tell "all slots set" from "some still default". This is
-// what lets setAttrib(_, R_ClassSymbol, _) recover class names from the build-up
-// idiom — its class reader drops the "" allocation default (see
-// Defs.setAttrib_class_classes), so the recovered classes stay clean.
 SET_STRING_ELT: t(v['n](chr & 'e), c_int, p(chr & 's)) -> v['n]((chr & 'e) | (chr & 's))
 StringBlank: (t(p("")) -> c_true) & (t(p(chr \ "")) -> c_false) & (t(null) -> c_true) 
 NA_STRING: na_string
@@ -134,7 +122,6 @@ R_getVar: t(sym, env, c_bool) -> any_sexp
 // R API: reflection / printing
 Rf_PrintValue: t(any_sexp) -> c_void
 Rf_type2str: t(any) -> sym // similar to TYPEOF for the argument. Fix accordingly
-Rf_isObject: t(any_sexp) -> c_bool
 Rf_asS4:     t(any_sexp) -> any_sexp
 Rf_isS4:     t(any_sexp) -> c_bool
 Rf_onintr:   t() -> c_void
@@ -353,11 +340,23 @@ coerceVector: t(any, 'a) -> 'a//TODO: not all coercions are possible!
 
 MARK_NOT_MUTABLE: t(any) -> c_void
 
-// classes 
+// classes
 inherits: t(any, c_string) -> c_bool // to improve when supporting classes
 
+// Class-checking predicates. Typed as intersection arrows so that, used as an
+// if/ternary guard, mlsem's occurrence typing refines the argument in each
+// branch (the same app-inversion path that refines isString/isInteger). Unlike
+// inherits these take no runtime class argument, so the class is fixed in the
+// type. isFactor: an INTSXP carrying class <factor>. isObject (OBJECT bit):
+// carries some explicit class, i.e. an attr value other than the no-class one
+// <>.
+isFactor: (t(v(int) <factor, ...>) -> c_true) & (t(any_sexp \ (v(int) <factor, ...>)) -> c_false)
+isObject: (t(sexp \ <>) -> c_true) & (t(any_sexp \ (sexp \ <>)) -> c_false)
+// TODO: add isFrame = inherits(_, "data.frame") here once the .ty lexer accepts
+// dotted class names (rstt-repl lexer.mll `id` rule): it would read
+// isFrame: (t(<data.frame, ...>) -> c_true) & (t(any_sexp \ <data.frame, ...>) -> c_false)
+
 // External pointers 
-// TODO: add a specific type 
 R_ExternalPtrAddr: (t(externalptr('a)) -> *'a) & (t(externalptr(empty)) -> c_null)
 R_MakeExternalPtr: (t(*'a, any_sexp, any_sexp) -> externalptr('a)) & (t(c_null, any_sexp, any_sexp) -> externalptr(empty))
 
