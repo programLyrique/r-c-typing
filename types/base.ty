@@ -326,7 +326,8 @@ COMPLEX_RO: t(v(clx)) -> *s({ r : c_double, i : c_double })
 VECTOR_PTR_RO: t(list) -> *any_sexp
 
 // R API: misc
-length: (t(v[int('a)](any)) -> c_int('a)) & (t(p(chr)) -> c_int)
+// length is defined in Rinlinedfuns.h
+length: (t(v[int('a)](any)) -> c_int('a)) & (t(null) -> c(0)) & (t(sym | (any -> any) | externalptr) -> c(1)) & (t(any_sexp) -> c_int)
 asReal: t(any) -> c_double
 memcpy: t(any, any, c_int) -> any
 R_alloc: t(c_int, c_int) -> *any // or c_ptr?
