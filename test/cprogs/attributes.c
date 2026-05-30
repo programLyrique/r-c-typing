@@ -224,3 +224,29 @@ SEXP unnamed_list_names(void)
   SEXP l = allocVector(VECSXP, 2);
   return getAttrib(l, R_NamesSymbol);
 }
+
+/* setAttrib(list, R_NamesSymbol, nms): the names STRSXP is built statically, so
+   const-prop tracks its ordered contents ["a","b"] and the list's positional
+   slots are relabeled -> { a: ...; b: ... }. (This is what makes setAttrib-names
+   precise: the type-level STRSXP element union is unordered, but const-prop
+   preserves slot order.) */
+SEXP set_names_on_list(void)
+{
+  SEXP l = allocVector(VECSXP, 2);
+  SEXP nms = allocVector(STRSXP, 2);
+  SET_STRING_ELT(nms, 0, mkChar("a"));
+  SET_STRING_ELT(nms, 1, mkChar("b"));
+  setAttrib(l, R_NamesSymbol, nms);
+  return l;
+}
+
+/* Reading the names back off the relabeled list: exactly c("a","b"), no "". */
+SEXP set_names_then_get(void)
+{
+  SEXP l = allocVector(VECSXP, 2);
+  SEXP nms = allocVector(STRSXP, 2);
+  SET_STRING_ELT(nms, 0, mkChar("a"));
+  SET_STRING_ELT(nms, 1, mkChar("b"));
+  setAttrib(l, R_NamesSymbol, nms);
+  return getAttrib(l, R_NamesSymbol);
+}

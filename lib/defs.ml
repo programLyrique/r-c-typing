@@ -365,6 +365,61 @@ let setAttrib_dynamic_cons tys =
     Attr.mk { content; classes; attrs }
   | _ -> assert false
 
+(* ===== const-prop'd STRSXP contents: setAttrib(class/names) with known,
+   ordered strings (no type-read, no "" seed). Used when the value being set is
+   an [allocVector(STRSXP,n)]+[SET_STRING_ELT] build-up the const-prop tracked. *)
+
+(* Domain of a 1-argument setAttrib constructor (only the value being tagged);
+   the class/names strings are captured statically, not passed as a type arg. *)
+let setAttrib_one_cdom _result_ty = [ [ any_sexp ] ]
+
+(* setAttrib(vec, R_ClassSymbol, v) with v's STRSXP contents known: the classes
+   are exactly [names] minus "" (the alloc default / not a class) -- no type-read
+   or "" filtering of an over-approximated element type. *)
+let setAttrib_class_cons_known names tys =
+  let open Rstt in
+  match tys with
+  | [ vec_ty ] ->
+    let content = try Attr.proj_content vec_ty with _ -> vec_ty in
+    let attrs = try Attr.proj_attrs vec_ty with _ -> Lst.any in
+    let classes =
+      match List.filter (fun s -> s <> "") names with
+      | [] -> Classes.any
+      | ns ->
+        Classes.mk { pos = List.map (fun n -> Classes.L (n, [])) ns;
+                     neg = []; unk = []; tail = Classes.NoOther }
+    in
+    Attr.mk { content; classes; attrs }
+  | _ -> assert false
+
+(* Relabel a list's positional slots with [names] (by index), keeping each slot's
+   value type. Only when [content] is a single-atom list whose slot count matches
+   [names]; otherwise [content] is returned unchanged. ("" names -> "" labels;
+   duplicate "" collapse in the record, as with mkNamed.) *)
+let relabel_list content names =
+  let open Rstt in
+  try
+    match Lst.destruct content with
+    | [ (atom :: _, []) ] when List.length atom.Lst.bindings = List.length names ->
+      let bindings = List.map2 (fun (_, f) name -> (name, f)) atom.Lst.bindings names in
+      Lst.mk { bindings; sym = atom.Lst.sym; tl = atom.Lst.tl }
+    | _ -> content
+  with _ -> content
+
+(* setAttrib(list, R_NamesSymbol, v) with v's STRSXP contents known: relabel the
+   list's slots with the ordered names. Non-list content passes through unchanged
+   (names are not modeled for non-lists). getAttrib(_, R_NamesSymbol) then reads
+   the relabeled field labels back precisely. *)
+let setAttrib_names_cons_known names tys =
+  let open Rstt in
+  match tys with
+  | [ vec_ty ] ->
+    let content = try Attr.proj_content vec_ty with _ -> vec_ty in
+    let classes = try Attr.proj_classes vec_ty with _ -> Classes.any in
+    let attrs = try Attr.proj_attrs vec_ty with _ -> Lst.any in
+    Attr.mk { content = relabel_list content names; classes; attrs }
+  | _ -> assert false
+
 let tobool, tobool_t =
   let v = MVariable.create Immut (Some "tobool") in
   let non_int_or_ptr = Ty.diff Ty.any (Ty.cup Cint.any_na Cptr.any) in

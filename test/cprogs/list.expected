@@ -20,3 +20,7 @@ set_protected_noname_list: ∀'a. t(any_sexp & 'a) -> { null | 'a }
 
 read_in_list: () -> 3 | null
 
+create_pos_list_rf: () -> { _0: null, _1: null, _2: null }
+
+create_named_list_rf: () -> { a: any, b: any }
+

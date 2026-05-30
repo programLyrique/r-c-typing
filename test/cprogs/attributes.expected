@@ -52,3 +52,7 @@ named_list_names: () -> v2("a" | "b")
 
 unnamed_list_names: () -> null
 
+set_names_on_list: () -> { a: null, b: null }
+
+set_names_then_get: () -> v2("a" | "b")
+

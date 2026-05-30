@@ -86,9 +86,11 @@ module DeclMap = struct
       (bindings m)
 end
 
-type kind = 
-  | C of const 
-  | L of string list (* list of possible labels *)
+type kind =
+  | C of const
+  | L of string list (* list of possible labels (VECSXP field names, mkNamed) *)
+  | S of string list (* ordered STRSXP contents by index, "" = unset/empty slot
+                        (allocVector(STRSXP,n) + SET_STRING_ELT build-up) *)
 [@@deriving show]
 
 
@@ -256,6 +258,15 @@ let build_call f args =
       (PCustom { pname="pfun" ; pgen=true ; pdom=AttrProj.pdom ; proj=AttrProj.proj }, f) in
       A.App (f, args)
 
+(* Does variable [v] name the R C API function [name] in either spelling -- the
+   bare macro [name] or the real [Rf_name] entry point? Rinternals exposes both
+   unless R_NO_REMAP is set, and packages mix them freely (e.g. curl uses
+   [Rf_allocVector], others [allocVector]). *)
+let is_rfun name v =
+  match Variable.get_name v with
+  | Some n -> String.equal n name || String.equal n ("Rf_" ^ name)
+  | None -> false
+
 (* Resolve the symbol argument of a getAttrib/setAttrib call to the attribute it
    targets. The [R_*Symbol] constants and [install("lit")]/[Rf_install("lit")]
    (string recovered from a literal or the const-prop [vars] map, as
@@ -285,12 +296,17 @@ let attr_target_of_symarg (symarg : e) =
      | Some "R_LevelsSymbol" -> `Named "levels"
      | Some "R_RowNamesSymbol" -> `Named "row.names"
      | _ -> `Dynamic)
-  | (_, _, _, Call ((_, _, _, Id inst), [ strarg ]))
-    when (match Variable.get_name inst with
-          | Some ("install" | "Rf_install") -> true
-          | _ -> false) ->
+  | (_, _, _, Call ((_, _, _, Id inst), [ strarg ])) when is_rfun "install" inst ->
     (match str_of_arg strarg with Some s -> of_name s | None -> `Dynamic)
   | _ -> `Dynamic
+
+(* If [arg] is a variable whose const-prop kind is a tracked STRSXP (built by
+   allocVector(STRSXP,n) + SET_STRING_ELT), return its ordered string contents. *)
+let strsxp_of_arg (arg : e) =
+  match arg with
+  | (_, _, vars, Id v) ->
+    (match VarMap.find_opt v vars with Some (S strs) -> Some strs | _ -> None)
+  | _ -> None
 
 (* Transformation to MLsem ast
   GTy is used for gradual types, Ty for "normal" types
@@ -324,7 +340,7 @@ let rec aux_e (eid, _decl, vars, e) =
     in
     match c with
     | Call ((_,_,_, Id f), [v_arg; (_,_,_, Const (CStr name))])
-        when (let n = Variable.get_name f in n = Some "inherits" || n = Some "Rf_inherits") ->
+        when is_rfun "inherits" f ->
         Some (aux_e v_arg, GTy.mk (Defs.inherits_test_ty name), negated)
     | _ -> None
   in
@@ -341,8 +357,8 @@ let rec aux_e (eid, _decl, vars, e) =
     | FieldUpdate (e, field, value) -> 
         A.Operation (SA.RecUpd field, (Eid.unique (), A.Constructor (SA.Tuple 2, [aux_e e; aux_e value])))
     (* Some special cases for some calls*)
-    | Call ((_,_,_, Id v), [(_, _,_,Id vty); n_expr ]) 
-      when (Variable.get_name v = Some "allocVector") && 
+    | Call ((_,_,_, Id v), [(_, _,_,Id vty); n_expr ])
+      when is_rfun "allocVector" v &&
            (Variable.get_name vty = Some "VECSXP") &&
            Option.is_some (int_const_of_expr n_expr) ->
         let n =
@@ -352,8 +368,8 @@ let rec aux_e (eid, _decl, vars, e) =
         in
         let ty = Defs.allocVector_vecsxp_ty n in
         A.Value (GTy.mk ty)
-    | Call ((_,_,_,Id v1), [(_, _,_,Id vty); ( _ ,_,_, Id v2) ]) 
-      when (Variable.get_name v1 = Some "mkNamed") && 
+    | Call ((_,_,_,Id v1), [(_, _,_,Id vty); ( _ ,_,_, Id v2) ])
+      when is_rfun "mkNamed" v1 &&
            (Variable.get_name vty = Some "VECSXP") ->
         Format.eprintf "%a@." (VarMap.pp pp_kind) vars;
         let kind = VarMap.find_opt v2 vars in 
@@ -372,8 +388,7 @@ let rec aux_e (eid, _decl, vars, e) =
        - Dynamic: project the union of all of v's attributes (value | NULL).
        - Names: read the content list's field labels back as a names vector. *)
     | Call((_,_,_,Id f), [v_arg; symarg])
-        when (match Variable.get_name f with
-              | Some ("getAttrib" | "Rf_getAttrib") -> true | _ -> false) ->
+        when is_rfun "getAttrib" f ->
         (match attr_target_of_symarg symarg with
          | `Class ->
              A.Projection
@@ -406,14 +421,23 @@ let rec aux_e (eid, _decl, vars, e) =
        (The R-internal [classgets(v, val)] 2-arg alias is not in the corpus, so
        we do not special-case it.) *)
     | Call(((_,_,_,Id f) as fnode), ([v_arg; symarg; val_arg] as args))
-        when (match Variable.get_name f with
-              | Some ("setAttrib" | "Rf_setAttrib") -> true | _ -> false) ->
+        when is_rfun "setAttrib" f ->
         (match attr_target_of_symarg symarg with
          | `Class ->
-             A.Constructor
-               (SA.CCustom { cname="setClassAttrib"; cgen=true;
-                             cdom=Defs.setAttrib_class_cdom; cons=Defs.setAttrib_class_cons },
-                [aux_e v_arg; aux_e val_arg])
+             (* if val's STRSXP contents are const-prop'd, take the exact class
+                names (no type-read, no "" seed); else the general type-level path. *)
+             (match strsxp_of_arg val_arg with
+              | Some strs ->
+                  A.Constructor
+                    (SA.CCustom { cname="setClassAttrib!"; cgen=true;
+                                  cdom=Defs.setAttrib_one_cdom;
+                                  cons=Defs.setAttrib_class_cons_known strs },
+                     [aux_e v_arg])
+              | None ->
+                  A.Constructor
+                    (SA.CCustom { cname="setClassAttrib"; cgen=true;
+                                  cdom=Defs.setAttrib_class_cdom; cons=Defs.setAttrib_class_cons },
+                     [aux_e v_arg; aux_e val_arg]))
          | `Named name ->
              A.Constructor
                (SA.CCustom { cname="setAttrib:" ^ name; cgen=true;
@@ -425,10 +449,20 @@ let rec aux_e (eid, _decl, vars, e) =
                              cdom=Defs.setAttrib_class_cdom; cons=Defs.setAttrib_dynamic_cons },
                 [aux_e v_arg; aux_e val_arg])
          | `Names ->
-             Format.eprintf
-               "Warning: setAttrib on R_NamesSymbol; names are modeled via list field \
-                bindings, not the attrs field@.";
-             build_call (aux_e fnode) (List.map aux_e args))
+             (* if val's STRSXP contents are const-prop'd, relabel the list's
+                slots with the ordered names; else defer (warn + generic). *)
+             (match strsxp_of_arg val_arg with
+              | Some strs ->
+                  A.Constructor
+                    (SA.CCustom { cname="setNamesAttrib!"; cgen=true;
+                                  cdom=Defs.setAttrib_one_cdom;
+                                  cons=Defs.setAttrib_names_cons_known strs },
+                     [aux_e v_arg])
+              | None ->
+                  Format.eprintf
+                    "Warning: setAttrib on R_NamesSymbol; names are modeled via list field \
+                     bindings, not the attrs field@.";
+                  build_call (aux_e fnode) (List.map aux_e args)))
     (* Named lists*)
     | Call ((eid,_,_,Id v1), [(_, _,_,Id v2) as id2; ( _ ,_,_, idx); value])
       when (Variable.get_name v1 = Some "SET_VECTOR_ELT") &&
@@ -720,19 +754,42 @@ let rec aux_e (eid, _decl, vars, e) =
           in
           let args_with_kinds = List.rev args_rev in
           let args' = List.map fst args_with_kinds in
-          let kres =
+          let env_out, kres =
             match f', args_with_kinds with
-            (* PROTECT(arg): propagate the kind of the argument *)
+            (* PROTECT(arg) / protect / Rf_protect: propagate the arg's kind *)
             | (_, _, _, Id fv), [(_, k)]
-              when Variable.get_name fv = Some "PROTECT" -> k
+              when Variable.get_name fv = Some "PROTECT" || is_rfun "protect" fv -> env2, k
+            (* mkChar("s"): propagate the string-constant kind, so a
+               SET_STRING_ELT below can read the assigned string. *)
+            | (_, _, _, Id fv), [(_, (Some (C (CStr _)) as k))]
+              when is_rfun "mkChar" fv -> env2, k
             (* mkNamed(VECSXP, names_var): resolve names from the kind *)
             | (_, _, _, Id fv), [((_, _, _, Id vty), _); (_, Some (C (CArray names)))]
-              when Variable.get_name fv = Some "mkNamed"
+              when is_rfun "mkNamed" fv
                    && Variable.get_name vty = Some "VECSXP" ->
-                Some (L (extract_names names))
-            | _ -> None
+                env2, Some (L (extract_names names))
+            (* allocVector(STRSXP, n): seed an empty ordered STRSXP of length n
+               ("" = R_BlankString default per slot). *)
+            | (_, _, _, Id fv), [((_, _, _, Id vty), _); (_, Some (C (CInt n)))]
+              when is_rfun "allocVector" fv
+                   && Variable.get_name vty = Some "STRSXP" && n >= 0 ->
+                env2, Some (S (List.init n (fun _ -> "")))
+            (* SET_STRING_ELT(v, i, mkChar s): set index i of v's tracked STRSXP.
+               (v = SET_STRING_ELT(v,...) per PAst rewrite, so VarAssign rebinds v.) *)
+            | (_, _, _, Id fv),
+              [ ((_, _, _, Id _), Some (S strs)); (_, Some (C (CInt i))); (_, Some (C (CStr s))) ]
+              when Variable.get_name fv = Some "SET_STRING_ELT"
+                   && i >= 0 && i < List.length strs ->
+                env2, Some (S (List.mapi (fun j o -> if j = i then s else o) strs))
+            (* SET_STRING_ELT on a tracked STRSXP but with a dynamic index/string:
+               invalidate the tracking so no partial S lingers (drop to the
+               type-level fallback). *)
+            | (_, _, _, Id fv), ((_, _, _, Id vv), Some (S _)) :: _
+              when Variable.get_name fv = Some "SET_STRING_ELT" ->
+                VarMap.remove vv env2, None
+            | _ -> env2, None
           in
-          ((id, decl, env, Call (f', args')), env2, kres)
+          ((id, decl, env, Call (f', args')), env_out, kres)
 
       | If (cond, then_, else_) ->
           let cond', env1, _ = aux cond env in

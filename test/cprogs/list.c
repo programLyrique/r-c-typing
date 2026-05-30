@@ -80,3 +80,17 @@ SEXP read_in_list()
     return VECTOR_ELT(l, 0);
     // return l;
 }
+
+/* The Rf_-prefixed spellings hit the same VECSXP/mkNamed special-cases as the
+   bare names (via is_rfun), so they yield the precise positional / named list
+   types, not an opaque `list`. */
+SEXP create_pos_list_rf()
+{
+    return Rf_allocVector(VECSXP, 3);
+}
+
+SEXP create_named_list_rf()
+{
+    const char *names[] = {"a", "b", ""};
+    return Rf_mkNamed(VECSXP, names);
+}
