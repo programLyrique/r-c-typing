@@ -8,12 +8,11 @@ module MVariable = Mlsem.Lang.MVariable
 (* The set of values that can flow as a real C SEXP (anything reachable via
    [r_obj*]). Of the [Prim] family only [Chr] (CHARSXP) is itself a passable
    SEXP — the others ([Int], [Dbl], [Lgl], [Clx], [Raw]) only exist as the
-   element type of an enclosing [Vec]. Everything else can carry attributes,
+   element type of an enclosing [Vec]. Everything else except sym and null 
+   can carry attributes,
    so [Attr.any] (any attr-tagged value, regardless of class) covers env,
-   null, sym, list, lang, closure, externalptr, and vec uniformly.
-   This must match the SEXP-param model in [ast.ml]'s [Function] handler so
-   parameters and casts on the same SEXP value agree on its type. *)
-let any_sexp = Ty.cup Rstt.Prim.(Chr.any |> mk) Rstt.Attr.any
+    list, lang, closure, externalptr, and vec uniformly. *)
+let any_sexp = Rstt.(Ty.disj [Prim.(Chr.any |> mk); Attr.any; Null.any; Sym.any; ])
 
 let any_c = Ty.disj [Cint.any; Cenums.char; Cenums.double; Cptr.any]
 
@@ -433,7 +432,7 @@ module BuiltinVar = struct
       ("TRUE", Cint.tt);
       ("FALSE", Cint.ff);
       (* Special values *)
-      ("R_NilValue", Null.any |> Attr.mk_content);
+      ("R_NilValue", Null.any);
       (* Predefined preprocessor macros (see
          https://gcc.gnu.org/onlinedocs/cpp/Standard-Predefined-Macros.html).
          [__FILE__], [__DATE__], [__TIME__] expand to string literals,

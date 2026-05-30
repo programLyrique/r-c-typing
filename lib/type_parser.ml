@@ -86,6 +86,9 @@ let build_types ti_map env type_list =
       with Not_found ->
         Printf.eprintf "Not_found while resolving symbol '%s' during type resolution.@." sym;
         raise Not_found
+      | Invalid_argument msg ->
+        Printf.eprintf "Invalid_argument while resolving symbol '%s' during type resolution: %s@." sym msg;
+        raise (Invalid_argument msg)
     in
     let ty = build ti_map ty in
     let ti_map = if kind = Alias then TIdMap.add id ty ti_map else ti_map in

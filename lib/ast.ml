@@ -370,8 +370,8 @@ let rec aux_e (eid, _decl, vars, e) =
          when v's classes are concretely known (see [Defs.getAttrib_class_ty]).
        - Named name: project that label of v's attrs (value | NULL).
        - Dynamic: project the union of all of v's attributes (value | NULL).
-       - Names: deferred to list-field-names modeling; warn and type generically. *)
-    | Call(((_,_,_,Id f) as fnode), ([v_arg; symarg] as args))
+       - Names: read the content list's field labels back as a names vector. *)
+    | Call((_,_,_,Id f), [v_arg; symarg])
         when (match Variable.get_name f with
               | Some ("getAttrib" | "Rf_getAttrib") -> true | _ -> false) ->
         (match attr_target_of_symarg symarg with
@@ -391,10 +391,12 @@ let rec aux_e (eid, _decl, vars, e) =
                              pdom=Defs.getAttrib_attr_pdom; proj=Defs.getAttrib_dynamic_ty },
                 aux_e v_arg)
          | `Names ->
-             Format.eprintf
-               "Warning: getAttrib on R_NamesSymbol; names are modeled via list field \
-                bindings, not the attrs field@.";
-             build_call (aux_e fnode) (List.map aux_e args))
+             (* names live in the content list's field labels (mkNamed /
+                SET_VECTOR_ELT); read them back as a names vector. *)
+             A.Projection
+               (SA.PCustom { pname="getNamesAttrib"; pgen=true;
+                             pdom=Defs.getAttrib_attr_pdom; proj=Defs.getAttrib_names_ty },
+                aux_e v_arg))
     (* setAttrib(v, sym, val): dual of getAttrib.
        - Class: keep v's content/attrs, install val's classes.
        - Named name: set that attrs label to val's type (content/classes/other

@@ -4,7 +4,7 @@ prim = p(int) | p(dbl) | p(lgl) | p(chr) | p(clx) | p(raw)
 expr = {lang|sym}
 any_r_not_vec = env | null | sym | list | lang | (any -> any) | expr | externalptr | p(chr)
 //any_sexp = any_r_not_vec | vec // the old definition: but in Defs, it was defined as p(chr) | Attr.any
-any_sexp = p(chr) | sexp // Syntax for Attr.any is sexp
+any_sexp = p(chr) | attr | null | sym //
 // This is maybe too unconstrained as sexp can have content be a C type, not only a R type. 
 // Maybe it would be better to tighten Defs.any_sexp...
 
@@ -352,10 +352,8 @@ inherits: t(any, c_string) -> c_bool // to improve when supporting classes
 // carries some explicit class, i.e. an attr value other than the no-class one
 // <>.
 isFactor: (t(v(int) <factor, ...>) -> c_true) & (t(any_sexp \ (v(int) <factor, ...>)) -> c_false)
-isObject: (t(sexp \ <>) -> c_true) & (t(any_sexp \ (sexp \ <>)) -> c_false)
-// TODO: add isFrame = inherits(_, "data.frame") here once the .ty lexer accepts
-// dotted class names (rstt-repl lexer.mll `id` rule): it would read
-// isFrame: (t(<data.frame, ...>) -> c_true) & (t(any_sexp \ <data.frame, ...>) -> c_false)
+isObject: (t(attr \ <>) -> c_true) & (t(any_sexp \ (attr \ <>)) -> c_false)
+isFrame: (t(<data.frame, ...>) -> c_true) & (t(any_sexp \ <data.frame, ...>) -> c_false)
 
 // External pointers 
 R_ExternalPtrAddr: (t(externalptr('a)) -> *'a) & (t(externalptr(empty)) -> c_null)

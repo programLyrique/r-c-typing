@@ -2,15 +2,15 @@ first_class: t(any_sexp) -> p(chr)
 
 n_classes: t(any_sexp) -> c_int
 
-names: t(any_sexp) -> any_sexp
+names: t(any_sexp) -> chr | null
 
-dim: t(any_sexp) -> int | s(null)
+dim: t(any_sexp) -> int | null
 
-levels: t(any_sexp) -> chr | s(null)
+levels: t(any_sexp) -> chr | null
 
-dimnames: t(any_sexp) -> list | s(null)
+dimnames: t(any_sexp) -> list | null
 
-row_names: t(any_sexp) -> (chr | int) | s(null)
+row_names: t(any_sexp) -> (chr | int) | null
 
 set_class: t(any_sexp) -> <myclass>
 
@@ -32,13 +32,13 @@ dim_roundtrip_constructed: t(any_sexp) -> int2
 
 install_roundtrip_constructed: t(any_sexp) -> "hello"
 
-dim_roundtrip_arg: ∀'a. t(any_sexp, any_sexp & 'a) -> int & 'a
+dim_roundtrip_arg: ∀'a. t(any_sexp, any_sexp & 'a) -> 'a & (int | null)
 
 class_then_dim_keeps_class: t(any_sexp) -> v1("myclass")
 
-get_unset_attr: t(any_sexp) -> int | s(null)
+get_unset_attr: t(any_sexp) -> int | null
 
-get_dynamic_attr: t(any_sexp, any_sexp) -> p(chr) | s(null) | attr_any
+get_dynamic_attr: t(any_sexp, any_sexp) -> any_sexp
 
 set_attr_on_param_return_param: t(any_sexp) -> any with { dim: int2, any }
 
@@ -47,4 +47,8 @@ set_class_on_param_return_param: t(any_sexp) -> <myclass>
 make_factor: () -> int3<factor> with { levels: v2("" | "a" | "b"), any }
 
 factor_levels: () -> v2("" | "a" | "b")
+
+named_list_names: () -> v2("a" | "b")
+
+unnamed_list_names: () -> null
 
