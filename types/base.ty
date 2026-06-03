@@ -230,6 +230,13 @@ R_INT_MAX: c_int
 R_LEN_T_MAX: c_int
 R_SSIZE_MAX: c_int
 R_NaN: c_double
+R_PosInf: c_double
+R_NegInf: c_double
+// NaN / finiteness predicates (libm <math.h> + R_ext/Arith.h); int-ish 0/1 -> c_bool.
+isnan: t(c_double) -> c_bool
+ISNAN: t(c_double) -> c_bool
+R_FINITE: t(c_double) -> c_bool
+R_IsNA: t(c_double) -> c_bool
 sizeof: t(any) -> c_int
 
 INT64_MIN: c_int
@@ -254,6 +261,8 @@ TYPEOF: (t(v('a)) -> 'a) & (t('b & ~vec & any_r_not_vec) -> 'b)
 
 NA_INTEGER: c_int_na
 NA_LOGICAL: c_int_na
+// No c_double_na token; mirror R_NaN's plain c_double (double-NA is a NaN bit pattern).
+NA_REAL: c_double
 
 TRUE: c_true
 FALSE: c_false
