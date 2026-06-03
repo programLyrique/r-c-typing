@@ -73,7 +73,10 @@ fwrite: t(any, any, any, any) -> c_int
 snprintf: (t(any, any, any) -> c_int) & (t(any, any, any, any) -> c_int) & (t(any, any, any, any, any) -> c_int) & (t(any, any, any, any, any, any) -> c_int)
 
 // POSIX misc
-errno: c_int
+// NB: errno is intentionally *not* declared here. It is a mutable lvalue
+// (code does [errno = 0]), but a .ty binding is immutable, so installing it
+// would make every [errno = ...] crash with "Cannot assign to an immutable
+// variable". Left undeclared, it falls back to a fresh mutable variable.
 gettimeofday: t(any, any) -> c_int
 setpgid: t(any, any) -> c_int
 prctl: t(any, any) -> c_int

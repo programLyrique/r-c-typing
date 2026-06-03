@@ -112,6 +112,7 @@ R_RowNamesSymbol: sym
 R_BraceSymbol: sym
 R_BracketSymbol: sym
 R_Bracket2Symbol: sym
+R_DoubleColonSymbol: sym
 
 // R API: evaluation / binding
 Rf_eval: t(any_sexp, env) -> any
@@ -162,6 +163,11 @@ R_new_custom_connection: t(c_string, c_string, c_string, *any) -> any_sexp
 // Casts
 asLogical: t(any_sexp) -> c_true | c_false
 asInteger: t(any_sexp) -> c_int
+// Rf_asCharacterFactor: maps a factor's integer codes through its levels, so the
+// input must be a factor (v(int) with class factor; ... allows ordered factors).
+// Result is a STRSXP whose elements are the level strings (level content not
+// projected here -- base.ty has no attribute-record domain syntax).
+asCharacterFactor: t(v(int)<factor, ...>) -> chr
 
 // Pairlists and language
 list2: t(any_sexp, any_sexp) -> lang
@@ -235,9 +241,12 @@ R_NegInf: c_double
 // NaN / finiteness predicates (libm <math.h> + R_ext/Arith.h); int-ish 0/1 -> c_bool.
 isnan: t(c_double) -> c_bool
 ISNAN: t(c_double) -> c_bool
+isfinite: t(c_double) -> c_bool
 R_FINITE: t(c_double) -> c_bool
 R_IsNA: t(c_double) -> c_bool
 sizeof: t(any) -> c_int
+// libm <math.h>: rounds toward -inf, result is still a double.
+floor: t(c_double) -> c_double
 
 INT64_MIN: c_int
 

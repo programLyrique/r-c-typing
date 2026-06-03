@@ -655,7 +655,16 @@ let build_vars m =
   in
   Rstt.Builder.StrMap.fold add_var m []
 
-let defs = (tobool, tobool_t) :: build_vars parsed_types
+(* [errno] is a mutable POSIX global (an [int] lvalue): library code does
+   [errno = 0] / [errno = ERANGE]. It must be *mutable* so assignments don't
+   crash reconstruction with "Cannot assign to an immutable variable", yet we
+   still want precise reads ([c_int]). A [.ty] declaration can't express this
+   (those bindings are [Immut]), so we build it here as an [AnnotMut] binding
+   pinned at [c_int]. [Cint.any] has no type variables, so the [poly] scheme
+   installed by [initial_env] is sound for a mutable variable. *)
+let errno_var = MVariable.create (MVariable.AnnotMut (GTy.mk Cint.any)) (Some "errno")
+
+let defs = (tobool, tobool_t) :: (errno_var, Cint.any) :: build_vars parsed_types
 
 module StrMap = Map.Make(String)
 let defs_map = List.fold_left 
