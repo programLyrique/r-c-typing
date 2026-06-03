@@ -738,6 +738,15 @@ let rec extract_calls_from_expr ?(fun_names=StrSet.empty) (_pos, e') =
     | _ -> extract (_pos, e')
   in
   match e' with
+  (* A bare function name used as a *value* (not as a call target) is a real
+     reference — e.g. a callback stored in a struct field
+     [g->print = &yajl_buf_print] or [yaf->malloc = yajl_internal_malloc]. The
+     [extract_arg] handling above only fires for call arguments, so without
+     this the static [fn] is unreachable from any entry point, gets pruned by
+     [Call_graph.keep_reachable], and its caller reports a spurious "unbound
+     variable". The [fun_names] membership check keeps this to genuine
+     function references ([&fn] reaches the [Id] via the [Unop] case below). *)
+  | Id name when StrSet.mem name fun_names -> [name]
   | Const _ | Id _ | Break | Next -> []
   | Unop (_, e) -> extract e
   | Binop (_, (e1, e2)) -> extract e1 @ extract e2
