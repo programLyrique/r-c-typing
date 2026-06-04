@@ -1,6 +1,6 @@
 C_malloc_to_charptr: t(c_int_na) -> p(^chr)
 
-get_buf: () -> c_string
+get_buf: () --> c_string
 
 C_voidptr_keeps_precision: () -> p(^chr)
 

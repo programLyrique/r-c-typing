@@ -10,11 +10,11 @@ check: () -> c_false
 
 incr: t(int1) -> int1
 
-isFunction: (t(any -> any) -> c_true) & (t(~(any -> any)) -> c_false)
+isFunction: t(arrow) --> c_true & t(~arrow) --> c_false
 
-isPrimitive: (t(any -> any) -> c_true) & (t((env | externalptr | lang | list | vec) | null | p(chr) | sym) -> c_false)
+isPrimitive: (t(any -> any) -> c_true) & (t((env | externalptr | lang | list | vec | arrow \ (any -> any)) | null | p(chr) | sym) -> c_false)
 
-isList: (t((env | externalptr | list | vec | (any -> any)) | p(chr) | sym) -> c_false) & (t(lang) | t(null) -> c_true)
+isList: (t((env | externalptr | list | vec | arrow) | p(chr) | sym) -> c_false) & (t(lang) | t(null) -> c_true)
 
-isNewList: (t((env | externalptr | lang | vec | (any -> any)) | p(chr) | sym) -> c_false) & (t(list) | t(null) -> c_true)
+isNewList: (t((env | externalptr | lang | vec | arrow) | p(chr) | sym) -> c_false) & (t(list) | t(null) -> c_true)
 

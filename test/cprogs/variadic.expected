@@ -1,4 +1,4 @@
-my_printf: any -> c_int_na
+my_printf: any --> c_int_na
 
 call_no_varargs: () -> c_int_na
 

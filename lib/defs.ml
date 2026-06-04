@@ -129,8 +129,12 @@ let setAttrib_class_classes val_ty =
         let elem = match atom with
           | Vec.AnyLength e | Vec.CstLength (_, e) | Vec.VarLength (_, e) -> e
         in
+        (* [Prim.Chr.destruct] now returns [(has_na, prim_line list)] (rstt's
+           NA-by-default refactor). A concrete, positive, finite set of string
+           singletons is a single line with [pos=true] and no type variables;
+           the [content] strings are its class names. *)
         (match Prim.Chr.destruct (Prim.destruct elem) with
-         | _, { Prim.Chr.positive = true; content } ->
+         | _, [ { pos = true; prim = content; pvs = []; nvs = [] } ] ->
            (match List.filter (fun s -> s <> "") content with
             | [] -> None
             | names -> Some names)

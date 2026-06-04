@@ -213,14 +213,14 @@ let typeof_ctype ct =
     | FunPtr (ret, params, variadic) ->
         (* Mirrors [C_interface.infer_cfun]: variadic functions accept [Ty.any]
            for their argument tuple; fixed-arity ones use the explicit tuple.
-           The [Attr.mk_content] wrap is required so [Ast.build_call]'s
-           [pfun] projection accepts the value as callable. *)
+           A C function pointer is a bare arrow (no [Attr] wrap) — see
+           [Ast.build_call]'s [pfun] projection, which accepts bare arrows. *)
         let ret_ty = aux resolving ret in
         let arg_ty =
           if variadic then Ty.any
           else Tuple.mk (List.map (aux resolving) params)
         in
-        Arrow.mk arg_ty ret_ty |> Attr.mk_content
+        Arrow.mk arg_ty ret_ty
     | _ -> failwith ("Type not supported yet in typeof_ctype: " ^ show_ctype ct)
   in
   aux StrMap.empty ct
@@ -228,8 +228,17 @@ let typeof_ctype ct =
 
 
 module AttrProj = struct
-  let pdom ty = Rstt.Attr.mk_content ty
-  let proj ty = Rstt.Attr.proj_content ty
+  (* A callable C value is a function arrow. With rstt's arrow split, C
+     functions and C function pointers are bare arrows (written [-->] in the
+     [.ty] files, built without an [Attr] wrap); R closures are arrows wrapped
+     in an [Attr] container (written [->]). [build_call] only ever applies C
+     callables, but we stay robust to both spellings: a bare arrow is already
+     callable, an attr-wrapped one is unwrapped to its content. *)
+  let arrow_any = Rstt.(Arrows.any |> Descr.mk_arrows |> Ty.mk_descr)
+  let pdom ty = Rstt.Ty.cup ty (Rstt.Attr.mk_content ty)
+  let proj ty =
+    if Rstt.Ty.leq ty arrow_any then ty
+    else try Rstt.Attr.proj_content ty with _ -> ty
 end
 
 module AttrConstr = struct

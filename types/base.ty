@@ -8,28 +8,28 @@ any_sexp = p(chr) | attr | null | sym //
 // This is maybe too unconstrained as sexp can have content be a C type, not only a R type. 
 // Maybe it would be better to tighten Defs.any_sexp...
 
-error: any -> empty
-fail: empty -> any
+error: any --> empty
+fail: empty --> any
 
-isInteger: (t(v(int)) -> c_true) & (t(~v(int)) -> c_false)
-isReal: (t(v(dbl)) -> c_true) & (t(~v(dbl)) -> c_false)
-isLogical: (t(v(lgl)) -> c_true) & (t(~v(lgl)) -> c_false)
-IS_SCALAR: (t(v[1]('b)) -> c_true) & (t(v[int \ 1]('b)) -> c_false)
+isInteger: (t(v(int)) --> c_true) & (t(~v(int)) --> c_false)
+isReal: (t(v(dbl)) --> c_true) & (t(~v(dbl)) --> c_false)
+isLogical: (t(v(lgl)) --> c_true) & (t(~v(lgl)) --> c_false)
+IS_SCALAR: (t(v[1]('b)) --> c_true) & (t(v[int \ 1]('b)) --> c_false)
 
-INTEGER: (t(v(^int)) -> *c_int) & (t(v(int)) -> *c_int_na)
-INTEGER_RO: (t(v(^int)) -> *c_int) & (t(v(int)) -> *c_int_na)
-REAL: t(v(dbl)) -> *c_double
-REAL_RO: t(v(dbl)) -> *c_double
-LOGICAL: t(v(lgl)) -> *c_int
-LOGICAL_RO: t(v(lgl)) -> *c_int
+INTEGER: (t(v(^int)) --> *c_int) & (t(v(int)) --> *c_int_na)
+INTEGER_RO: (t(v(^int)) --> *c_int) & (t(v(int)) --> *c_int_na)
+REAL: t(v(dbl)) --> *c_double
+REAL_RO: t(v(dbl)) --> *c_double
+LOGICAL: t(v(lgl)) --> *c_int
+LOGICAL_RO: t(v(lgl)) --> *c_int
 
 
-LENGTH: (t(v[int('a)](any)) -> c_int('a)) & (t(p(chr)) -> c_int) // length actually returns the length of the string (without '\0)
-XLENGTH: (t(v[int('a)](any)) -> c_int('a)) & (t(p(chr)) -> c_int)
-xlength: (t(v[int('a)](any)) -> c_int('a)) & (t(p(chr)) -> c_int)
-envlength: t(env) -> c_int
-nrows: t(vec | list | expr | null | lang) -> c_int
-ncols: t(vec | list | expr | null | lang) -> c_int
+LENGTH: (t(v[int('a)](any)) --> c_int('a)) & (t(p(chr)) --> c_int) // length actually returns the length of the string (without '\0)
+XLENGTH: (t(v[int('a)](any)) --> c_int('a)) & (t(p(chr)) --> c_int)
+xlength: (t(v[int('a)](any)) --> c_int('a)) & (t(p(chr)) --> c_int)
+envlength: t(env) --> c_int
+nrows: t(vec | list | expr | null | lang) --> c_int
+ncols: t(vec | list | expr | null | lang) --> c_int
 
 // there is also a special case for VECSXP (list) that is coded in OCaml.
 // The STRSXP overload seeds elements to "" (R_BlankString) — R's actual initial
@@ -37,42 +37,43 @@ ncols: t(vec | list | expr | null | lang) -> c_int
 // are set to R_BlankString, VECSXP/EXPRSXP to R_NilValue). This is the sound
 // fresh-vector type, and lets SET_STRING_ELT's union narrow from "" rather than
 // from chr-top.
-allocVector: (t('a & prim, c_int('b)) -> v[int('b)]('a)) & (t(p(chr), c_int('b)) -> v[int('b)]("")) & (t(list, 'b) -> list)
-R_allocResizableVector: (t('a & prim, c_int('b)) -> v[int('b)]('a)) & (t(list, 'b) -> list) // we might have to support the special case as for the function above, but not the case yet
-allocSExp: t('a & any_r_not_vec) -> 'a
-install: t(c_string) -> sym
+allocVector: (t('a & prim, c_int('b)) --> v[int('b)]('a)) & (t(p(chr), c_int('b)) --> v[int('b)]("")) & (t(list, 'b) --> list)
+R_allocResizableVector: (t('a & prim, c_int('b)) --> v[int('b)]('a)) & (t(list, 'b) --> list) // we might have to support the special case as for the function above, but not the case yet
+allocSExp: t('a & any_r_not_vec) --> 'a
+install: t(c_string) --> sym
 
 // when the names are statically known, we can return a more precise type (handled on the OCaml side)
-mkNamed: (t('a & prim, *c_string) -> v('a)) & (t(list, *c_string) -> list)
+mkNamed: (t('a & prim, *c_string) --> v('a)) & (t(list, *c_string) --> list)
 
-VECTOR_ELT: t({ 'r}, c_int) -> 'r
-SET_VECTOR_ELT: (t({ 'r}, c_int, 'a) -> { 'r | 'a}) & (t(expr, c_int, lang | sym) -> expr)
+VECTOR_ELT: t({ 'r}, c_int) --> 'r
+SET_VECTOR_ELT: (t({ 'r}, c_int, 'a) --> { 'r | 'a}) & (t(expr, c_int, lang | sym) --> expr)
 
-isVector: (t(v('a) | expr | list) -> c_true) & (t(any_r_not_vec \ (list & expr)) -> c_false)
-isVectorList: (t(list | expr) -> c_true) & (t(v('a) | any_r_not_vec \ (list | expr)) -> c_false)
+isVector: (t(v('a) | expr | list) --> c_true) & (t(any_r_not_vec \ (list & expr)) --> c_false)
+isVectorList: (t(list | expr) --> c_true) & (t(v('a) | any_r_not_vec \ (list | expr)) --> c_false)
 
-ScalarReal: t(c_double | c_int) -> dbl1
-ScalarInteger: (t(c_int('a)) -> v[1](int('a))) & (t(c_na) -> v[1](int \ ^int))
-ScalarLogical: (t(c(0)) -> v[1](ff)) & (t(c_na) -> v[1](lgl \ ^lgl)) & (t(c_int \ c(0)) -> v[1](tt))
+ScalarReal: t(c_double | c_int) --> dbl1
+ScalarInteger: (t(c_int('a)) --> v[1](^int('a))) & (t(c_na) --> v[1](int \ ^int))
+ScalarLogical: (t(c(0)) --> v[1](ff)) & (t(c_na) --> v[1](lgl \ ^lgl)) & (t(c_int \ c(0)) --> v[1](tt))
 
 // Strings 
 na_string = p(chr \ ^chr)
-mkString: t(c_string('a)) -> v[1](chr('a))
-ScalarString: t(p(chr('a))) -> v[1](chr('a))
-mkChar: t(c_string('a) | c_null) -> p(chr('a))
-mkCharLen: t(c_string('a) | c_null, c_int) -> p(chr('a))
-mkCharCE: t(c_string('a) | c_null, any) -> p(chr('a)) // the 2nd argument is the encoding
-mkCharLenCE: t(c_string('a), c_int, any) -> p(chr('a))
-R_CHAR: (t(p(chr('a))) -> c_string('a)) & (t(p(chr \ ^chr)) -> c("NA"))
-CHAR: (t(p(chr('a))) -> c_string('a)) & (t(p(chr \ ^chr)) -> c("NA"))
-STRING_ELT: t(v(chr & 'a), c_int) -> p('a)
-SET_STRING_ELT: t(v['n](chr & 'e), c_int, p(chr & 's)) -> v['n]((chr & 'e) | (chr & 's))
-StringBlank: (t(p("")) -> c_true) & (t(p(chr \ "")) -> c_false) & (t(null) -> c_true) 
+mkString: t(c_string('a)) --> v[1](^chr('a))
+ScalarString: t(p(chr & 'a)) --> v[1](chr & 'a)
+mkChar: (t(c_string('a)) --> p(^chr('a))) & (t(c_null) --> na_string)
+mkCharLen: (t(c_string('a), c_int) --> p(^chr('a))) & (t(c_null, c_int) --> na_string)
+mkCharCE: (t(c_string('a), any) --> p(^chr('a))) & (t(c_null, any) --> na_string) // the 2nd argument is the encoding
+mkCharLenCE: t(c_string('a), c_int, any) --> p(^chr('a))
+// ^chr('a) (NA-free) so NA_STRING falls to the c("NA") overload, not c_string(empty)=empty
+R_CHAR: (t(p(^chr('a))) --> c_string('a)) & (t(p(chr \ ^chr)) --> c("NA"))
+CHAR: (t(p(^chr('a))) --> c_string('a)) & (t(p(chr \ ^chr)) --> c("NA"))
+STRING_ELT: t(v(chr & 'a), c_int) --> p('a)
+SET_STRING_ELT: t(v['n](chr & 'e), c_int, p(chr & 's)) --> v['n]((chr & 'e) | (chr & 's))
+StringBlank: (t(p("")) --> c_true) & (t(p(chr \ "")) --> c_false) & (t(null) --> c_true) 
 NA_STRING: na_string
-asChar: (t(v[(1..)]('a)) -> p(chr)) & (t(p(chr) & 'a) -> 'a) & (t(sym) -> p(chr)) & (t(any_r_not_vec \ sym | v0('a)) -> na_string)
-type2char:  (t(p(int)) -> c("integer")) & (t(p(dbl)) -> c("double")) & (t(p(lgl)) -> c("logical")) & (t(p(chr)) -> c("character")) & (t(p(clx)) -> c("complex")) & (t(p(raw)) -> c("raw")) & (t(list) -> c("list")) & (t(null) -> c("NULL")) & (t(env) -> c("environment")) & (t(sym) -> c("symbol")) & (t(lang) -> c("language")) & (t(expr) -> c("expression")) & (t(empty -> any) -> c("closure"))
-isString: (t(v(chr)) -> c_true) & (t(any_sexp \ v(chr)) -> c_false)
-getCharCE: t(p(chr)) -> c_int
+asChar: (t(v[(1..)]('a)) --> p(chr)) & (t(p(chr) & 'a) --> 'a) & (t(sym) --> p(chr)) & (t(any_r_not_vec \ sym | v0('a)) --> na_string)
+type2char:  (t(p(int)) --> c("integer")) & (t(p(dbl)) --> c("double")) & (t(p(lgl)) --> c("logical")) & (t(p(chr)) --> c("character")) & (t(p(clx)) --> c("complex")) & (t(p(raw)) --> c("raw")) & (t(list) --> c("list")) & (t(null) --> c("NULL")) & (t(env) --> c("environment")) & (t(sym) --> c("symbol")) & (t(lang) --> c("language")) & (t(expr) --> c("expression")) & (t(empty -> any) --> c("closure"))
+isString: (t(v(chr)) --> c_true) & (t(any_sexp \ v(chr)) --> c_false)
+getCharCE: t(p(chr)) --> c_int
 // cetype_t encoding constants (R's Rinternals.h); the encoding argument of
 // mkCharCE / mkCharLenCE and the result of getCharCE.
 CE_NATIVE: c(0)
@@ -81,26 +82,26 @@ CE_LATIN1: c(2)
 CE_BYTES: c(3)
 CE_SYMBOL: c(5)
 CE_ANY: c(99)
-translateCharUTF8: t(p(chr)) -> c_string
-translateChar: t(p(chr)) -> c_string
-PRINTNAME: t(sym) -> p(chr)
-STRING_PTR_RO: t(v(chr)) -> *p(chr)
-STRING_PTR: t(v(chr)) -> *p(chr)
+translateCharUTF8: t(p(chr)) --> c_string
+translateChar: t(p(chr)) --> c_string
+PRINTNAME: t(sym) --> p(chr)
+STRING_PTR_RO: t(v(chr)) --> *p(chr)
+STRING_PTR: t(v(chr)) --> *p(chr)
 
-Rprintf: any -> c_void // variadic
+Rprintf: any --> c_void // variadic
 
 // Environments
 R_GlobalEnv: env
 R_EmptyEnv: env
 R_BaseEnv: env
 R_BaseNamespace: env
-R_NewEnv: t(env, c_int, c_int) -> env
-R_GetCurrentEnv: () -> env
-R_ParentEnv: t(env) -> env
+R_NewEnv: t(env, c_int, c_int) --> env
+R_GetCurrentEnv: () --> env
+R_ParentEnv: t(env) --> env
 R_UnboundValue: sym
 R_NamespaceRegistry: env
-R_FindNamespace: t(any) -> env
-R_IsNamespaceEnv: t(env) -> c_bool
+R_FindNamespace: t(any) --> env
+R_IsNamespaceEnv: t(env) --> c_bool
 
 // R API: internal symbols (getAttrib/setAttrib/defineVar args)
 R_LevelsSymbol: sym
@@ -115,120 +116,120 @@ R_Bracket2Symbol: sym
 R_DoubleColonSymbol: sym
 
 // R API: evaluation / binding
-Rf_eval: t(any_sexp, env) -> any
-Rf_defineVar: t(sym, any_sexp, env) -> c_void
-Rf_GetOption1: t(sym) -> any_sexp
-R_getVar: t(sym, env, c_bool) -> any_sexp
+Rf_eval: t(any_sexp, env) --> any
+Rf_defineVar: t(sym, any_sexp, env) --> c_void
+Rf_GetOption1: t(sym) --> any_sexp
+R_getVar: t(sym, env, c_bool) --> any_sexp
 
 // R API: reflection / printing
-Rf_PrintValue: t(any_sexp) -> c_void
-Rf_type2str: t(any) -> sym // similar to TYPEOF for the argument. Fix accordingly
-Rf_asS4:     t(any_sexp) -> any_sexp
-Rf_isS4:     t(any_sexp) -> c_bool
-Rf_onintr:   t() -> c_void
-Rf_lengthgets: t(vec | list | lang, c_int) -> any_sexp
-Rf_ParseVector: t(any_sexp, c_int, *c_int, chr1) -> any_sexp // the 2 sexp arguments are probably STRSXP actually and the return type, an expr?
-R_ParseVector: t(any_sexp, c_int, *c_int, any_sexp) -> expr
-R_GetBindingType: t(sym, env) -> c_int
+Rf_PrintValue: t(any_sexp) --> c_void
+Rf_type2str: t(any) --> sym // similar to TYPEOF for the argument. Fix accordingly
+Rf_asS4:     t(any_sexp) --> any_sexp
+Rf_isS4:     t(any_sexp) --> c_bool
+Rf_onintr:   t() --> c_void
+Rf_lengthgets: t(vec | list | lang, c_int) --> any_sexp
+Rf_ParseVector: t(any_sexp, c_int, *c_int, chr1) --> any_sexp // the 2 sexp arguments are probably STRSXP actually and the return type, an expr?
+R_ParseVector: t(any_sexp, c_int, *c_int, any_sexp) --> expr
+R_GetBindingType: t(sym, env) --> c_int
 
 // R API: external pointers (extended)
-R_ClearExternalPtr: t(externalptr) -> c_void
-R_SetExternalPtrAddr: t(externalptr, *any) -> c_void
-R_ExternalPtrTag: t(externalptr) -> any_sexp
-R_ExternalPtrProtected: t(externalptr) -> any_sexp
-R_RegisterCFinalizerEx: t(externalptr, any_sexp -> () | c_void, c_bool) -> c_void
+R_ClearExternalPtr: t(externalptr) --> c_void
+R_SetExternalPtrAddr: t(externalptr, *any) --> c_void
+R_ExternalPtrTag: t(externalptr) --> any_sexp
+R_ExternalPtrProtected: t(externalptr) --> any_sexp
+R_RegisterCFinalizerEx: t(externalptr, any_sexp --> () | c_void, c_bool) --> c_void
 
 // R API: closures
-R_ClosureExpr: t(empty -> any) -> lang
-R_ClosureEnv: t(empty -> any) -> env
-R_ClosureFormals: t(empty -> any) -> lang | null
-R_mkClosure: t(lang | null, any_sexp, env) -> (any -> any)
+R_ClosureExpr: t(empty -> any) --> lang
+R_ClosureEnv: t(empty -> any) --> env
+R_ClosureFormals: t(empty -> any) --> lang | null
+R_mkClosure: t(lang | null, any_sexp, env) --> (any -> any)
 
 // R API: ALTREP
 // R_altrep_class_t is [typedef struct { SEXP ptr; } R_altrep_class_t;] — modelled
 // as a single-field C struct so [R_new_altrep] callers carrying a real
 // [R_altrep_class_t] (rather than [any]) get a meaningful first-arg type.
-ALTREP: t(any_sexp) -> c_bool
-R_altrep_data2: t(any_sexp) -> any_sexp
-R_new_altrep: t(s({ ptr : any_sexp }), any_sexp, any_sexp) -> any_sexp
+ALTREP: t(any_sexp) --> c_bool
+R_altrep_data2: t(any_sexp) --> any_sexp
+R_new_altrep: t(s({ ptr : any_sexp }), any_sexp, any_sexp) --> any_sexp
 
 // R API: misc
-R_CheckStack2: t(c_int) -> c_void
-R_GetCCallable: t(c_string, c_string) -> any
-MAYBE_REFERENCED: t(any_sexp) -> c_int
-vmaxget: () -> *any
-Rf_charIsASCII: t(p(chr)) -> c_bool
-R_new_custom_connection: t(c_string, c_string, c_string, *any) -> any_sexp
+R_CheckStack2: t(c_int) --> c_void
+R_GetCCallable: t(c_string, c_string) --> any
+MAYBE_REFERENCED: t(any_sexp) --> c_int
+vmaxget: () --> *any
+Rf_charIsASCII: t(p(chr)) --> c_bool
+R_new_custom_connection: t(c_string, c_string, c_string, *any) --> any_sexp
 
 // Casts
-asLogical: t(any_sexp) -> c_true | c_false
-asInteger: t(any_sexp) -> c_int
+asLogical: t(any_sexp) --> c_true | c_false
+asInteger: t(any_sexp) --> c_int
 // Rf_asCharacterFactor: maps a factor's integer codes through its levels, so the
 // input must be a factor (v(int) with class factor; ... allows ordered factors).
 // Result is a STRSXP whose elements are the level strings (level content not
 // projected here -- base.ty has no attribute-record domain syntax).
-asCharacterFactor: t(v(int)<factor, ...>) -> chr
+asCharacterFactor: t(v(int)<factor, ...>) --> chr
 
 // Pairlists and language
-list2: t(any_sexp, any_sexp) -> lang
-isPairList: (t(lang) -> c_true) & (t(~lang) -> c_false)
-lang1: t(any_sexp) -> lang
-lang2: t(any_sexp, any_sexp) -> lang
-Rf_lang3: t(any_sexp, any_sexp, any_sexp) -> lang
-Rf_lang4: t(any_sexp, any_sexp, any_sexp, any_sexp) -> lang
+list2: t(any_sexp, any_sexp) --> lang
+isPairList: (t(lang) --> c_true) & (t(~lang) --> c_false)
+lang1: t(any_sexp) --> lang
+lang2: t(any_sexp, any_sexp) --> lang
+Rf_lang3: t(any_sexp, any_sexp, any_sexp) --> lang
+Rf_lang4: t(any_sexp, any_sexp, any_sexp, any_sexp) --> lang
 
 // Attributes
 // TODO: we also support attributes in the type algebra, so add it!
-getAttrib: t(any_sexp, sym) -> any_sexp
-setAttrib: t(any_sexp, sym, any) -> any_sexp
-ANY_ATTRIB: t(any_sexp) -> c_int
-CLEAR_ATTRIB: t(any_sexp) -> c_void
-SHALLOW_DUPLICATE_ATTRIB: t(any_sexp, any_sexp) -> c_void
+getAttrib: t(any_sexp, sym) --> any_sexp
+setAttrib: t(any_sexp, sym, any) --> any_sexp
+ANY_ATTRIB: t(any_sexp) --> c_int
+CLEAR_ATTRIB: t(any_sexp) --> c_void
+SHALLOW_DUPLICATE_ATTRIB: t(any_sexp, any_sexp) --> c_void
 // 2nd argument is [SEXP (*FUN)(SEXP, SEXP, void*)] but the type system has
 // no first-class function-pointer-with-data abstraction, so the callback is
 // left as [any].
-R_mapAttrib: t(any_sexp, any, *any) -> any_sexp
+R_mapAttrib: t(any_sexp, any, *any) --> any_sexp
 
-[]<-: (t(*'a, c_int_na, 'a) -> *'a) & (t(c_string, c_int_na, c_char) -> c_string)
-[]: (t(*'a, c_int_na) -> 'a) & (t(c_string, c_int_na) -> c_char)
+[]<-: (t(*'a, c_int_na, 'a) --> *'a) & (t(c_string, c_int_na, c_char) --> c_string)
+[]: (t(*'a, c_int_na) --> 'a) & (t(c_string, c_int_na) --> c_char)
 
 PROTECT_INDEX: c_int
 
-PROTECT: t('a) -> 'a
-UNPROTECT: t(c_int) -> c_void
-REPROTECT: t(any_sexp, c_int) -> c_void
-PROTECT_WITH_INDEX: t(any_sexp, *c_int) -> c_void
-R_PreserveObject: t(any_sexp) -> c_void
-R_ReleaseObject: t(any_sexp) -> c_void
+PROTECT: t('a) --> 'a
+UNPROTECT: t(c_int) --> c_void
+REPROTECT: t(any_sexp, c_int) --> c_void
+PROTECT_WITH_INDEX: t(any_sexp, *c_int) --> c_void
+R_PreserveObject: t(any_sexp) --> c_void
+R_ReleaseObject: t(any_sexp) --> c_void
 
 // Arithmetic (including pointer arithmetic for strings)
 
-+__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na) & (t(c_string, c_int) -> c_string) & (t(c_char, c_int) -> c_char) & (t(c_char, c_char) -> c_char) & (t(*'a, c_int_na) -> *'a) & (t(c_int_na, *'a) -> *'a)
++__2: (t(c_int, c_int) --> c_int) & (t(c_double, c_double) --> c_double) & (t(any, any) --> any) & (t(c_int_na, c_int_na) --> c_int_na) & (t(c_int_na, c_int) --> c_int_na) & (t(c_int, c_int_na) --> c_int_na) & (t(c_string, c_int) --> c_string) & (t(c_char, c_int) --> c_char) & (t(c_char, c_char) --> c_char) & (t(*'a, c_int_na) --> *'a) & (t(c_int_na, *'a) --> *'a)
 
--__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na) & (t(c_string, c_int) -> c_string) & (t(c_string, c_string) -> c_int)
+-__2: (t(c_int, c_int) --> c_int) & (t(c_double, c_double) --> c_double) & (t(any, any) --> any) & (t(c_int_na, c_int_na) --> c_int_na) & (t(c_int_na, c_int) --> c_int_na) & (t(c_int, c_int_na) --> c_int_na) & (t(c_string, c_int) --> c_string) & (t(c_string, c_string) --> c_int)
 
-*__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na, c_int_na) -> c_int_na) & (t(c_int_na, c_int) -> c_int_na) & (t(c_int, c_int_na) -> c_int_na)
+*__2: (t(c_int, c_int) --> c_int) & (t(c_double, c_double) --> c_double) & (t(any, any) --> any) & (t(c_int_na, c_int_na) --> c_int_na) & (t(c_int_na, c_int) --> c_int_na) & (t(c_int, c_int_na) --> c_int_na)
 
-%__2: t(c_int, c_int) -> c_int
-/__2: (t(c_int, c_int) -> c_int) & (t(c_double, c_double) -> c_double) & (t(any, any) -> any)
-|__2: (t(c_int, c_int) -> c_int) & (t(c_int_na, c_int) -> c_int)
-^__2: (t(c_int, c_int) -> c_int) & (t(c_int_na, c_int) -> c_int)
-&__2: (t(c_int, c_int) -> c_int) & (t(c_int_na, c_int) -> c_int)
-~__1: (t(c_int) -> c_int) & (t(c_int_na) -> c_int_na)
-<<__2: (t(c_int, c_int) -> c_int) & (t(c_int_na, c_int) -> c_int)
->>__2: (t(c_int, c_int) -> c_int) & (t(c_int_na, c_int) -> c_int)
+%__2: t(c_int, c_int) --> c_int
+/__2: (t(c_int, c_int) --> c_int) & (t(c_double, c_double) --> c_double) & (t(any, any) --> any)
+|__2: (t(c_int, c_int) --> c_int) & (t(c_int_na, c_int) --> c_int)
+^__2: (t(c_int, c_int) --> c_int) & (t(c_int_na, c_int) --> c_int)
+&__2: (t(c_int, c_int) --> c_int) & (t(c_int_na, c_int) --> c_int)
+~__1: (t(c_int) --> c_int) & (t(c_int_na) --> c_int_na)
+<<__2: (t(c_int, c_int) --> c_int) & (t(c_int_na, c_int) --> c_int)
+>>__2: (t(c_int, c_int) --> c_int) & (t(c_int_na, c_int) --> c_int)
 
 
 // t('a) -> 'a would also include singleton types, which is not semantically correct for numbers for instance
-++__1: (t(c_int) -> c_int) & (t(c_int_na) -> c_int_na) & (t(c_double) -> c_double) & (t(*'a) -> *'a) & (t(c_string) -> c_string)
---__1: (t(c_int) -> c_int) & (t(c_int_na) -> c_int_na) & (t(c_double) -> c_double) & (t(*'a) -> *'a) & (t(c_string) -> c_string)
+++__1: (t(c_int) --> c_int) & (t(c_int_na) --> c_int_na) & (t(c_double) --> c_double) & (t(*'a) --> *'a) & (t(c_string) --> c_string)
+--__1: (t(c_int) --> c_int) & (t(c_int_na) --> c_int_na) & (t(c_double) --> c_double) & (t(*'a) --> *'a) & (t(c_string) --> c_string)
 
-*__1: (t(*'a) -> 'a) & (t(c_string) -> c_char) // rather (t(*'a \ c_null) -> 'a) & (t(c_string) -> c_char) but would require dyn for the c_null overload to be added
-&__1: t('a) -> *'a
+*__1: (t(*'a) --> 'a) & (t(c_string) --> c_char) // rather (t(*'a \ c_null) -> 'a) & (t(c_string) -> c_char) but would require dyn for the c_null overload to be added
+&__1: t('a) --> *'a
 
--__1: (t(c_int) -> c_int) & (t(c_double) -> c_double) & (t(any, any) -> any) & (t(c_int_na) -> c_int_na)
+-__1: (t(c_int) --> c_int) & (t(c_double) --> c_double) & (t(any, any) --> any) & (t(c_int_na) --> c_int_na)
 
-abs: t(c_int) -> c(0..) 
+abs: t(c_int) --> c(0..) 
 
 // TODO: put the actual value here?
 R_INT_MIN: c_int
@@ -239,34 +240,34 @@ R_NaN: c_double
 R_PosInf: c_double
 R_NegInf: c_double
 // NaN / finiteness predicates (libm <math.h> + R_ext/Arith.h); int-ish 0/1 -> c_bool.
-isnan: t(c_double) -> c_bool
-ISNAN: t(c_double) -> c_bool
-isfinite: t(c_double) -> c_bool
-R_FINITE: t(c_double) -> c_bool
-R_IsNA: t(c_double) -> c_bool
-sizeof: t(any) -> c_int
+isnan: t(c_double) --> c_bool
+ISNAN: t(c_double) --> c_bool
+isfinite: t(c_double) --> c_bool
+R_FINITE: t(c_double) --> c_bool
+R_IsNA: t(c_double) --> c_bool
+sizeof: t(any) --> c_int
 // libm <math.h>: rounds toward -inf, result is still a double.
-floor: t(c_double) -> c_double
+floor: t(c_double) --> c_double
 
 INT64_MIN: c_int
 
 
-Rf_envlength: t(env) -> c_int
-CDR: t(lang) -> any_sexp
+Rf_envlength: t(env) --> c_int
+CDR: t(lang) --> any_sexp
 
 // Boolean operators and comparisons
-||__2: (t(c_true, c_true) | t(c_true, c_false) | t(c_false, c_true) -> c_true) & (t(c_false, c_false) -> c_false)
-&&__2: (t(c_false, c_false) | t(c_true, c_false) | t(c_false, c_true) -> c_false) & (t(c_true, c_true) -> c_true)
-==__2: t(any, any) -> c_bool
-!=__2: t(any, any) -> c_bool
-!__1: (t(c_true) -> c_false) & (t(c_false) -> c_true) & (t(c(..-1) | c(1..)) -> c_false) & (t(c_null) -> c_true) & (t(*any \ c_null) -> c_false) & (t(c_string \ c_null) -> c_false)
-<__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
->__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
-<=__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
->=__2: (t(c_int, c_int) -> c_bool) & (t(c_double, c_double) -> c_bool) & (t(any, any) -> c_bool)
+||__2: (t(c_true, c_true) | t(c_true, c_false) | t(c_false, c_true) --> c_true) & (t(c_false, c_false) --> c_false)
+&&__2: (t(c_false, c_false) | t(c_true, c_false) | t(c_false, c_true) --> c_false) & (t(c_true, c_true) --> c_true)
+==__2: t(any, any) --> c_bool
+!=__2: t(any, any) --> c_bool
+!__1: (t(c_true) --> c_false) & (t(c_false) --> c_true) & (t(c(..-1) | c(1..)) --> c_false) & (t(c_null) --> c_true) & (t(*any \ c_null) --> c_false) & (t(c_string) --> c_false)
+<__2: (t(c_int, c_int) --> c_bool) & (t(c_double, c_double) --> c_bool) & (t(any, any) --> c_bool)
+>__2: (t(c_int, c_int) --> c_bool) & (t(c_double, c_double) --> c_bool) & (t(any, any) --> c_bool)
+<=__2: (t(c_int, c_int) --> c_bool) & (t(c_double, c_double) --> c_bool) & (t(any, any) --> c_bool)
+>=__2: (t(c_int, c_int) --> c_bool) & (t(c_double, c_double) --> c_bool) & (t(any, any) --> c_bool)
 
 // TODO: add more non vector types for the 2nd overload
-TYPEOF: (t(v('a)) -> 'a) & (t('b & ~vec & any_r_not_vec) -> 'b)
+TYPEOF: (t(v('a)) --> 'a) & (t('b & ~vec & any_r_not_vec) --> 'b)
 
 NA_INTEGER: c_int_na
 NA_LOGICAL: c_int_na
@@ -307,60 +308,60 @@ __DATE__: c_string
 __TIME__: c_string
 
 // R API: error/warning
-Rf_error: any -> empty // redundant with error but like fail. The best would be to generate 2 versions of the function and pick the one which type checks?
-errorcall: (t(any, any) -> empty) & (t(any, any, any) -> empty) & (t(any, any, any, any) -> empty)
-warningcall: (t(any, any) -> c_void) & (t(any, any, any) -> c_void) & (t(any, any, any, any) -> c_void)
+Rf_error: any --> empty // redundant with error but like fail. The best would be to generate 2 versions of the function and pick the one which type checks?
+errorcall: (t(any, any) --> empty) & (t(any, any, any) --> empty) & (t(any, any, any, any) --> empty)
+warningcall: (t(any, any) --> c_void) & (t(any, any, any) --> c_void) & (t(any, any, any, any) --> c_void)
 
 // R API: type tests
-isFunction: (t(empty -> any) -> c_true) & (t(~(empty -> any)) -> c_false)
+isFunction: (t(empty -> any) --> c_true) & (t(~(empty -> any)) --> c_false)
 
 // R API: evaluation
-R_ToplevelExec: t(any, *any) -> c_bool
-R_tryEval: t(any_sexp, env, *c_int) -> any_sexp
-R_CheckUserInterrupt: t() -> c_void
+R_ToplevelExec: t(any, *any) --> c_bool
+R_tryEval: t(any_sexp, env, *c_int) --> any_sexp
+R_CheckUserInterrupt: t() --> c_void
 
 // R API: pairlists
-LCONS: t(any_sexp, lang | null) -> lang
-CONS: t(any_sexp, lang | null) -> lang
-cons: t(any_sexp, lang | null) -> lang
-lcons: t(any_sexp, lang | null) -> lang
-CAR: t(lang) -> any_sexp
-CADR: t(lang) -> any_sexp
-CDDR: t(lang) -> any_sexp
-TAG: t(lang) -> any_sexp
-SET_TAG: t(lang, any_sexp) -> c_void
-SETCAR: t(lang, any_sexp) -> any_sexp
-SETCDR: t(lang, any_sexp) -> any_sexp
+LCONS: t(any_sexp, lang | null) --> lang
+CONS: t(any_sexp, lang | null) --> lang
+cons: t(any_sexp, lang | null) --> lang
+lcons: t(any_sexp, lang | null) --> lang
+CAR: t(lang) --> any_sexp
+CADR: t(lang) --> any_sexp
+CDDR: t(lang) --> any_sexp
+TAG: t(lang) --> any_sexp
+SET_TAG: t(lang, any_sexp) --> c_void
+SETCAR: t(lang, any_sexp) --> any_sexp
+SETCDR: t(lang, any_sexp) --> any_sexp
 
 // R API: raw vectors
-RAW: t(v(raw)) -> *c_int
+RAW: t(v(raw)) --> *c_int
 
 // R API: complex / list vector accessors
 // Rcomplex is [typedef struct { double r; double i; } Rcomplex;] so the
 // pointee is modelled as the matching two-field C struct — code that reads
 // [COMPLEX(x)[i].r] / [.i] then gets a precise [c_double] for each field.
-COMPLEX: t(v(clx)) -> *s({ r : c_double, i : c_double })
-COMPLEX_RO: t(v(clx)) -> *s({ r : c_double, i : c_double })
-VECTOR_PTR_RO: t(list) -> *any_sexp
+COMPLEX: t(v(clx)) --> *s({ r : c_double, i : c_double })
+COMPLEX_RO: t(v(clx)) --> *s({ r : c_double, i : c_double })
+VECTOR_PTR_RO: t(list) --> *any_sexp
 
 // R API: misc
 // length is defined in Rinlinedfuns.h
-length: (t(v[int('a)](any)) -> c_int('a)) & (t(null) -> c(0)) & (t(sym | (empty -> any) | externalptr) -> c(1)) & (t(any_sexp) -> c_int)
-asReal: t(any) -> c_double
-memcpy: t(any, any, c_int) -> any
-R_alloc: t(c_int, c_int) -> *any // or c_ptr?
-R_isort: t(*c_int_na, c_int) -> c_void
-shallow_duplicate: t('a) -> 'a
-duplicate: t('a) -> 'a
-Rf_match: (t(vec | null, v['n]('a), c_int) -> v['n](^int)) & (t(vec | null, null, c_int) -> v[0](^int)) 
+length: (t(v[int('a)](any)) --> c_int('a)) & (t(null) --> c(0)) & (t(sym | (empty -> any) | externalptr) --> c(1)) & (t(any_sexp) --> c_int)
+asReal: t(any) --> c_double
+memcpy: t(any, any, c_int) --> any
+R_alloc: t(c_int, c_int) --> *any // or c_ptr?
+R_isort: t(*c_int_na, c_int) --> c_void
+shallow_duplicate: t('a) --> 'a
+duplicate: t('a) --> 'a
+Rf_match: (t(vec | null, v['n]('a), c_int) --> v['n](^int)) & (t(vec | null, null, c_int) --> v[0](^int)) 
 
 // Coercion
-coerceVector: t(any, 'a) -> 'a//TODO: not all coercions are possible!
+coerceVector: t(any, 'a) --> 'a//TODO: not all coercions are possible!
 
-MARK_NOT_MUTABLE: t(any) -> c_void
+MARK_NOT_MUTABLE: t(any) --> c_void
 
 // classes
-inherits: t(any, c_string) -> c_bool // to improve when supporting classes
+inherits: t(any, c_string) --> c_bool // to improve when supporting classes
 
 // Class-checking predicates. Typed as intersection arrows so that, used as an
 // if/ternary guard, mlsem's occurrence typing refines the argument in each
@@ -369,14 +370,14 @@ inherits: t(any, c_string) -> c_bool // to improve when supporting classes
 // type. isFactor: an INTSXP carrying class <factor>. isObject (OBJECT bit):
 // carries some explicit class, i.e. an attr value other than the no-class one
 // <>.
-isFactor: (t(v(int) <factor, ...>) -> c_true) & (t(any_sexp \ (v(int) <factor, ...>)) -> c_false)
-isObject: (t(attr \ <>) -> c_true) & (t(any_sexp \ (attr \ <>)) -> c_false)
-isFrame: (t(<data.frame, ...>) -> c_true) & (t(any_sexp \ <data.frame, ...>) -> c_false)
+isFactor: (t(v(int) <factor, ...>) --> c_true) & (t(any_sexp \ (v(int) <factor, ...>)) --> c_false)
+isObject: (t(attr \ <>) --> c_true) & (t(any_sexp \ (attr \ <>)) --> c_false)
+isFrame: (t(<data.frame, ...>) --> c_true) & (t(any_sexp \ <data.frame, ...>) --> c_false)
 
 // External pointers 
-R_ExternalPtrAddr: (t(externalptr('a)) -> *'a) & (t(externalptr(empty)) -> c_null)
-R_MakeExternalPtr: (t(*'a, any_sexp, any_sexp) -> externalptr('a)) & (t(c_null, any_sexp, any_sexp) -> externalptr(empty))
+R_ExternalPtrAddr: (t(externalptr('a)) --> *'a) & (t(externalptr(empty)) --> c_null)
+R_MakeExternalPtr: (t(*'a, any_sexp, any_sexp) --> externalptr('a)) & (t(c_null, any_sexp, any_sexp) --> externalptr(empty))
 
 // C functions
 
-assert: t(any) -> c_void //We might differentiate between the true and false case here
+assert: t(any) --> c_void //We might differentiate between the true and false case here

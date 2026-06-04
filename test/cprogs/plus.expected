@@ -14,7 +14,7 @@ r_plus_scalar_strict: (t(dbl, dbl) -> dbl1) & (t(int, int) -> int1)
 
 r_plus_scalar: (t(int, int) -> int1) & (t(dbl, dbl) | t(dbl, int) | t(int, dbl) -> dbl1)
 
-r_plus_all: ∀'a,'b. (t(int[int(i(int & 'b))], int[int(i(int & 'b))]) -> int[int(i(int & 'b))]) & (t(dbl[int(i(int & 'a))], dbl) | t(dbl[int(i(int & 'a))], int) | t(int[int(i(int & 'a))], dbl) -> dbl) & (t(dbl[int(i(int & 'a))], dbl[int(i(int & 'a))]) | t(dbl[int(i(int & 'a))], int[int(i(int & 'a))]) | t(int[int(i(int & 'a))], dbl[int(i(int & 'a))]) -> dbl[int(i(int & 'a))])
+r_plus_all: ∀'a,'b. (t(int[^int('b)], int[^int('b)]) -> int[^int('b)]) & (t(dbl[^int('a)], dbl) | t(dbl[^int('a)], int) | t(int[^int('a)], dbl) -> dbl) & (t(dbl[^int('a)], dbl[^int('a)]) | t(dbl[^int('a)], int[^int('a)]) | t(int[^int('a)], dbl[^int('a)]) -> dbl[^int('a)])
 
-R_integer_plus: t(c_int_na, c(..-1), *c_bool \ c_null) | t(c_int_na, c(..-1), c_null) | t(c_int_na, c(1..), *c_bool \ c_null) | t(c_int_na, c(1..), c_null) | t(c_int_na, c_na | c_false, *c_bool) -> c_int_na
+R_integer_plus: t(c_int_na, c(..-1), *c_bool \ c_null) | t(c_int_na, c(..-1), c_null) | t(c_int_na, c(1..), *c_bool \ c_null) | t(c_int_na, c(1..), c_null) | t(c_int_na, c_int_na \ (c(..-1) | c(1..)), *c_bool) -> c_int_na
 
