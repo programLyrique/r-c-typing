@@ -2,7 +2,7 @@
 any_scalar = int | dbl | lgl | chr | clx | raw
 prim = p(int) | p(dbl) | p(lgl) | p(chr) | p(clx) | p(raw)
 expr = {lang|sym}
-any_r_not_vec = env | null | sym | list | lang | (any -> any) | expr | externalptr | p(chr)
+any_r_not_vec = env | null | sym | list | lang | (empty -> any) | expr | externalptr | p(chr)
 //any_sexp = any_r_not_vec | vec // the old definition: but in Defs, it was defined as p(chr) | Attr.any
 any_sexp = p(chr) | attr | null | sym //
 // This is maybe too unconstrained as sexp can have content be a C type, not only a R type. 
@@ -70,7 +70,7 @@ SET_STRING_ELT: t(v['n](chr & 'e), c_int, p(chr & 's)) -> v['n]((chr & 'e) | (ch
 StringBlank: (t(p("")) -> c_true) & (t(p(chr \ "")) -> c_false) & (t(null) -> c_true) 
 NA_STRING: na_string
 asChar: (t(v[(1..)]('a)) -> p(chr)) & (t(p(chr) & 'a) -> 'a) & (t(sym) -> p(chr)) & (t(any_r_not_vec \ sym | v0('a)) -> na_string)
-type2char:  (t(p(int)) -> c("integer")) & (t(p(dbl)) -> c("double")) & (t(p(lgl)) -> c("logical")) & (t(p(chr)) -> c("character")) & (t(p(clx)) -> c("complex")) & (t(p(raw)) -> c("raw")) & (t(list) -> c("list")) & (t(null) -> c("NULL")) & (t(env) -> c("environment")) & (t(sym) -> c("symbol")) & (t(lang) -> c("language")) & (t(expr) -> c("expression")) & (t(any -> any) -> c("closure"))
+type2char:  (t(p(int)) -> c("integer")) & (t(p(dbl)) -> c("double")) & (t(p(lgl)) -> c("logical")) & (t(p(chr)) -> c("character")) & (t(p(clx)) -> c("complex")) & (t(p(raw)) -> c("raw")) & (t(list) -> c("list")) & (t(null) -> c("NULL")) & (t(env) -> c("environment")) & (t(sym) -> c("symbol")) & (t(lang) -> c("language")) & (t(expr) -> c("expression")) & (t(empty -> any) -> c("closure"))
 isString: (t(v(chr)) -> c_true) & (t(any_sexp \ v(chr)) -> c_false)
 getCharCE: t(p(chr)) -> c_int
 // cetype_t encoding constants (R's Rinternals.h); the encoding argument of
@@ -139,9 +139,9 @@ R_ExternalPtrProtected: t(externalptr) -> any_sexp
 R_RegisterCFinalizerEx: t(externalptr, any_sexp -> () | c_void, c_bool) -> c_void
 
 // R API: closures
-R_ClosureExpr: t(any -> any) -> lang
-R_ClosureEnv: t(any -> any) -> env
-R_ClosureFormals: t(any -> any) -> lang | null
+R_ClosureExpr: t(empty -> any) -> lang
+R_ClosureEnv: t(empty -> any) -> env
+R_ClosureFormals: t(empty -> any) -> lang | null
 R_mkClosure: t(lang | null, any_sexp, env) -> (any -> any)
 
 // R API: ALTREP
@@ -286,9 +286,9 @@ LGLSXP: p(lgl)
 NILSXP: null
 VECSXP: list
 EXPRSXP: {lang|sym}
-CLOSXP: any -> any
-BUILTINSXP: any -> any
-SPECIALSXP: any -> any
+CLOSXP: empty -> any
+BUILTINSXP: empty -> any
+SPECIALSXP: empty -> any
 CHARSXP: p(chr)
 SYMSXP: sym
 LISTSXP: lang
@@ -312,7 +312,7 @@ errorcall: (t(any, any) -> empty) & (t(any, any, any) -> empty) & (t(any, any, a
 warningcall: (t(any, any) -> c_void) & (t(any, any, any) -> c_void) & (t(any, any, any, any) -> c_void)
 
 // R API: type tests
-isFunction: (t(any -> any) -> c_true) & (t(~(any -> any)) -> c_false)
+isFunction: (t(empty -> any) -> c_true) & (t(~(empty -> any)) -> c_false)
 
 // R API: evaluation
 R_ToplevelExec: t(any, *any) -> c_bool
@@ -345,7 +345,7 @@ VECTOR_PTR_RO: t(list) -> *any_sexp
 
 // R API: misc
 // length is defined in Rinlinedfuns.h
-length: (t(v[int('a)](any)) -> c_int('a)) & (t(null) -> c(0)) & (t(sym | (any -> any) | externalptr) -> c(1)) & (t(any_sexp) -> c_int)
+length: (t(v[int('a)](any)) -> c_int('a)) & (t(null) -> c(0)) & (t(sym | (empty -> any) | externalptr) -> c(1)) & (t(any_sexp) -> c_int)
 asReal: t(any) -> c_double
 memcpy: t(any, any, c_int) -> any
 R_alloc: t(c_int, c_int) -> *any // or c_ptr?
