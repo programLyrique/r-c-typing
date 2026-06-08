@@ -1230,17 +1230,47 @@ and aux_declaration typ (decl: anon_choice_opt_ms_call_modi_decl_decl_opt_gnu_as
                   (Mlsem.Common.Position.dummy, A.Seq [var_decl; var_assign])
               | InitDynamic entries ->
                   let base = (Position.dummy, name) in
-                  let element_ty =
-                    match typ with
-                    | Ast.Ptr elem_ty -> elem_ty
-                    | _ -> Ast.Any
+                  (* Decide whether the aggregate is a record (struct/union) or
+                     an array from the leading designator of the entries: a
+                     field designator ([.f = v]) means a record, an index
+                     designator ([[i] = v]) means an array. A struct seeded as
+                     a null-filled array would make [base] a [*c_null], so the
+                     subsequent [base.f = v] writes — lowered to [RecUpd], whose
+                     domain is an (open) record — have nothing to write into and
+                     the whole declaration types as [untypeable application]. *)
+                  let is_record_init =
+                    List.exists
+                      (fun (steps, _) ->
+                        match steps with
+                        | InitField _ :: _ -> true
+                        | _ -> false)
+                      entries
                   in
-                  let placeholder = placeholder_const_of_ctype element_ty in
-                  let init_len = top_level_initializer_count init_list in
-                  let bootstrap_vals = List.init init_len (fun _ -> placeholder) in
                   let init_empty =
-                    (Position.dummy,
-                     A.VarAssign (base, (Position.dummy, A.Const (A.CArray bootstrap_vals))))
+                    if is_record_init then
+                      (* Seed [base] with the empty closed record [{}]. It is a
+                         subtype of [RecUpd]'s open-record domain, so each
+                         [base.f = v] write extends it, accumulating the
+                         designated fields. *)
+                      let empty_record =
+                        (Position.dummy,
+                         A.Cast (Ast.Struct ("", []),
+                                 (Position.dummy, A.Const A.CNull)))
+                      in
+                      (Position.dummy, A.VarAssign (base, empty_record))
+                    else
+                      let element_ty =
+                        match typ with
+                        | Ast.Ptr elem_ty -> elem_ty
+                        | _ -> Ast.Any
+                      in
+                      let placeholder = placeholder_const_of_ctype element_ty in
+                      let init_len = top_level_initializer_count init_list in
+                      let bootstrap_vals =
+                        List.init init_len (fun _ -> placeholder) in
+                      (Position.dummy,
+                       A.VarAssign
+                         (base, (Position.dummy, A.Const (A.CArray bootstrap_vals))))
                   in
                   let assigns =
                     List.map

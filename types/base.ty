@@ -363,13 +363,7 @@ MARK_NOT_MUTABLE: t(any) --> c_void
 // classes
 inherits: t(any, c_string) --> c_bool // to improve when supporting classes
 
-// Class-checking predicates. Typed as intersection arrows so that, used as an
-// if/ternary guard, mlsem's occurrence typing refines the argument in each
-// branch (the same app-inversion path that refines isString/isInteger). Unlike
-// inherits these take no runtime class argument, so the class is fixed in the
-// type. isFactor: an INTSXP carrying class <factor>. isObject (OBJECT bit):
-// carries some explicit class, i.e. an attr value other than the no-class one
-// <>.
+// Class-checking predicates.
 isFactor: (t(v(int) <factor, ...>) --> c_true) & (t(any_sexp \ (v(int) <factor, ...>)) --> c_false)
 isObject: (t(attr \ <>) --> c_true) & (t(any_sexp \ (attr \ <>)) --> c_false)
 isFrame: (t(<data.frame, ...>) --> c_true) & (t(any_sexp \ <data.frame, ...>) --> c_false)

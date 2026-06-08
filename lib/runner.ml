@@ -771,7 +771,7 @@ let () =
      literally as [any] in [.ty] input). Print [Attr.any] as [attr_any] so
      diagnostics like [r_attrib_get_cb: (any | chr, ...)] become readable. *)
   Mlsem_types.PrinterCfg.add_printer_param
-    (Rstt.Pp.printer_params' [(Rstt.Attr.any, "attr_any")]) ;
+    (Rstt.Pp.printer_params' [(Rstt.Attr.any, "attr_any"); (Defs.any_sexp, "any_sexp")]) ;
   Mlsem_system.Config.normalization_fun := Rstt.Simplify.partition_vecs
 
 let%test "filter predicate with Some substring" =

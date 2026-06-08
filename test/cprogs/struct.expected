@@ -1,6 +1,6 @@
 f: t({ x : c_int_na ; y : c_int_na }) -> ()
 
-g: () -> { x : c_int_na ; y : c_int_na }
+g: () -> { x : c_true ; y : c(2) }
 
 h: t(*{ x : c_int_na ; y : c_int_na }) -> ()
 

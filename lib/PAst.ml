@@ -288,6 +288,22 @@ let lookup_binding env str =
         | Some _ as r -> r
         | None -> Defs.StrMap.find_opt str Defs.defs_map))
 
+(* True when [str] is a variable declared in a *block* scope of the function
+   body currently being lowered (an upper scope frame), as opposed to a
+   file-scope global or a parameter. The base frame (always the last in
+   [env.id]) holds globals — [Runner.infer_def] threads them through [idenv],
+   which seeds that frame — and the function's parameters; block-local
+   declarations are pushed into frames above it. The distinction gates the
+   field-write rebind below: rebinding a global struct would clobber its
+   declared record type with the narrow record accumulated from one function's
+   writes. *)
+let is_block_local env str =
+  match env.id with
+  | [] | [_] -> false
+  | frames ->
+      let upper = List.filteri (fun i _ -> i < List.length frames - 1) frames in
+      Option.is_some (lookup_in_frames str upper)
+
 let var env str =
   (* Resolve identifier-alias macros ([#define NAME TARGET]) before looking
      up. Keep the resolution only if [TARGET] is itself bound; otherwise the
@@ -390,6 +406,27 @@ let rec aux_e env (pos,e) =
       let tmp = MVariable.create MVariable.Mut (Some "_deref") in
       let assign_e = fresh_e env (Ast.VarAssign (tmp, aux_e env e2)) in
       Ast.Let (tmp, read_e, assign_e)
+  | VarAssign ((_, FieldAccess (((_, Id s) as e1), field)) ,e2)
+    when is_block_local env s ->
+      (* Model [b.field = v] on a local struct variable as a functional update
+         rebinding the variable: [b = b with field = v]. Mirrors the [arr[i] =
+         v] case above. Without the rebind the [FieldUpdate] produces a fresh
+         record that is discarded, so later reads of [b] (and the field-by-field
+         lowering of a designated initializer [struct T b = { .field = v }]) see
+         the pre-update record and the field-read fails as an untypeable
+         projection.
+
+         Restricted to block-local variables ([is_block_local], i.e. declared
+         in a scope frame above the base frame). A file-scope global struct
+         ([struct syms syms; ... syms.f = v]) lives in the base frame; rebinding
+         it would replace its full declared record with the narrow record
+         accumulated from one function's writes, breaking later width-subtyping
+         uses (e.g. vctrs' [globals.c] / [vctrs_init_*]). Globals fall through to
+         the non-rebinding general arm below and keep their declared type.
+         Pointer writes [p->field = v] also fall through — they arrive with a
+         dereference ([Unop "*"]) as the base. *)
+      Ast.VarAssign (var env s,
+        fresh_e env (Ast.FieldUpdate (aux_e env e1, field, aux_e env e2)))
   | VarAssign ((_, FieldAccess (e1, field)) ,e2) ->
       Ast.FieldUpdate (aux_e env e1, field, aux_e env e2)
   | VarAssign (_,_) -> failwith ("Unexpected left-hand side in assignment. Got: " ^ show_e (pos,e))
